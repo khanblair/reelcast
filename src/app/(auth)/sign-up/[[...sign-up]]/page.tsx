@@ -1,20 +1,36 @@
 "use client";
 
 import Link from "next/link";
-import { useSignIn } from "@clerk/nextjs";
+import { useSignUp } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Sparkles, Video } from "lucide-react";
 
 export default function CustomSignUpPage() {
-  const { signIn, isLoaded } = useSignIn() as any;
+  const { signUp, isLoaded } = useSignUp() as any;
 
-  const handleGoogleAuth = () => {
-    if (!isLoaded) return;
-    signIn.authenticateWithRedirect({
-      strategy: "oauth_google",
-      redirectUrl: "/sso-callback",
-      redirectUrlComplete: "/dashboard",
-    });
+  const handleGoogleAuth = async () => {
+    console.log("Sign-up button clicked. isLoaded:", isLoaded);
+    
+    if (!isLoaded) {
+      console.error("Clerk is not loaded yet");
+      return;
+    }
+
+    if (!signUp) {
+      console.error("signUp object not available");
+      return;
+    }
+
+    try {
+      console.log("Initiating Google OAuth for sign-up...");
+      await signUp.authenticateWithRedirect({
+        strategy: "oauth_google",
+        redirectUrl: "/sso-callback",
+        redirectUrlComplete: "/dashboard",
+      });
+    } catch (error) {
+      console.error("Google auth error:", error);
+    }
   };
 
   return (
@@ -48,9 +64,10 @@ export default function CustomSignUpPage() {
 
           <Button 
             onClick={handleGoogleAuth}
+            disabled={!isLoaded}
             size="lg"
             variant="outline" 
-            className="w-full relative group h-12 bg-background hover:bg-muted/50 border-border"
+            className="w-full relative group h-12 bg-background hover:bg-muted/50 border-border disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <div className="absolute inset-0 bg-gradient-to-r from-primary/10 to-red-500/10 opacity-0 group-hover:opacity-100 transition-opacity rounded-md pointer-events-none" />
             <div className="flex items-center justify-center w-full gap-3">
@@ -72,7 +89,7 @@ export default function CustomSignUpPage() {
                   fill="#EA4335"
                 />
               </svg>
-              <span className="font-medium text-foreground">Sign Up with Google</span>
+              <span className="font-medium text-foreground">{isLoaded ? "Sign Up with Google" : "Loading..."}</span>
             </div>
           </Button>
 

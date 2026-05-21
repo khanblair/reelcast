@@ -1,0 +1,194 @@
+@import "tailwindcss";
+
+/* ── ReelCast Design Tokens — YouTube-Inspired Dark-First ─────────── */
+
+:root {
+  /* Backgrounds */
+  --background: #ffffff;
+  --foreground: #0f0f0f;
+  --card: #f9f9f9;
+  --card-foreground: #0f0f0f;
+  --popover: #ffffff;
+  --popover-foreground: #0f0f0f;
+
+  /* Brand — YouTube Red */
+  --primary: #ff0000;
+  --primary-foreground: #ffffff;
+
+  /* Secondary surfaces */
+  --secondary: #f2f2f2;
+  --secondary-foreground: #0f0f0f;
+
+  /* Muted / disabled */
+  --muted: #f2f2f2;
+  --muted-foreground: #606060;
+
+  /* Accent / hover */
+  --accent: #f2f2f2;
+  --accent-foreground: #0f0f0f;
+
+  /* Semantic */
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --success: #2ba640;
+  --success-foreground: #ffffff;
+  --warning: #f59e0b;
+  --warning-foreground: #0f0f0f;
+
+  /* Borders & focus */
+  --border: #e5e5e5;
+  --input: #e5e5e5;
+  --ring: #ff0000;
+
+  /* Sidebar */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f0f0f;
+  --sidebar-border: #e5e5e5;
+  --sidebar-accent: #f2f2f2;
+  --sidebar-accent-foreground: #0f0f0f;
+
+  /* Radius */
+  --radius: 0.5rem;
+}
+
+.dark {
+  --background: #0f0f0f;
+  --foreground: #f1f1f1;
+  --card: #1a1a1a;
+  --card-foreground: #f1f1f1;
+  --popover: #1a1a1a;
+  --popover-foreground: #f1f1f1;
+
+  --primary: #ff0000;
+  --primary-foreground: #ffffff;
+
+  --secondary: #272727;
+  --secondary-foreground: #f1f1f1;
+
+  --muted: #272727;
+  --muted-foreground: #aaaaaa;
+
+  --accent: #272727;
+  --accent-foreground: #f1f1f1;
+
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --success: #2ba640;
+  --success-foreground: #ffffff;
+  --warning: #f59e0b;
+  --warning-foreground: #0f0f0f;
+
+  --border: #333333;
+  --input: #333333;
+  --ring: #ff0000;
+
+  --sidebar: #1a1a1a;
+  --sidebar-foreground: #f1f1f1;
+  --sidebar-border: #333333;
+  --sidebar-accent: #272727;
+  --sidebar-accent-foreground: #f1f1f1;
+}
+
+/* ── Tailwind v4 Theme Extension ───────────────────────────────────── */
+
+@theme inline {
+  /* Colors */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+
+  /* Radius */
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* Fonts */
+  --font-sans: "Inter", "Roboto", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+
+  /* Animations */
+  --animate-fade-in: fade-in 0.2s ease-out;
+  --animate-slide-up: slide-up 0.2s ease-out;
+  --animate-slide-down: slide-down 0.2s ease-out;
+  --animate-pulse-subtle: pulse-subtle 2s ease-in-out infinite;
+}
+
+/* ── Keyframes ─────────────────────────────────────────────────────── */
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* ── Base Styles ───────────────────────────────────────────────────── */
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar — YouTube-style thin dark scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--muted-foreground);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--foreground);
+}

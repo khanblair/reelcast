@@ -28,10 +28,16 @@ export const get = query({
       return {
         userId: user._id,
         notificationsEnabled: false,
+        youtubeConnected: user.youtubeConnected,
+        aiPreset: undefined,
+        telegramChatId: undefined,
       };
     }
 
-    return settings;
+    return {
+      ...settings,
+      youtubeConnected: user.youtubeConnected,
+    };
   },
 });
 
@@ -71,5 +77,15 @@ export const update = mutation({
         ...updateData,
       });
     }
+  },
+});
+
+export const getByUserId = query({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("settings")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .unique();
   },
 });

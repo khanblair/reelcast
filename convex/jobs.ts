@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { api } from "./_generated/api";
 import { getCurrentUserOrThrow } from "./lib/auth";
 
 export const create = mutation({
@@ -23,12 +24,28 @@ export const create = mutation({
       throw new Error("Video not found or unauthorized");
     }
 
-    return await ctx.db.insert("jobs", {
+    const jobId = await ctx.db.insert("jobs", {
       userId: user._id,
       videoId: args.videoId,
       type: args.type,
       status: "pending",
     });
+
+    if (args.type === "generation") {
+      // Schedule the mock generation action
+      await ctx.scheduler.runAfter(0, api.scheduled.runGeneration.processGenerationJob, {
+        jobId,
+        videoId: args.videoId,
+      });
+    } else if (args.type === "publish") {
+      // Schedule the mock publish action
+      await ctx.scheduler.runAfter(0, api.scheduled.runPublish.processPublishJob, {
+        jobId,
+        videoId: args.videoId,
+      });
+    }
+
+    return jobId;
   },
 });
 

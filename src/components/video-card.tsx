@@ -1,0 +1,50 @@
+import Link from "next/link";
+import { formatDistanceToNow } from "date-fns";
+import { Video } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { VideoStatusBadge } from "./video-status-badge";
+import type { Video as VideoType } from "@/types/video";
+
+interface VideoCardProps {
+  video: VideoType;
+}
+
+export function VideoCard({ video }: VideoCardProps) {
+  const timeAgo = formatDistanceToNow(video._creationTime, { addSuffix: true });
+
+  return (
+    <Link href={`/video/${video._id}`}>
+      <Card className="overflow-hidden hover:border-primary/50 transition-colors group cursor-pointer">
+        <div className="aspect-video bg-muted relative flex items-center justify-center">
+          {video.thumbnailUrl ? (
+            <img 
+              src={video.thumbnailUrl} 
+              alt={video.title} 
+              className="object-cover w-full h-full"
+            />
+          ) : (
+            <Video className="w-10 h-10 text-muted-foreground/50 group-hover:text-primary/50 transition-colors" />
+          )}
+          <div className="absolute top-2 right-2">
+            <VideoStatusBadge status={video.status} />
+          </div>
+          {video.duration && (
+            <div className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-1.5 py-0.5 rounded">
+              {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, '0')}
+            </div>
+          )}
+        </div>
+        <CardContent className="p-4">
+          <h3 className="font-semibold line-clamp-2 mb-1 group-hover:text-primary transition-colors">
+            {video.title}
+          </h3>
+          <div className="flex items-center text-xs text-muted-foreground">
+            <span>{timeAgo}</span>
+            <span className="mx-2">•</span>
+            <span>{(video.rawFileSize / (1024 * 1024)).toFixed(1)} MB</span>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}

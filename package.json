@@ -12,12 +12,15 @@
     "convex:dev": "convex dev"
   },
   "dependencies": {
+    "@clerk/nextjs": "^7.4.0",
+    "clsx": "^2.1.1",
+    "convex": "^1.39.1",
+    "lucide-react": "^0.511.0",
     "next": "16.2.6",
     "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "clsx": "^2.1.1",
+    "react-dom": "^19.2.6",
+    "svix": "^1.94.0",
     "tailwind-merge": "^3.3.0",
-    "lucide-react": "^0.511.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {

@@ -29,7 +29,7 @@ export const JOB_TYPE = {
 
 export type JobType = (typeof JOB_TYPE)[keyof typeof JOB_TYPE];
 
-export const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024; // 5GB
+export const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
 
 export const SUPPORTED_VIDEO_FORMATS = [
   "video/mp4",

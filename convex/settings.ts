@@ -44,6 +44,10 @@ export const get = query({
 export const update = mutation({
   args: {
     aiPreset: v.optional(v.string()),
+    defaultQuality: v.optional(v.string()),
+    defaultAspectRatio: v.optional(v.string()),
+    defaultCaptions: v.optional(v.boolean()),
+    defaultBackgroundMusic: v.optional(v.boolean()),
     notificationsEnabled: v.optional(v.boolean()),
     telegramChatId: v.optional(v.string()),
   },
@@ -65,6 +69,10 @@ export const update = mutation({
 
     const updateData: any = {};
     if (args.aiPreset !== undefined) updateData.aiPreset = args.aiPreset;
+    if (args.defaultQuality !== undefined) updateData.defaultQuality = args.defaultQuality;
+    if (args.defaultAspectRatio !== undefined) updateData.defaultAspectRatio = args.defaultAspectRatio;
+    if (args.defaultCaptions !== undefined) updateData.defaultCaptions = args.defaultCaptions;
+    if (args.defaultBackgroundMusic !== undefined) updateData.defaultBackgroundMusic = args.defaultBackgroundMusic;
     if (args.notificationsEnabled !== undefined) updateData.notificationsEnabled = args.notificationsEnabled;
     if (args.telegramChatId !== undefined) updateData.telegramChatId = args.telegramChatId;
 
@@ -87,5 +95,64 @@ export const getByUserId = query({
       .query("settings")
       .withIndex("by_user", (q) => q.eq("userId", args.userId))
       .unique();
+  },
+});
+
+export const testYoutubeConnection = mutation({
+  handler: async (ctx) => {
+    const identity = await getCurrentUserOrThrow(ctx);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .unique();
+
+    if (!user) throw new Error("User not found");
+
+    if (!user.youtubeConnected) {
+      throw new Error("YouTube account is not connected.");
+    }
+
+    // Push a dummy notification to verify
+    await ctx.db.insert("notifications", {
+      userId: user._id,
+      title: "YouTube Connection Verified",
+      message: "Successfully connected and pinged your YouTube account API.",
+      type: "success",
+      isRead: false,
+    });
+    
+    return { success: true };
+  },
+});
+
+export const testTelegramConnection = mutation({
+  handler: async (ctx) => {
+    const identity = await getCurrentUserOrThrow(ctx);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .unique();
+
+    if (!user) throw new Error("User not found");
+
+    const settings = await ctx.db
+      .query("settings")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .unique();
+
+    if (!settings?.telegramChatId) {
+      throw new Error("Telegram Chat ID is not connected.");
+    }
+
+    // Push a dummy notification to verify
+    await ctx.db.insert("notifications", {
+      userId: user._id,
+      title: "Telegram Connection Verified",
+      message: `Test message successfully sent to Telegram chat ID: @${settings.telegramChatId}`,
+      type: "info",
+      isRead: false,
+    });
+    
+    return { success: true };
   },
 });

@@ -67,7 +67,20 @@ export default defineSchema({
   settings: defineTable({
     userId: v.id("users"),
     aiPreset: v.optional(v.string()),
+    defaultQuality: v.optional(v.string()),
+    defaultAspectRatio: v.optional(v.string()),
+    defaultCaptions: v.optional(v.boolean()),
+    defaultBackgroundMusic: v.optional(v.boolean()),
     notificationsEnabled: v.boolean(),
     telegramChatId: v.optional(v.string()),
   }).index("by_user", ["userId"]),
+
+  notifications: defineTable({
+    userId: v.id("users"),
+    title: v.string(),
+    message: v.string(),
+    type: v.union(v.literal("info"), v.literal("success"), v.literal("warning"), v.literal("error")),
+    isRead: v.boolean(),
+    link: v.optional(v.string()), // optional link to a video or page
+  }).index("by_user", ["userId"]).index("by_user_read", ["userId", "isRead"]),
 });

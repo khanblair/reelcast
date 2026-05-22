@@ -11,9 +11,11 @@
 import type * as actions_publish from "../actions/publish.js";
 import type * as actions_storage from "../actions/storage.js";
 import type * as actions_telegram from "../actions/telegram.js";
+import type * as analytics from "../analytics.js";
 import type * as http from "../http.js";
 import type * as jobs from "../jobs.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as notifications from "../notifications.js";
 import type * as scheduled_runGeneration from "../scheduled/runGeneration.js";
 import type * as scheduled_runPublish from "../scheduled/runPublish.js";
 import type * as settings from "../settings.js";
@@ -30,9 +32,11 @@ declare const fullApi: ApiFromModules<{
   "actions/publish": typeof actions_publish;
   "actions/storage": typeof actions_storage;
   "actions/telegram": typeof actions_telegram;
+  analytics: typeof analytics;
   http: typeof http;
   jobs: typeof jobs;
   "lib/auth": typeof lib_auth;
+  notifications: typeof notifications;
   "scheduled/runGeneration": typeof scheduled_runGeneration;
   "scheduled/runPublish": typeof scheduled_runPublish;
   settings: typeof settings;

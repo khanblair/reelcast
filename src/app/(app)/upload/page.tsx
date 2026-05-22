@@ -76,7 +76,7 @@ export default function UploadPage() {
               <UploadCloud className="h-8 w-8 text-primary" />
             </div>
             <h3 className="text-xl font-semibold mb-2">Drag and drop your video</h3>
-            <p className="text-muted-foreground mb-6">MP4, MOV, AVI up to 5GB</p>
+            <p className="text-muted-foreground mb-6">MP4, MOV, AVI up to 500MB</p>
             
             <label className="cursor-pointer">
               <span className="bg-primary text-primary-foreground px-4 py-2 rounded-md font-medium hover:bg-primary/90 transition-colors">

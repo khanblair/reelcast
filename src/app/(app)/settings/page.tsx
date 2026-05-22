@@ -14,6 +14,8 @@ import { AI_PRESETS } from "@/lib/constants";
 export default function SettingsPage() {
   const settings = useQuery(api.settings.get);
   const updateSettings = useMutation(api.settings.update);
+  const testYoutubeConnection = useMutation(api.settings.testYoutubeConnection);
+  const testTelegramConnection = useMutation(api.settings.testTelegramConnection);
 
   if (settings === undefined) {
     return <div className="flex h-[80vh] items-center justify-center"><LoadingSpinner /></div>;
@@ -42,9 +44,24 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent>
             {settings.youtubeConnected ? (
-              <div className="flex items-center justify-between p-3 border rounded-md bg-secondary/50">
-                <span className="font-medium text-sm">Connected as Channel ID</span>
-                <Button variant="outline" size="sm">Disconnect</Button>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-3 border rounded-md bg-secondary/50">
+                  <span className="font-medium text-sm">Connected as Channel ID</span>
+                  <Button variant="outline" size="sm">Disconnect</Button>
+                </div>
+                <Button 
+                  variant="secondary" 
+                  className="w-full"
+                  onClick={async () => {
+                    try {
+                      await testYoutubeConnection();
+                    } catch (e: any) {
+                      console.error(e);
+                    }
+                  }}
+                >
+                  Test Connection
+                </Button>
               </div>
             ) : (
               <Button className="w-full">Connect YouTube Account</Button>
@@ -75,6 +92,19 @@ export default function SettingsPage() {
                     onCheckedChange={(c) => updateSettings({ notificationsEnabled: c })} 
                   />
                 </div>
+                <Button 
+                  variant="secondary" 
+                  className="w-full"
+                  onClick={async () => {
+                    try {
+                      await testTelegramConnection();
+                    } catch (e: any) {
+                      console.error(e);
+                    }
+                  }}
+                >
+                  Test Connection
+                </Button>
               </div>
             ) : (
               <Button variant="outline" className="w-full border-blue-500 text-blue-500 hover:bg-blue-500/10">
@@ -82,41 +112,6 @@ export default function SettingsPage() {
               </Button>
             )}
           </CardContent>
-        </Card>
-
-        {/* Default AI Settings */}
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Settings className="h-5 w-5 text-primary" />
-              Default AI Preferences
-            </CardTitle>
-            <CardDescription>These settings will be applied by default to all new uploads.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2 max-w-sm">
-              <Label>Default Generation Style</Label>
-              <Select 
-                defaultValue={settings.aiPreset}
-                onChange={(e: any) => updateSettings({ aiPreset: e.target.value })}
-              >
-                {AI_PRESETS.map((p) => (
-                  <option key={p.value} value={p.value}>{p.label}</option>
-                ))}
-              </Select>
-            </div>
-            
-            <div className="flex items-center justify-between max-w-sm pt-2">
-              <div className="space-y-0.5">
-                <Label>Auto-generate Tags</Label>
-                <p className="text-sm text-muted-foreground">Always include tags</p>
-              </div>
-              <Switch defaultChecked />
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button variant="secondary"><Save className="mr-2 h-4 w-4" /> Save Preferences</Button>
-          </CardFooter>
         </Card>
       </div>
     </div>

@@ -8,11 +8,14 @@ import { ReactNode } from "react";
 
 const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
+import { SyncUserWithConvex } from "./sync-user-with-convex";
+
 export function Providers({ children }: { children: ReactNode }) {
   return (
     <ClerkProvider>
       <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
         <NextThemesProvider attribute="class" defaultTheme="dark" enableSystem>
+          <SyncUserWithConvex />
           {children}
         </NextThemesProvider>
       </ConvexProviderWithClerk>

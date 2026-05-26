@@ -8,6 +8,10 @@ export default defineSchema({
     name: v.optional(v.string()),
     imageUrl: v.optional(v.string()),
     youtubeConnected: v.boolean(),
+    youtubeChannelName: v.optional(v.string()),
+    youtubeAccessToken: v.optional(v.string()),
+    youtubeRefreshToken: v.optional(v.string()),
+    youtubeTokenExpiry: v.optional(v.number()),
   }).index("by_clerk_id", ["clerkId"]),
 
   videos: defineTable({

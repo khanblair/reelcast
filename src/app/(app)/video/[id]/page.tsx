@@ -61,7 +61,9 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
         {/* Left Column: Video Preview and AI Config */}
         <div className="lg:col-span-1 space-y-6">
           <div className="aspect-video bg-black rounded-lg flex items-center justify-center relative overflow-hidden border">
-            {video.thumbnailUrl ? (
+            {video.rawFileKey.startsWith("http") ? (
+              <video src={video.rawFileKey} controls className="w-full h-full object-contain" />
+            ) : video.thumbnailUrl ? (
               <img src={video.thumbnailUrl} alt="Thumbnail" className="w-full h-full object-cover opacity-80" />
             ) : (
               <Play className="w-12 h-12 text-white/50" />
@@ -80,7 +82,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
             )}
           </div>
           
-          <AIConfigForm videoId={video._id} />
+          <AIConfigForm videoId={video._id} status={video.status} />
         </div>
 
         {/* Right Column: Metadata Editor */}

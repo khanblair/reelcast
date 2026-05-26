@@ -28,15 +28,15 @@ export function MetadataEditor({ video }: { video: VideoType }) {
             Title
             {video.aiTitle && <Sparkles className="h-3 w-3 text-primary" />}
           </Label>
-          <Input defaultValue={title} />
+          <Input key={video.aiTitle ?? "no-ai"} defaultValue={title} />
         </div>
-        
+
         <div className="space-y-2">
           <Label className="flex items-center gap-2">
             Description
             {video.aiDescription && <Sparkles className="h-3 w-3 text-primary" />}
           </Label>
-          <Textarea rows={6} defaultValue={description} />
+          <Textarea key={video.aiDescription ?? "no-ai"} rows={6} defaultValue={description} />
         </div>
 
         <div className="space-y-2">

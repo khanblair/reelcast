@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation } from "./_generated/server";
 import { api } from "./_generated/api";
 import { getCurrentUserOrThrow } from "./lib/auth";
 
@@ -99,6 +99,37 @@ export const updateStatus = mutation({
     if (!job || job.userId !== user._id) {
       throw new Error("Job not found or unauthorized");
     }
+
+    const updates: any = { status: args.status };
+    if (args.error !== undefined) {
+      updates.error = args.error;
+    }
+    if (args.status === "processing" && job.status === "pending") {
+      updates.startedAt = Date.now();
+    }
+    if (args.status === "completed" || args.status === "failed") {
+      updates.completedAt = Date.now();
+    }
+
+    await ctx.db.patch(args.id, updates);
+  },
+});
+
+// Internal mutation — used by scheduled actions (no auth check, trusted context)
+export const internalUpdateStatus = internalMutation({
+  args: {
+    id: v.id("jobs"),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("processing"),
+      v.literal("completed"),
+      v.literal("failed")
+    ),
+    error: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.id);
+    if (!job) throw new Error("Job not found");
 
     const updates: any = { status: args.status };
     if (args.error !== undefined) {

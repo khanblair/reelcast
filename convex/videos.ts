@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
 import { getCurrentUserOrThrow } from "./lib/auth";
 
 export const create = mutation({
@@ -133,6 +133,64 @@ export const updateMetadata = mutation({
 });
 
 export const setPublishedData = mutation({
+  args: {
+    id: v.id("videos"),
+    publishedVideoId: v.string(),
+    publishedAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      publishedVideoId: args.publishedVideoId,
+      publishedAt: args.publishedAt,
+    });
+  },
+});
+
+// Internal query — used by scheduled actions (no auth check, trusted context)
+export const internalGet = internalQuery({
+  args: { id: v.id("videos") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.id);
+  },
+});
+
+// Internal mutation — used by scheduled actions (no auth check, trusted context)
+export const internalUpdateStatus = internalMutation({
+  args: {
+    id: v.id("videos"),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("queued"),
+      v.literal("generating"),
+      v.literal("ready"),
+      v.literal("scheduled"),
+      v.literal("publishing"),
+      v.literal("published"),
+      v.literal("failed")
+    ),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, { status: args.status });
+  },
+});
+
+export const internalUpdateMetadata = internalMutation({
+  args: {
+    id: v.id("videos"),
+    aiTitle: v.optional(v.string()),
+    aiDescription: v.optional(v.string()),
+    aiTags: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      aiTitle: args.aiTitle,
+      aiDescription: args.aiDescription,
+      aiTags: args.aiTags,
+    });
+  },
+});
+
+export const internalSetPublishedData = internalMutation({
   args: {
     id: v.id("videos"),
     publishedVideoId: v.string(),

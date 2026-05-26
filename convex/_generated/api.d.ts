@@ -15,10 +15,12 @@ import type * as analytics from "../analytics.js";
 import type * as http from "../http.js";
 import type * as jobs from "../jobs.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_youtube from "../lib/youtube.js";
 import type * as notifications from "../notifications.js";
 import type * as scheduled_runGeneration from "../scheduled/runGeneration.js";
 import type * as scheduled_runPublish from "../scheduled/runPublish.js";
 import type * as settings from "../settings.js";
+import type * as testSupport from "../testSupport.js";
 import type * as users from "../users.js";
 import type * as videos from "../videos.js";
 
@@ -36,10 +38,12 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   jobs: typeof jobs;
   "lib/auth": typeof lib_auth;
+  "lib/youtube": typeof lib_youtube;
   notifications: typeof notifications;
   "scheduled/runGeneration": typeof scheduled_runGeneration;
   "scheduled/runPublish": typeof scheduled_runPublish;
   settings: typeof settings;
+  testSupport: typeof testSupport;
   users: typeof users;
   videos: typeof videos;
 }>;

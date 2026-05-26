@@ -351,7 +351,9 @@ R2_PUBLIC_URL=https://cdn.reelcast.app
 # ── YouTube / Google OAuth ─────────────────────────────
 GOOGLE_CLIENT_ID=xxx.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=GOCSPX-xxx
-YOUTUBE_REDIRECT_URI=https://your-domain.com/api/youtube/callback
+YOUTUBE_REDIRECT_URI=http://localhost:3000/api/youtube/callback
+# For production deploys, also add:
+# https://reelcast-kappa.vercel.app/api/youtube/callback
 
 # ── Telegram Bot ───────────────────────────────────────
 TELEGRAM_BOT_TOKEN=123456:ABC-DEF

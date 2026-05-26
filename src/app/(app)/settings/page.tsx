@@ -1,21 +1,25 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
-import { Settings, Youtube, MessageCircle, Save } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
+import { Youtube, MessageCircle } from "lucide-react";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Select } from "@/components/ui/select";
-import { AI_PRESETS } from "@/lib/constants";
+import { Input } from "@/components/ui/input";
 
 export default function SettingsPage() {
   const settings = useQuery(api.settings.get);
   const updateSettings = useMutation(api.settings.update);
-  const testYoutubeConnection = useMutation(api.settings.testYoutubeConnection);
-  const testTelegramConnection = useMutation(api.settings.testTelegramConnection);
+  const disconnectYoutube = useMutation(api.users.disconnectYoutube);
+  const disconnectTelegram = useMutation(api.settings.disconnectTelegram);
+
+  const [telegramInput, setTelegramInput] = useState("");
+  const [savingTelegram, setSavingTelegram] = useState(false);
+  const [disconnectingYoutube, setDisconnectingYoutube] = useState(false);
 
   if (settings === undefined) {
     return <div className="flex h-[80vh] items-center justify-center"><LoadingSpinner /></div>;
@@ -24,6 +28,27 @@ export default function SettingsPage() {
   if (settings === null) {
     return <div className="flex h-[80vh] items-center justify-center text-muted-foreground">User settings not found.</div>;
   }
+
+  const handleSaveTelegram = async () => {
+    const value = telegramInput.trim();
+    if (!value) return;
+    setSavingTelegram(true);
+    try {
+      await updateSettings({ telegramChatId: value });
+      setTelegramInput("");
+    } finally {
+      setSavingTelegram(false);
+    }
+  };
+
+  const handleDisconnectYoutube = async () => {
+    setDisconnectingYoutube(true);
+    try {
+      await disconnectYoutube();
+    } finally {
+      setDisconnectingYoutube(false);
+    }
+  };
 
   return (
     <div className="max-w-4xl mx-auto py-8 space-y-8">
@@ -46,25 +71,29 @@ export default function SettingsPage() {
             {settings.youtubeConnected ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-between p-3 border rounded-md bg-secondary/50">
-                  <span className="font-medium text-sm">Connected as Channel ID</span>
-                  <Button variant="outline" size="sm">Disconnect</Button>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-0.5">Connected channel</p>
+                    <p className="font-medium text-sm">
+                      {settings.youtubeChannelName ?? "YouTube Channel"}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={disconnectingYoutube}
+                    onClick={handleDisconnectYoutube}
+                  >
+                    {disconnectingYoutube ? "Disconnecting…" : "Disconnect"}
+                  </Button>
                 </div>
-                <Button 
-                  variant="secondary" 
-                  className="w-full"
-                  onClick={async () => {
-                    try {
-                      await testYoutubeConnection();
-                    } catch (e: any) {
-                      console.error(e);
-                    }
-                  }}
-                >
-                  Test Connection
-                </Button>
               </div>
             ) : (
-              <Button className="w-full">Connect YouTube Account</Button>
+              <Button
+                className="w-full"
+                onClick={() => { window.location.href = "/api/youtube/connect"; }}
+              >
+                Connect YouTube Account
+              </Button>
             )}
           </CardContent>
         </Card>
@@ -82,34 +111,46 @@ export default function SettingsPage() {
             {settings.telegramChatId ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-between p-3 border rounded-md bg-secondary/50">
-                  <span className="font-medium text-sm">Connected to @{settings.telegramChatId}</span>
-                  <Button variant="outline" size="sm">Disconnect</Button>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-0.5">Connected chat</p>
+                    <p className="font-medium text-sm">@{settings.telegramChatId}</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => disconnectTelegram()}
+                  >
+                    Disconnect
+                  </Button>
                 </div>
                 <div className="flex items-center justify-between">
                   <Label>Enable Notifications</Label>
-                  <Switch 
-                    checked={settings.notificationsEnabled} 
-                    onCheckedChange={(c) => updateSettings({ notificationsEnabled: c })} 
+                  <Switch
+                    checked={settings.notificationsEnabled}
+                    onCheckedChange={(c) => updateSettings({ notificationsEnabled: c })}
                   />
                 </div>
-                <Button 
-                  variant="secondary" 
-                  className="w-full"
-                  onClick={async () => {
-                    try {
-                      await testTelegramConnection();
-                    } catch (e: any) {
-                      console.error(e);
-                    }
-                  }}
-                >
-                  Test Connection
-                </Button>
               </div>
             ) : (
-              <Button variant="outline" className="w-full border-blue-500 text-blue-500 hover:bg-blue-500/10">
-                Connect Telegram Bot
-              </Button>
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Start a chat with your bot on Telegram, then enter your username below.
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="your_telegram_username"
+                    value={telegramInput}
+                    onChange={(e) => setTelegramInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleSaveTelegram(); }}
+                  />
+                  <Button
+                    disabled={!telegramInput.trim() || savingTelegram}
+                    onClick={handleSaveTelegram}
+                  >
+                    {savingTelegram ? "Saving…" : "Save"}
+                  </Button>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>

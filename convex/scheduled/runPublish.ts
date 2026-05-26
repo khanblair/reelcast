@@ -1,48 +1,82 @@
+"use node";
+
 import { v } from "convex/values";
 import { action } from "../_generated/server";
-import { api } from "../_generated/api";
+import { internal } from "../_generated/api";
+import { uploadToYouTube, refreshYouTubeToken } from "../lib/youtube";
 
 export const processPublishJob = action({
   args: { jobId: v.id("jobs"), videoId: v.id("videos") },
   handler: async (ctx, args) => {
-    // 1. Mark job as processing
-    await ctx.runMutation(api.jobs.updateStatus, {
+    await ctx.runMutation(internal.jobs.internalUpdateStatus, {
       id: args.jobId,
       status: "processing",
     });
 
     try {
-      // 2. Simulate YouTube API call delay
-      await new Promise((resolve) => setTimeout(resolve, 5000));
+      const video = await ctx.runQuery(internal.videos.internalGet, { id: args.videoId });
+      if (!video) throw new Error("Video not found");
 
-      // 3. Update the video with the mock YouTube Video ID
-      const mockYouTubeId = "dQw4w9WgXcQ"; // Never gonna give you up
-      await ctx.runMutation(api.videos.updateStatus, {
+      const user = await ctx.runQuery(internal.users.internalGetById, { userId: video.userId });
+      if (!user) throw new Error("User not found");
+      if (!user.youtubeConnected || !user.youtubeAccessToken) {
+        throw new Error("YouTube account is not connected");
+      }
+
+      let accessToken = user.youtubeAccessToken;
+
+      // Refresh token if it expires within 5 minutes
+      if (user.youtubeRefreshToken && user.youtubeTokenExpiry) {
+        const expiresIn = user.youtubeTokenExpiry - Date.now();
+        if (expiresIn < 5 * 60 * 1000) {
+          const refreshed = await refreshYouTubeToken(user.youtubeRefreshToken);
+          accessToken = refreshed.accessToken;
+          await ctx.runMutation(internal.users.internalUpdateYoutubeTokens, {
+            userId: user._id,
+            accessToken: refreshed.accessToken,
+            expiresIn: refreshed.expiresIn,
+          });
+        }
+      }
+
+      const videoFileUrl = video.processedFileKey ?? video.rawFileKey;
+      const title = video.aiTitle ?? video.title;
+      const description = video.aiDescription ?? video.description ?? "";
+      const tags = video.aiTags ?? video.tags ?? [];
+
+      const youtubeVideoId = await uploadToYouTube({
+        accessToken,
+        title,
+        description,
+        tags,
+        videoUrl: videoFileUrl,
+      });
+
+      await ctx.runMutation(internal.videos.internalUpdateStatus, {
         id: args.videoId,
         status: "published",
       });
-      
-      // We need a mutation to set published metadata
-      await ctx.runMutation(api.videos.setPublishedData, {
+
+      await ctx.runMutation(internal.videos.internalSetPublishedData, {
         id: args.videoId,
-        publishedVideoId: mockYouTubeId,
+        publishedVideoId: youtubeVideoId,
         publishedAt: Date.now(),
       });
 
-      // 4. Mark job completed
-      await ctx.runMutation(api.jobs.updateStatus, {
+      await ctx.runMutation(internal.jobs.internalUpdateStatus, {
         id: args.jobId,
         status: "completed",
       });
-    } catch (e: any) {
-      // Mark job failed
-      await ctx.runMutation(api.jobs.updateStatus, {
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Unknown error";
+
+      await ctx.runMutation(internal.jobs.internalUpdateStatus, {
         id: args.jobId,
         status: "failed",
-        error: e.message,
+        error: message,
       });
-      
-      await ctx.runMutation(api.videos.updateStatus, {
+
+      await ctx.runMutation(internal.videos.internalUpdateStatus, {
         id: args.videoId,
         status: "failed",
       });

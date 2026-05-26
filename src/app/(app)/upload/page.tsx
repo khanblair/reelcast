@@ -16,24 +16,72 @@ export default function UploadPage() {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  const simulateUpload = async (file: File) => {
+  const uploadFile = async (file: File) => {
     setUploading(true);
     setProgress(0);
     
-    // Simulate chunked upload progress
-    for (let i = 0; i <= 100; i += 10) {
-      setProgress(i);
-      await new Promise(r => setTimeout(r, 200));
+    try {
+      // 1. Get the signature and metadata from our endpoint
+      const signRes = await fetch("/api/cloudinary/sign", {
+        method: "POST",
+      });
+      if (!signRes.ok) {
+        throw new Error("Failed to get Cloudinary upload signature");
+      }
+      const { signature, timestamp, apiKey, cloudName } = await signRes.json();
+
+      // 2. Prepare FormData
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("signature", signature);
+      formData.append("timestamp", timestamp.toString());
+      formData.append("api_key", apiKey);
+
+      // 3. Upload to Cloudinary using XMLHttpRequest for progress events
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `https://api.cloudinary.com/v1_1/${cloudName}/video/upload`, true);
+
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percentComplete = Math.round((event.loaded / event.total) * 100);
+          setProgress(percentComplete);
+        }
+      };
+
+      const uploadPromise = new Promise<{ secure_url: string; bytes: number }>((resolve, reject) => {
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const response = JSON.parse(xhr.responseText);
+              resolve(response);
+            } catch (e) {
+              reject(new Error("Failed to parse Cloudinary response"));
+            }
+          } else {
+            reject(new Error(`Upload failed with status: ${xhr.status} ${xhr.statusText}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error("Network error during Cloudinary upload"));
+        xhr.onabort = () => reject(new Error("Upload aborted"));
+      });
+
+      xhr.send(formData);
+
+      const cloudinaryData = await uploadPromise;
+      
+      // 4. Create the video entry in the Convex database
+      const videoId = await createVideo({
+        title: file.name.replace(/\.[^/.]+$/, ""), // remove extension
+        rawFileKey: cloudinaryData.secure_url,
+        rawFileSize: cloudinaryData.bytes || file.size,
+      });
+      
+      router.push(`/video/${videoId}`);
+    } catch (e: any) {
+      console.error("Cloudinary upload failed:", e);
+      alert(e.message || "An error occurred during upload. Please try again.");
+      setUploading(false);
     }
-    
-    // Simulate finishing
-    const videoId = await createVideo({
-      title: file.name.replace(/\.[^/.]+$/, ""), // remove extension
-      rawFileKey: `mock_path_${Date.now()}_${file.name}`,
-      rawFileSize: file.size,
-    });
-    
-    router.push(`/video/${videoId}`);
   };
 
   const onDrop = (e: React.DragEvent) => {
@@ -42,7 +90,7 @@ export default function UploadPage() {
     
     const file = e.dataTransfer.files[0];
     if (file && file.type.startsWith("video/")) {
-      simulateUpload(file);
+      uploadFile(file);
     } else {
       alert("Please drop a valid video file.");
     }
@@ -51,7 +99,7 @@ export default function UploadPage() {
   const onFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      simulateUpload(file);
+      uploadFile(file);
     }
   };
 

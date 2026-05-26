@@ -18,17 +18,17 @@ export const get = query({
       return null;
     }
 
-    let settings = await ctx.db
+    const settings = await ctx.db
       .query("settings")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .unique();
 
     if (!settings) {
-      // Default settings
       return {
         userId: user._id,
         notificationsEnabled: false,
         youtubeConnected: user.youtubeConnected,
+        youtubeChannelName: user.youtubeChannelName,
         aiPreset: undefined,
         telegramChatId: undefined,
       };
@@ -37,6 +37,7 @@ export const get = query({
     return {
       ...settings,
       youtubeConnected: user.youtubeConnected,
+      youtubeChannelName: user.youtubeChannelName,
     };
   },
 });
@@ -62,12 +63,20 @@ export const update = mutation({
       throw new Error("User not found in DB");
     }
 
-    let settings = await ctx.db
+    const settings = await ctx.db
       .query("settings")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .unique();
 
-    const updateData: any = {};
+    const updateData: Partial<{
+      aiPreset: string;
+      defaultQuality: string;
+      defaultAspectRatio: string;
+      defaultCaptions: boolean;
+      defaultBackgroundMusic: boolean;
+      notificationsEnabled: boolean;
+      telegramChatId: string;
+    }> = {};
     if (args.aiPreset !== undefined) updateData.aiPreset = args.aiPreset;
     if (args.defaultQuality !== undefined) updateData.defaultQuality = args.defaultQuality;
     if (args.defaultAspectRatio !== undefined) updateData.defaultAspectRatio = args.defaultAspectRatio;
@@ -95,6 +104,28 @@ export const getByUserId = query({
       .query("settings")
       .withIndex("by_user", (q) => q.eq("userId", args.userId))
       .unique();
+  },
+});
+
+export const disconnectTelegram = mutation({
+  handler: async (ctx) => {
+    const identity = await getCurrentUserOrThrow(ctx);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .unique();
+    if (!user) throw new Error("User not found");
+
+    const settings = await ctx.db
+      .query("settings")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .unique();
+    if (settings) {
+      await ctx.db.patch(settings._id, {
+        telegramChatId: undefined,
+        notificationsEnabled: false,
+      });
+    }
   },
 });
 

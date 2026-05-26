@@ -18,12 +18,10 @@ export const sendNotification = action({
       return;
     }
 
-    // 3. Simulate calling Telegram API
-    console.log(`[MOCK TELEGRAM to ${userSettings.telegramChatId}]: ${args.message}`);
-    
-    // In production, you would fetch from `https://api.telegram.org/bot<BOT_TOKEN>/sendMessage`
-    /*
-    await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    if (!botToken) return;
+
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -31,6 +29,5 @@ export const sendNotification = action({
         text: args.message,
       }),
     });
-    */
   },
 });

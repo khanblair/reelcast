@@ -17,14 +17,15 @@ export function VideoCard({ video }: VideoCardProps) {
 
   return (
     <Card className="overflow-hidden hover:border-primary/50 transition-colors group cursor-pointer relative">
-      {/* Stretch link — covers the whole card but sits below interactive children */}
+      {/* Stretch link — sits above content so clicks navigate, interactive children use pointer-events-auto */}
       <Link
         href={`/video/${video._id}`}
-        className="absolute inset-0 z-0"
+        className="absolute inset-0 z-10"
         aria-label={`Open ${video.title}`}
       />
 
-      <div className="aspect-video bg-muted relative flex items-center justify-center">
+      {/* pointer-events-none so the stretch link receives all clicks here */}
+      <div className="aspect-video bg-muted relative flex items-center justify-center pointer-events-none">
         {video.thumbnailUrl ? (
           <img
             src={video.thumbnailUrl}
@@ -35,12 +36,12 @@ export function VideoCard({ video }: VideoCardProps) {
           <Video className="w-10 h-10 text-muted-foreground/50 group-hover:text-primary/50 transition-colors" />
         )}
 
-        <div className="absolute top-2 right-2 z-10">
+        <div className="absolute top-2 right-2 z-20 pointer-events-auto">
           <VideoStatusBadge status={video.status} />
         </div>
 
         {video.duration && (
-          <div className="absolute bottom-2 right-2 z-10 bg-black/80 text-white text-xs px-1.5 py-0.5 rounded">
+          <div className="absolute bottom-2 right-2 z-20 bg-black/80 text-white text-xs px-1.5 py-0.5 rounded">
             {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, "0")}
           </div>
         )}
@@ -50,14 +51,15 @@ export function VideoCard({ video }: VideoCardProps) {
             href={youtubeUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="absolute bottom-2 left-2 z-10 bg-primary text-primary-foreground text-xs px-2 py-1 rounded flex items-center gap-1 hover:opacity-90"
+            className="absolute bottom-2 left-2 z-20 pointer-events-auto bg-primary text-primary-foreground text-xs px-2 py-1 rounded flex items-center gap-1 hover:opacity-90"
           >
             <Youtube className="w-3 h-3" /> YouTube
           </a>
         )}
       </div>
 
-      <CardContent className="p-4 relative z-10">
+      {/* pointer-events-none so the stretch link receives clicks on the text area too */}
+      <CardContent className="p-4 pointer-events-none">
         <h3 className="font-semibold line-clamp-2 mb-1 group-hover:text-primary transition-colors">
           {video.title}
         </h3>

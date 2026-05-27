@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { SidebarNav } from "./sidebar";
 import { NotificationsPopover } from "./notifications-popover";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { useState } from "react";
 
 export function Topbar() {
@@ -26,10 +27,10 @@ export function Topbar() {
             <SidebarNav onClick={() => setOpen(false)} />
           </SheetContent>
         </Sheet>
-        {/* Placeholder for Breadcrumbs or Search */}
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 sm:gap-4">
+        <ThemeToggle />
         <NotificationsPopover />
         <UserButton />
       </div>

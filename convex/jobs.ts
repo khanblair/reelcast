@@ -145,3 +145,44 @@ export const internalUpdateStatus = internalMutation({
     await ctx.db.patch(args.id, updates);
   },
 });
+
+export const retryJob = mutation({
+  args: {
+    id: v.id("jobs"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await getCurrentUserOrThrow(ctx);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .unique();
+
+    if (!user) {
+      throw new Error("User not found in DB");
+    }
+
+    const job = await ctx.db.get(args.id);
+    if (!job || job.userId !== user._id) {
+      throw new Error("Job not found or unauthorized");
+    }
+
+    await ctx.db.patch(args.id, {
+      status: "pending",
+      error: undefined,
+      startedAt: undefined,
+      completedAt: undefined,
+    });
+
+    if (job.type === "generation") {
+      await ctx.scheduler.runAfter(0, api.scheduled.runGeneration.processGenerationJob, {
+        jobId: args.id,
+        videoId: job.videoId,
+      });
+    } else if (job.type === "publish") {
+      await ctx.scheduler.runAfter(0, api.scheduled.runPublish.processPublishJob, {
+        jobId: args.id,
+        videoId: job.videoId,
+      });
+    }
+  },
+});

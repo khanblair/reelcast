@@ -40,7 +40,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
     : null;
 
   return (
-    <div className="max-w-5xl mx-auto py-4 sm:py-6 space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">

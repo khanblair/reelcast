@@ -72,7 +72,7 @@ export default function HistoryPage() {
   );
 
   return (
-    <div className="space-y-8">
+    <div className="max-w-4xl mx-auto space-y-8">
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">Job History</h1>
         <p className="text-muted-foreground">View the history of all your AI generation and publishing tasks.</p>

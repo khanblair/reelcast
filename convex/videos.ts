@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
+import { api } from "./_generated/api";
 import { getCurrentUserOrThrow } from "./lib/auth";
 
 export const create = mutation({
@@ -226,5 +227,99 @@ export const internalSetPublishedData = internalMutation({
       publishedVideoId: args.publishedVideoId,
       publishedAt: args.publishedAt,
     });
+  },
+});
+
+export const schedulePublish = mutation({
+  args: {
+    id: v.id("videos"),
+    scheduledAt: v.number(),
+    privacyStatus: v.optional(v.union(v.literal("private"), v.literal("public"), v.literal("unlisted"))),
+  },
+  handler: async (ctx, args) => {
+    const identity = await getCurrentUserOrThrow(ctx);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .unique();
+    if (!user) throw new Error("User not found");
+
+    const video = await ctx.db.get(args.id);
+    if (!video || video.userId !== user._id) throw new Error("Video not found or unauthorized");
+
+    await ctx.db.patch(args.id, {
+      status: "scheduled",
+      scheduledPublishAt: args.scheduledAt,
+      ...(args.privacyStatus ? { privacyStatus: args.privacyStatus } : {}),
+    });
+  },
+});
+
+export const cancelSchedule = mutation({
+  args: { id: v.id("videos") },
+  handler: async (ctx, args) => {
+    const identity = await getCurrentUserOrThrow(ctx);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .unique();
+    if (!user) throw new Error("User not found");
+
+    const video = await ctx.db.get(args.id);
+    if (!video || video.userId !== user._id) throw new Error("Video not found or unauthorized");
+
+    await ctx.db.patch(args.id, {
+      status: "ready",
+      scheduledPublishAt: undefined,
+    });
+  },
+});
+
+export const listScheduled = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .unique();
+    if (!user) return [];
+
+    const videos = await ctx.db
+      .query("videos")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .order("desc")
+      .collect();
+
+    return videos.filter((v) => v.scheduledPublishAt !== undefined);
+  },
+});
+
+export const processDueSchedules = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const scheduledVideos = await ctx.db
+      .query("videos")
+      .withIndex("by_status", (q) => q.eq("status", "scheduled"))
+      .collect();
+
+    for (const video of scheduledVideos) {
+      if (video.scheduledPublishAt && video.scheduledPublishAt <= now) {
+        await ctx.db.patch(video._id, { status: "publishing" });
+        const jobId = await ctx.db.insert("jobs", {
+          userId: video.userId,
+          videoId: video._id,
+          type: "publish",
+          status: "pending",
+        });
+        await ctx.scheduler.runAfter(0, api.scheduled.runPublish.processPublishJob, {
+          jobId,
+          videoId: video._id,
+        });
+      }
+    }
   },
 });

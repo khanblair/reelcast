@@ -30,7 +30,7 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto py-4 sm:py-8 space-y-6 sm:space-y-8">
+    <div className="max-w-4xl mx-auto space-y-8">
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">Analytics</h1>
         <p className="text-muted-foreground">Overview of your video generation and storage.</p>

@@ -18,7 +18,7 @@ import {
 const NAV_ITEMS = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Upload", href: "/upload", icon: Upload },
-  { name: "Drafts", href: "/drafts", icon: Files },
+  { name: "Library", href: "/drafts", icon: Files },
   { name: "Schedule", href: "/schedule", icon: Calendar },
   { name: "History", href: "/history", icon: History },
   { name: "Analytics", href: "/analytics", icon: BarChart },

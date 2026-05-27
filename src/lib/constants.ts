@@ -61,6 +61,30 @@ export const ASPECT_RATIOS = [
   { value: "1:1", label: "1:1 Square" },
 ] as const;
 
+export const AI_TONES = [
+  { value: "professional", label: "Professional" },
+  { value: "casual", label: "Casual & Friendly" },
+  { value: "educational", label: "Educational" },
+  { value: "entertainment", label: "Entertainment" },
+  { value: "technical", label: "Technical" },
+] as const;
+
+export const AI_LANGUAGES = [
+  { value: "en", label: "English" },
+  { value: "es", label: "Spanish" },
+  { value: "fr", label: "French" },
+  { value: "de", label: "German" },
+  { value: "pt", label: "Portuguese" },
+  { value: "ja", label: "Japanese" },
+  { value: "zh", label: "Chinese" },
+] as const;
+
+export const AI_DESCRIPTION_LENGTHS = [
+  { value: "short", label: "Short (~100 words)" },
+  { value: "medium", label: "Medium (~250 words)" },
+  { value: "long", label: "Long (~500 words)" },
+] as const;
+
 export const PRIVACY_STATUS = {
   PRIVATE: "private",
   PUBLIC: "public",

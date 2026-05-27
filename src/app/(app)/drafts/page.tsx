@@ -18,14 +18,14 @@ export default function DraftsPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="max-w-4xl mx-auto space-y-8">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">Video Library</h1>
           <p className="text-muted-foreground">Manage your uploads, drafts, and published content.</p>
         </div>
         <Link href="/upload">
-          <Button className="w-full sm:w-auto">
+          <Button>
             <Plus className="mr-2 h-4 w-4" /> New Upload
           </Button>
         </Link>

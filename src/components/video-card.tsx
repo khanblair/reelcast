@@ -16,49 +16,57 @@ export function VideoCard({ video }: VideoCardProps) {
     : null;
 
   return (
-    <Link href={`/video/${video._id}`}>
-      <Card className="overflow-hidden hover:border-primary/50 transition-colors group cursor-pointer">
-        <div className="aspect-video bg-muted relative flex items-center justify-center">
-          {video.thumbnailUrl ? (
-            <img
-              src={video.thumbnailUrl}
-              alt={video.title}
-              className="object-cover w-full h-full"
-            />
-          ) : (
-            <Video className="w-10 h-10 text-muted-foreground/50 group-hover:text-primary/50 transition-colors" />
-          )}
-          <div className="absolute top-2 right-2">
-            <VideoStatusBadge status={video.status} />
-          </div>
-          {video.duration && (
-            <div className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-1.5 py-0.5 rounded">
-              {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, '0')}
-            </div>
-          )}
-          {youtubeUrl && (
-            <a
-              href={youtubeUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="absolute bottom-2 left-2 bg-primary text-primary-foreground text-xs px-2 py-1 rounded flex items-center gap-1 hover:opacity-90"
-            >
-              <Youtube className="w-3 h-3" /> YouTube
-            </a>
-          )}
+    <Card className="overflow-hidden hover:border-primary/50 transition-colors group cursor-pointer relative">
+      {/* Stretch link — covers the whole card but sits below interactive children */}
+      <Link
+        href={`/video/${video._id}`}
+        className="absolute inset-0 z-0"
+        aria-label={`Open ${video.title}`}
+      />
+
+      <div className="aspect-video bg-muted relative flex items-center justify-center">
+        {video.thumbnailUrl ? (
+          <img
+            src={video.thumbnailUrl}
+            alt={video.title}
+            className="object-cover w-full h-full"
+          />
+        ) : (
+          <Video className="w-10 h-10 text-muted-foreground/50 group-hover:text-primary/50 transition-colors" />
+        )}
+
+        <div className="absolute top-2 right-2 z-10">
+          <VideoStatusBadge status={video.status} />
         </div>
-        <CardContent className="p-4">
-          <h3 className="font-semibold line-clamp-2 mb-1 group-hover:text-primary transition-colors">
-            {video.title}
-          </h3>
-          <div className="flex items-center text-xs text-muted-foreground">
-            <span>{timeAgo}</span>
-            <span className="mx-2">•</span>
-            <span>{(video.rawFileSize / (1024 * 1024)).toFixed(1)} MB</span>
+
+        {video.duration && (
+          <div className="absolute bottom-2 right-2 z-10 bg-black/80 text-white text-xs px-1.5 py-0.5 rounded">
+            {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, "0")}
           </div>
-        </CardContent>
-      </Card>
-    </Link>
+        )}
+
+        {youtubeUrl && (
+          <a
+            href={youtubeUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="absolute bottom-2 left-2 z-10 bg-primary text-primary-foreground text-xs px-2 py-1 rounded flex items-center gap-1 hover:opacity-90"
+          >
+            <Youtube className="w-3 h-3" /> YouTube
+          </a>
+        )}
+      </div>
+
+      <CardContent className="p-4 relative z-10">
+        <h3 className="font-semibold line-clamp-2 mb-1 group-hover:text-primary transition-colors">
+          {video.title}
+        </h3>
+        <div className="flex items-center text-xs text-muted-foreground">
+          <span>{timeAgo}</span>
+          <span className="mx-2">•</span>
+          <span>{(video.rawFileSize / (1024 * 1024)).toFixed(1)} MB</span>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

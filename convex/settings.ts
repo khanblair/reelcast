@@ -31,6 +31,14 @@ export const get = query({
         youtubeChannelName: user.youtubeChannelName,
         aiPreset: undefined,
         telegramChatId: undefined,
+        aiAutoGenerate: undefined,
+        aiGenerateTitle: undefined,
+        aiGenerateDescription: undefined,
+        aiGenerateTags: undefined,
+        aiTone: undefined,
+        aiLanguage: undefined,
+        aiDescriptionLength: undefined,
+        aiGuidelines: undefined,
       };
     }
 
@@ -51,6 +59,14 @@ export const update = mutation({
     defaultBackgroundMusic: v.optional(v.boolean()),
     notificationsEnabled: v.optional(v.boolean()),
     telegramChatId: v.optional(v.string()),
+    aiAutoGenerate: v.optional(v.boolean()),
+    aiGenerateTitle: v.optional(v.boolean()),
+    aiGenerateDescription: v.optional(v.boolean()),
+    aiGenerateTags: v.optional(v.boolean()),
+    aiTone: v.optional(v.string()),
+    aiLanguage: v.optional(v.string()),
+    aiDescriptionLength: v.optional(v.string()),
+    aiGuidelines: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await getCurrentUserOrThrow(ctx);
@@ -69,13 +85,13 @@ export const update = mutation({
       .unique();
 
     const updateData: Partial<{
-      aiPreset: string;
-      defaultQuality: string;
-      defaultAspectRatio: string;
-      defaultCaptions: boolean;
-      defaultBackgroundMusic: boolean;
-      notificationsEnabled: boolean;
-      telegramChatId: string;
+      aiPreset: string; defaultQuality: string; defaultAspectRatio: string;
+      defaultCaptions: boolean; defaultBackgroundMusic: boolean;
+      notificationsEnabled: boolean; telegramChatId: string;
+      aiAutoGenerate: boolean; aiGenerateTitle: boolean;
+      aiGenerateDescription: boolean; aiGenerateTags: boolean;
+      aiTone: string; aiLanguage: string; aiDescriptionLength: string;
+      aiGuidelines: string;
     }> = {};
     if (args.aiPreset !== undefined) updateData.aiPreset = args.aiPreset;
     if (args.defaultQuality !== undefined) updateData.defaultQuality = args.defaultQuality;
@@ -84,6 +100,14 @@ export const update = mutation({
     if (args.defaultBackgroundMusic !== undefined) updateData.defaultBackgroundMusic = args.defaultBackgroundMusic;
     if (args.notificationsEnabled !== undefined) updateData.notificationsEnabled = args.notificationsEnabled;
     if (args.telegramChatId !== undefined) updateData.telegramChatId = args.telegramChatId;
+    if (args.aiAutoGenerate !== undefined) updateData.aiAutoGenerate = args.aiAutoGenerate;
+    if (args.aiGenerateTitle !== undefined) updateData.aiGenerateTitle = args.aiGenerateTitle;
+    if (args.aiGenerateDescription !== undefined) updateData.aiGenerateDescription = args.aiGenerateDescription;
+    if (args.aiGenerateTags !== undefined) updateData.aiGenerateTags = args.aiGenerateTags;
+    if (args.aiTone !== undefined) updateData.aiTone = args.aiTone;
+    if (args.aiLanguage !== undefined) updateData.aiLanguage = args.aiLanguage;
+    if (args.aiDescriptionLength !== undefined) updateData.aiDescriptionLength = args.aiDescriptionLength;
+    if (args.aiGuidelines !== undefined) updateData.aiGuidelines = args.aiGuidelines;
 
     if (settings) {
       await ctx.db.patch(settings._id, updateData);

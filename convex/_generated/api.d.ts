@@ -11,7 +11,9 @@
 import type * as actions_publish from "../actions/publish.js";
 import type * as actions_storage from "../actions/storage.js";
 import type * as actions_telegram from "../actions/telegram.js";
+import type * as actions_testConnections from "../actions/testConnections.js";
 import type * as analytics from "../analytics.js";
+import type * as crons from "../crons.js";
 import type * as http from "../http.js";
 import type * as jobs from "../jobs.js";
 import type * as lib_auth from "../lib/auth.js";
@@ -34,7 +36,9 @@ declare const fullApi: ApiFromModules<{
   "actions/publish": typeof actions_publish;
   "actions/storage": typeof actions_storage;
   "actions/telegram": typeof actions_telegram;
+  "actions/testConnections": typeof actions_testConnections;
   analytics: typeof analytics;
+  crons: typeof crons;
   http: typeof http;
   jobs: typeof jobs;
   "lib/auth": typeof lib_auth;

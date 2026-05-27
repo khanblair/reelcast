@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { Button } from "@/components/ui/button";
-import { Video, Sparkles, Youtube, Clock } from "lucide-react";
+import { Sparkles, Youtube, Clock } from "lucide-react";
 import { auth } from "@clerk/nextjs/server";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -13,7 +13,7 @@ export default async function LandingPage() {
       {/* Header */}
       <header className="px-6 h-16 flex items-center border-b bg-background/80 backdrop-blur-md sticky top-0 z-50">
         <Link href="/" className="flex items-center gap-2 font-bold text-lg">
-          <Video className="h-6 w-6 text-primary" />
+          <img src="/icons/logo.png" alt="ReelCast" className="h-6 w-6" />
           <span>ReelCast</span>
         </Link>
         <nav className="ml-auto flex items-center gap-6">
@@ -142,7 +142,7 @@ export default async function LandingPage() {
       <footer className="border-t bg-background py-12 md:py-16">
         <div className="max-w-6xl mx-auto px-4 md:px-6 flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-2 font-semibold">
-            <Video className="h-5 w-5 text-primary" />
+            <img src="/icons/logo.png" alt="ReelCast" className="h-5 w-5" />
             <span>ReelCast</span>
           </div>
           <p className="text-sm text-muted-foreground text-center md:text-left">

@@ -12,7 +12,6 @@ import {
   History,
   BarChart,
   Settings,
-  Video,
   Wand2,
 } from "lucide-react";
 
@@ -33,7 +32,7 @@ export function SidebarNav({ onClick }: { onClick?: () => void }) {
       {/* Logo */}
       <div className="flex h-16 items-center border-b px-6">
         <Link href="/dashboard" className="flex items-center gap-2 font-bold text-lg" onClick={onClick}>
-          <Video className="h-6 w-6 text-primary" />
+          <img src="/icons/logo.png" alt="ReelCast" className="h-6 w-6" />
           <span>ReelCast</span>
         </Link>
       </div>

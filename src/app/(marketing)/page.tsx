@@ -149,9 +149,9 @@ export default async function LandingPage() {
             &copy; {new Date().getFullYear()} ReelCast Inc. All rights reserved. Built with ❤️ for creators.
           </p>
           <div className="flex gap-4">
-            <Link href="#" className="text-sm text-muted-foreground hover:text-foreground">Terms</Link>
-            <Link href="#" className="text-sm text-muted-foreground hover:text-foreground">Privacy</Link>
-            <Link href="#" className="text-sm text-muted-foreground hover:text-foreground">Contact</Link>
+            <Link href="/terms" className="text-sm text-muted-foreground hover:text-foreground">Terms</Link>
+            <Link href="/privacy" className="text-sm text-muted-foreground hover:text-foreground">Privacy</Link>
+            <Link href="/contact" className="text-sm text-muted-foreground hover:text-foreground">Contact</Link>
           </div>
         </div>
       </footer>

@@ -5,10 +5,11 @@ import { useQuery } from "convex/react";
 import { Upload, Plus, Film, Clock } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { VideoCard } from "@/components/video-card";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
+import type { Video as VideoType } from "@/types/video";
 
 export default function DashboardPage() {
   const videos = useQuery(api.videos.list);
@@ -24,8 +25,8 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight mb-2">Welcome back</h1>
-        <p className="text-muted-foreground">Here's what's happening with your videos today.</p>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">Welcome back</h1>
+        <p className="text-muted-foreground">Here&apos;s what&apos;s happening with your videos today.</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -49,10 +50,10 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-semibold tracking-tight">Recent Drafts</h2>
         <Link href="/upload">
-          <Button>
+          <Button className="w-full sm:w-auto">
             <Upload className="mr-2 h-4 w-4" /> New Upload
           </Button>
         </Link>
@@ -61,7 +62,7 @@ export default function DashboardPage() {
       {recentDrafts.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {recentDrafts.map((video) => (
-            <VideoCard key={video._id} video={video as any} />
+            <VideoCard key={video._id} video={video as VideoType} />
           ))}
         </div>
       ) : (

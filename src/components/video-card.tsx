@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
-import { Video } from "lucide-react";
+import { Video, Youtube } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { VideoStatusBadge } from "./video-status-badge";
 import type { Video as VideoType } from "@/types/video";
@@ -11,15 +11,18 @@ interface VideoCardProps {
 
 export function VideoCard({ video }: VideoCardProps) {
   const timeAgo = formatDistanceToNow(video._creationTime, { addSuffix: true });
+  const youtubeUrl = video.publishedVideoId
+    ? `https://youtu.be/${video.publishedVideoId}`
+    : null;
 
   return (
     <Link href={`/video/${video._id}`}>
       <Card className="overflow-hidden hover:border-primary/50 transition-colors group cursor-pointer">
         <div className="aspect-video bg-muted relative flex items-center justify-center">
           {video.thumbnailUrl ? (
-            <img 
-              src={video.thumbnailUrl} 
-              alt={video.title} 
+            <img
+              src={video.thumbnailUrl}
+              alt={video.title}
               className="object-cover w-full h-full"
             />
           ) : (
@@ -32,6 +35,17 @@ export function VideoCard({ video }: VideoCardProps) {
             <div className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-1.5 py-0.5 rounded">
               {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, '0')}
             </div>
+          )}
+          {youtubeUrl && (
+            <a
+              href={youtubeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="absolute bottom-2 left-2 bg-primary text-primary-foreground text-xs px-2 py-1 rounded flex items-center gap-1 hover:opacity-90"
+            >
+              <Youtube className="w-3 h-3" /> YouTube
+            </a>
           )}
         </div>
         <CardContent className="p-4">

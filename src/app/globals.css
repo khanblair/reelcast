@@ -11,8 +11,8 @@
   --popover: #ffffff;
   --popover-foreground: #0f0f0f;
 
-  /* Brand — YouTube Red */
-  --primary: #ff0000;
+  /* Brand — ReelCast Red */
+  --primary: #ff0335;
   --primary-foreground: #ffffff;
 
   /* Secondary surfaces */
@@ -38,7 +38,7 @@
   /* Borders & focus */
   --border: #e5e5e5;
   --input: #e5e5e5;
-  --ring: #ff0000;
+  --ring: #ff0335;
 
   /* Sidebar */
   --sidebar: #ffffff;
@@ -59,7 +59,7 @@
   --popover: #1a1a1a;
   --popover-foreground: #f1f1f1;
 
-  --primary: #ff0000;
+  --primary: #ff0335;
   --primary-foreground: #ffffff;
 
   --secondary: #272727;
@@ -80,7 +80,7 @@
 
   --border: #333333;
   --input: #333333;
-  --ring: #ff0000;
+  --ring: #ff0335;
 
   --sidebar: #1a1a1a;
   --sidebar-foreground: #f1f1f1;

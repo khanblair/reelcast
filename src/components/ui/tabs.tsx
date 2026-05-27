@@ -94,7 +94,7 @@ interface TabsContentProps {
   className?: string;
 }
 
-function TabsContent({ value, children, className }: TabsContentProps) {
+function TabsContent({ value: _value, children, className }: TabsContentProps) {
   return (
     <div
       className={cn("mt-4", className)}

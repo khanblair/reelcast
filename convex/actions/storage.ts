@@ -1,11 +1,10 @@
 "use node";
 
-import { v } from "convex/values";
 import { action } from "../_generated/server";
 
 export const generateUploadUrl = action({
   args: {},
-  handler: async (ctx) => {
+  handler: async (_ctx) => {
     // 1. Verify user (in a real app, you would pass an auth token or use internal action)
     // 2. Generate a mock presigned URL for R2 / S3
     

@@ -61,6 +61,20 @@ export const ASPECT_RATIOS = [
   { value: "1:1", label: "1:1 Square" },
 ] as const;
 
+export const PRIVACY_STATUS = {
+  PRIVATE: "private",
+  PUBLIC: "public",
+  UNLISTED: "unlisted",
+} as const;
+
+export type PrivacyStatus = (typeof PRIVACY_STATUS)[keyof typeof PRIVACY_STATUS];
+
+export const PRIVACY_LABELS: Record<PrivacyStatus, string> = {
+  private: "Private",
+  public: "Public",
+  unlisted: "Unlisted",
+};
+
 export const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: "LayoutDashboard" },
   { href: "/upload", label: "Upload", icon: "Upload" },

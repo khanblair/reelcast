@@ -1,4 +1,4 @@
-export default {
+const authConfig = {
   providers: [
     {
       domain: process.env.CLERK_ISSUER_URL || "https://genuine-dingo-34.clerk.accounts.dev",
@@ -6,3 +6,5 @@ export default {
     },
   ]
 };
+
+export default authConfig;

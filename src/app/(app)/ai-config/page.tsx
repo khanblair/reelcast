@@ -12,13 +12,21 @@ import { Select } from "@/components/ui/select";
 import { AI_PRESETS, OUTPUT_QUALITY, ASPECT_RATIOS } from "@/lib/constants";
 import { useState } from "react";
 
+interface AISettings {
+  aiPreset?: string;
+  defaultQuality?: string;
+  defaultAspectRatio?: string;
+  defaultCaptions?: boolean;
+  defaultBackgroundMusic?: boolean;
+  [key: string]: unknown;
+}
+
 export default function AIConfigPage() {
   const settings = useQuery(api.settings.get);
   const updateSettings = useMutation(api.settings.update);
   const [saving, setSaving] = useState(false);
 
-  // Local state to track changes before saving
-  const [localSettings, setLocalSettings] = useState<any>(null);
+  const [localSettings, setLocalSettings] = useState<AISettings | null>(null);
 
   if (settings === undefined) {
     return <div className="flex h-[80vh] items-center justify-center"><LoadingSpinner /></div>;
@@ -29,17 +37,18 @@ export default function AIConfigPage() {
     setLocalSettings(settings);
   }
 
-  const currentSettings = localSettings || settings || {};
+  const currentSettings = (localSettings || settings || {}) as AISettings;
 
   const handleSave = async () => {
     setSaving(true);
+    const s = currentSettings as AISettings;
     try {
       await updateSettings({
-        aiPreset: currentSettings.aiPreset,
-        defaultQuality: currentSettings.defaultQuality,
-        defaultAspectRatio: currentSettings.defaultAspectRatio,
-        defaultCaptions: currentSettings.defaultCaptions,
-        defaultBackgroundMusic: currentSettings.defaultBackgroundMusic,
+        aiPreset: s.aiPreset ?? undefined,
+        defaultQuality: s.defaultQuality ?? undefined,
+        defaultAspectRatio: s.defaultAspectRatio ?? undefined,
+        defaultCaptions: s.defaultCaptions ?? undefined,
+        defaultBackgroundMusic: s.defaultBackgroundMusic ?? undefined,
       });
       alert("AI settings saved successfully.");
     } catch (e) {
@@ -51,9 +60,9 @@ export default function AIConfigPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto py-8 space-y-8">
+    <div className="max-w-4xl mx-auto py-4 sm:py-8 space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight mb-2">AI Configuration</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">AI Configuration</h1>
         <p className="text-muted-foreground">Manage global defaults for all AI video generation tasks.</p>
       </div>
 
@@ -70,7 +79,7 @@ export default function AIConfigPage() {
             <Label>Default Style Preset</Label>
             <Select 
               value={currentSettings.aiPreset || AI_PRESETS[0].value}
-              onChange={(e: any) => setLocalSettings({ ...currentSettings, aiPreset: e.target.value })}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setLocalSettings({ ...currentSettings, aiPreset: e.target.value })}
             >
               {AI_PRESETS.map((p) => (
                 <option key={p.value} value={p.value}>{p.label}</option>
@@ -78,12 +87,12 @@ export default function AIConfigPage() {
             </Select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 max-w-md">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-md">
             <div className="space-y-2">
               <Label>Default Quality</Label>
               <Select 
                 value={currentSettings.defaultQuality || OUTPUT_QUALITY[1].value}
-                onChange={(e: any) => setLocalSettings({ ...currentSettings, defaultQuality: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setLocalSettings({ ...currentSettings, defaultQuality: e.target.value })}
               >
                 {OUTPUT_QUALITY.map((q) => (
                   <option key={q.value} value={q.value}>{q.label}</option>
@@ -94,7 +103,7 @@ export default function AIConfigPage() {
               <Label>Default Aspect Ratio</Label>
               <Select 
                 value={currentSettings.defaultAspectRatio || ASPECT_RATIOS[0].value}
-                onChange={(e: any) => setLocalSettings({ ...currentSettings, defaultAspectRatio: e.target.value })}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setLocalSettings({ ...currentSettings, defaultAspectRatio: e.target.value })}
               >
                 {ASPECT_RATIOS.map((r) => (
                   <option key={r.value} value={r.value}>{r.label}</option>

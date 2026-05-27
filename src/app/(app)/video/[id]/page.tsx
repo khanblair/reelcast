@@ -2,14 +2,17 @@
 
 import { use } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { Play, Calendar as CalendarIcon, Youtube } from "lucide-react";
+import { Play, Calendar as CalendarIcon, Youtube, ExternalLink } from "lucide-react";
 import { api } from "../../../../../convex/_generated/api";
 import { Id } from "../../../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { VideoStatusBadge } from "@/components/video-status-badge";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { AIConfigForm } from "@/components/ai-config-form";
 import { MetadataEditor } from "@/components/metadata-editor";
+import { PRIVACY_STATUS, PRIVACY_LABELS, type PrivacyStatus } from "@/lib/constants";
+import type { Video as VideoType } from "@/types/video";
 
 export default function VideoDetailPage({ params }: { params: Promise<{ id: string }> }) {
   // In Next 15, params is a Promise that must be unwrapped with React.use()
@@ -18,6 +21,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
   
   const video = useQuery(api.videos.get, { id: videoId });
   const updateStatus = useMutation(api.videos.updateStatus);
+  const updatePrivacy = useMutation(api.videos.updatePrivacyStatus);
   const triggerPublish = useMutation(api.jobs.create);
 
   if (video === undefined) {
@@ -31,27 +35,57 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
     await triggerPublish({ videoId: video._id, type: "publish" });
   };
 
+  const youtubeUrl = video.publishedVideoId
+    ? `https://youtu.be/${video.publishedVideoId}`
+    : null;
+
   return (
-    <div className="max-w-5xl mx-auto py-6 space-y-6">
+    <div className="max-w-5xl mx-auto py-4 sm:py-6 space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <h1 className="text-3xl font-bold tracking-tight">{video.title}</h1>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-3 mb-2">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight truncate">{video.title}</h1>
             <VideoStatusBadge status={video.status} />
           </div>
           <p className="text-muted-foreground text-sm">
             {(video.rawFileSize / (1024 * 1024)).toFixed(1)} MB • Uploaded {new Date(video._creationTime).toLocaleDateString()}
           </p>
+          {youtubeUrl && (
+            <a
+              href={youtubeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-sm text-primary hover:underline mt-1"
+            >
+              <Youtube className="w-4 h-4" /> View on YouTube <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
         </div>
         
-        <div className="flex gap-2">
+        <div className="flex flex-col items-stretch sm:items-end gap-2 w-full sm:w-auto shrink-0">
           {video.status === "ready" && (
             <>
-              <Button variant="outline"><CalendarIcon className="mr-2 h-4 w-4" /> Schedule</Button>
-              <Button onClick={handlePublish} className="bg-primary hover:bg-primary/90 text-white">
-                <Youtube className="mr-2 h-4 w-4" /> Publish Now
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  value={video.privacyStatus ?? "private"}
+                  onChange={(e) => updatePrivacy({ id: video._id, privacyStatus: e.target.value as PrivacyStatus })}
+                  className="w-32"
+                >
+                  {Object.entries(PRIVACY_STATUS).map(([_key, value]) => (
+                    <option key={value} value={value}>
+                      {PRIVACY_LABELS[value as PrivacyStatus]}
+                    </option>
+                  ))}
+                </Select>
+                <Button variant="outline"><CalendarIcon className="mr-2 h-4 w-4" /> Schedule</Button>
+                <Button onClick={handlePublish} className="bg-primary hover:bg-primary/90 text-white">
+                  <Youtube className="mr-2 h-4 w-4" /> Publish Now
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Will upload as: <span className="font-medium text-foreground">{PRIVACY_LABELS[(video.privacyStatus ?? "private") as PrivacyStatus]}</span>
+              </p>
             </>
           )}
         </div>
@@ -87,7 +121,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
 
         {/* Right Column: Metadata Editor */}
         <div className="lg:col-span-2">
-          <MetadataEditor video={video as any} />
+          <MetadataEditor video={video as VideoType} />
         </div>
       </div>
     </div>

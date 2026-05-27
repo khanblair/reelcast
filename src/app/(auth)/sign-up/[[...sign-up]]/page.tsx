@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { Route } from "next";
 import { useClerk } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Sparkles, Video } from "lucide-react";
@@ -29,7 +30,7 @@ export default function CustomSignUpPage() {
       {/* Background decoration */}
       <div className="absolute inset-0 z-0 pointer-events-none">
         <div className="absolute top-1/4 right-1/4 w-96 h-96 bg-primary/20 rounded-full blur-[128px] translate-x-1/2 -translate-y-1/2" />
-        <div className="absolute bottom-1/4 left-1/4 w-96 h-96 bg-red-500/10 rounded-full blur-[128px] -translate-x-1/2 translate-y-1/2" />
+        <div className="absolute bottom-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-[128px] -translate-x-1/2 translate-y-1/2" />
       </div>
 
       <div className="relative z-10 w-full max-w-sm mx-auto">
@@ -59,7 +60,7 @@ export default function CustomSignUpPage() {
               variant="outline" 
               className="w-full relative group h-14 bg-background hover:bg-muted/50 border-border/80 shadow-sm transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 rounded-xl"
             >
-              <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-red-500/5 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl pointer-events-none" />
+              <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-primary/5 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl pointer-events-none" />
               <div className="flex items-center justify-center w-full gap-3 pointer-events-none">
                 <svg viewBox="0 0 24 24" className="w-5 h-5">
                   <path
@@ -89,7 +90,7 @@ export default function CustomSignUpPage() {
 
         <p className="text-center text-sm text-muted-foreground mt-10">
           Already have an account?{" "}
-          <Link href={"/sign-in" as any} className="font-semibold text-red-500 hover:underline underline-offset-4">
+          <Link href={"/sign-in" as Route} className="font-semibold text-primary hover:underline underline-offset-4">
             Sign In
           </Link>
         </p>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { Route } from "next";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
@@ -44,7 +45,7 @@ export function SidebarNav({ onClick }: { onClick?: () => void }) {
           return (
             <Link
               key={item.href}
-              href={item.href as any}
+              href={item.href as Route}
               onClick={onClick}
               className={cn(
                 "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
@@ -63,7 +64,7 @@ export function SidebarNav({ onClick }: { onClick?: () => void }) {
       {/* Settings */}
       <div className="border-t p-4">
         <Link
-          href={"/settings" as any}
+          href="/settings"
           onClick={onClick}
           className={cn(
             "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",

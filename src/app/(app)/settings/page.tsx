@@ -51,9 +51,9 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto py-8 space-y-8">
+    <div className="max-w-4xl mx-auto py-4 sm:py-8 space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight mb-2">Settings</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">Settings</h1>
         <p className="text-muted-foreground">Manage your connections, notifications, and default preferences.</p>
       </div>
 
@@ -62,7 +62,7 @@ export default function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Youtube className="h-5 w-5 text-red-500" />
+              <Youtube className="h-5 w-5 text-primary" />
               YouTube Connection
             </CardTitle>
             <CardDescription>Connect your YouTube channel to enable auto-publishing.</CardDescription>
@@ -136,7 +136,7 @@ export default function SettingsPage() {
                 <p className="text-sm text-muted-foreground">
                   Start a chat with your bot on Telegram, then enter your username below.
                 </p>
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <Input
                     placeholder="your_telegram_username"
                     value={telegramInput}

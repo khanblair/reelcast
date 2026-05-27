@@ -1,6 +1,7 @@
 import Link from "next/link";
+import type { Route } from "next";
 import { Button } from "@/components/ui/button";
-import { Video, Sparkles, Youtube, Clock, Zap, Target, Lock } from "lucide-react";
+import { Video, Sparkles, Youtube, Clock } from "lucide-react";
 import { auth } from "@clerk/nextjs/server";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -24,11 +25,11 @@ export default async function LandingPage() {
           </Link>
           <ThemeToggle />
           {userId ? (
-            <Link href={"/dashboard" as any}>
+            <Link href="/dashboard">
               <Button size="sm">Dashboard</Button>
             </Link>
           ) : (
-            <Link href={"/sign-in" as any}>
+            <Link href={"/sign-in" as Route}>
               <Button size="sm" variant="outline">Sign In</Button>
             </Link>
           )}
@@ -46,7 +47,7 @@ export default async function LandingPage() {
           </div>
           <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-6 max-w-4xl z-10">
             Upload raw footage.<br />
-            <span className="text-primary bg-clip-text text-transparent bg-gradient-to-r from-primary to-red-500">Let AI do the rest.</span>
+            <span className="text-primary bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/80">Let AI do the rest.</span>
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mb-10 z-10">
             ReelCast analyzes your raw video, generates highly optimized titles, descriptions, and tags, 
@@ -54,20 +55,20 @@ export default async function LandingPage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 z-10">
             {userId ? (
-              <Link href={"/dashboard" as any}>
+              <Link href="/dashboard">
                 <Button size="lg" className="w-full sm:w-auto font-semibold h-12 px-8">
                   Go to Dashboard
                 </Button>
               </Link>
             ) : (
               <>
-                <Link href={"/sign-up" as any}>
+                <Link href={"/sign-up" as Route}>
                   <Button size="lg" className="w-full sm:w-auto font-semibold h-12 px-8 relative overflow-hidden group">
                     <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform" />
                     Get Started for Free
                   </Button>
                 </Link>
-                <Link href={"/sign-in" as any}>
+            <Link href={"/sign-in" as Route}>
                   <Button size="lg" variant="outline" className="w-full sm:w-auto h-12 px-8">
                     Sign In
                   </Button>

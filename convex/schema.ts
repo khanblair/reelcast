@@ -50,6 +50,7 @@ export default defineSchema({
     publishedAt: v.optional(v.number()),
     scheduledPublishAt: v.optional(v.number()),
     scheduledGenerationAt: v.optional(v.number()),
+    privacyStatus: v.optional(v.union(v.literal("private"), v.literal("public"), v.literal("unlisted"))),
   }).index("by_user", ["userId"]).index("by_status", ["status"]),
 
   jobs: defineTable({

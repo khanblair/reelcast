@@ -54,7 +54,7 @@ export default function UploadPage() {
             try {
               const response = JSON.parse(xhr.responseText);
               resolve(response);
-            } catch (e) {
+            } catch {
               reject(new Error("Failed to parse Cloudinary response"));
             }
           } else {
@@ -77,9 +77,10 @@ export default function UploadPage() {
       });
       
       router.push(`/video/${videoId}`);
-    } catch (e: any) {
-      console.error("Cloudinary upload failed:", e);
-      alert(e.message || "An error occurred during upload. Please try again.");
+    } catch (err: unknown) {
+      console.error("Cloudinary upload failed:", err);
+      const message = err instanceof Error ? err.message : "An error occurred during upload. Please try again.";
+      alert(message);
       setUploading(false);
     }
   };
@@ -104,10 +105,10 @@ export default function UploadPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto py-8">
+    <div className="max-w-3xl mx-auto py-4 sm:py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight mb-2">Upload Footage</h1>
-        <p className="text-muted-foreground">Drop your raw video here. We'll secure it and prepare it for AI generation.</p>
+        <p className="text-muted-foreground">Drop your raw video here. We&apos;ll secure it and prepare it for AI generation.</p>
       </div>
 
       {!uploading ? (
@@ -119,13 +120,12 @@ export default function UploadPage() {
           onDragLeave={() => setIsDragging(false)}
           onDrop={onDrop}
         >
-          <CardContent className="flex flex-col items-center justify-center p-16 text-center">
+          <CardContent className="flex flex-col items-center justify-center p-6 sm:p-16 text-center">
             <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center mb-6">
               <UploadCloud className="h-8 w-8 text-primary" />
             </div>
             <h3 className="text-xl font-semibold mb-2">Drag and drop your video</h3>
             <p className="text-muted-foreground mb-6">MP4, MOV, AVI up to 500MB</p>
-            
             <label className="cursor-pointer">
               <span className="bg-primary text-primary-foreground px-4 py-2 rounded-md font-medium hover:bg-primary/90 transition-colors">
                 Select File
@@ -141,7 +141,7 @@ export default function UploadPage() {
         </Card>
       ) : (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center p-16 text-center">
+          <CardContent className="flex flex-col items-center justify-center p-6 sm:p-16 text-center">
             <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center mb-6">
               {progress < 100 ? (
                 <FileVideo className="h-8 w-8 text-primary animate-pulse" />

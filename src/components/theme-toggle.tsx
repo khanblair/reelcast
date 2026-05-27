@@ -7,15 +7,15 @@ import { cn } from "@/lib/utils";
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = React.useState(false);
-
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = React.useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
 
   if (!mounted) return <div className="w-16 h-8" />;
 
-  const isDark = theme === "dark" || (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const isDark = theme === "dark" || (theme === "system" && typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
   return (
     <button
@@ -24,13 +24,11 @@ export function ThemeToggle() {
     >
       <span className="sr-only">Toggle theme</span>
       
-      {/* Background icons */}
       <div className="flex w-full justify-between px-2.5 absolute inset-0 items-center pointer-events-none">
         <Sun className="h-4 w-4 text-muted-foreground" />
         <Moon className="h-4 w-4 text-muted-foreground" />
       </div>
 
-      {/* Sliding thumb */}
       <div
         className={cn(
           "absolute left-1 h-6 w-6 rounded-full bg-background shadow-md transition-transform pointer-events-none",

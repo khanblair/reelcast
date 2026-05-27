@@ -5,7 +5,7 @@ import { api } from "../../../../convex/_generated/api";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Calendar, CheckCircle, Clock, XCircle } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { formatDistanceToNow } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 
@@ -29,7 +29,7 @@ export default function SchedulePage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight mb-2">Job Queue</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">Job Queue</h1>
         <p className="text-muted-foreground">Monitor the status of your video generation and publishing tasks.</p>
       </div>
 
@@ -38,17 +38,17 @@ export default function SchedulePage() {
           <CardContent className="p-0">
             <div className="divide-y">
               {jobs.map((job) => (
-                <div key={job._id} className="flex items-center justify-between p-4">
-                  <div className="flex items-center gap-4">
+                <div key={job._id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-2">
+                  <div className="flex items-center gap-4 min-w-0">
                     {getStatusIcon(job.status)}
-                    <div>
-                      <div className="font-medium flex items-center gap-2">
+                    <div className="min-w-0">
+                      <div className="font-medium flex flex-wrap items-center gap-2">
                         {job.type === "generation" ? "AI Generation" : "YouTube Publish"}
                         <Badge variant="outline" className="capitalize text-xs">
                           {job.status}
                         </Badge>
                       </div>
-                      <div className="text-sm text-muted-foreground">
+                      <div className="text-sm text-muted-foreground truncate">
                         {job.startedAt ? (
                           <span>Started {formatDistanceToNow(job.startedAt, { addSuffix: true })}</span>
                         ) : (

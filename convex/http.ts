@@ -33,7 +33,7 @@ http.route({
         "svix-timestamp": svixIdTimeStamp,
         "svix-signature": svixSignature,
       }) as WebhookEvent;
-    } catch (err) {
+    } catch {
       console.error("Error verifying webhook");
       return new Response("Error occurred", { status: 400 });
     }

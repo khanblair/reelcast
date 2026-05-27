@@ -65,7 +65,7 @@ export const processGenerationJob = action({
       let parsed;
       try {
         parsed = JSON.parse(text);
-      } catch (e) {
+      } catch {
         const cleaned = text.replace(/```json\n?/g, "").replace(/```/g, "").trim();
         parsed = JSON.parse(cleaned);
       }
@@ -88,11 +88,12 @@ export const processGenerationJob = action({
         id: args.jobId,
         status: "completed",
       });
-    } catch (e: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
       await ctx.runMutation(internal.jobs.internalUpdateStatus, {
         id: args.jobId,
         status: "failed",
-        error: e.message,
+        error: message,
       });
 
       await ctx.runMutation(internal.videos.internalUpdateStatus, {

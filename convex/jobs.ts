@@ -100,7 +100,7 @@ export const updateStatus = mutation({
       throw new Error("Job not found or unauthorized");
     }
 
-    const updates: any = { status: args.status };
+    const updates: Record<string, unknown> = { status: args.status };
     if (args.error !== undefined) {
       updates.error = args.error;
     }
@@ -131,7 +131,7 @@ export const internalUpdateStatus = internalMutation({
     const job = await ctx.db.get(args.id);
     if (!job) throw new Error("Job not found");
 
-    const updates: any = { status: args.status };
+    const updates: Record<string, unknown> = { status: args.status };
     if (args.error !== undefined) {
       updates.error = args.error;
     }

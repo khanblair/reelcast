@@ -1,15 +1,14 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 
-// Helper function to verify user authentication
-async function getUserId(ctx: any) {
+async function getUserId(ctx: QueryCtx) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) {
     throw new Error("Unauthenticated call");
   }
   const user = await ctx.db
     .query("users")
-    .withIndex("by_clerk_id", (q: any) => q.eq("clerkId", identity.subject))
+    .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
     .first();
   
   if (!user) {
@@ -27,7 +26,7 @@ export const get = query({
         .withIndex("by_user", (q) => q.eq("userId", userId))
         .order("desc")
         .take(50); // Get recent 50 notifications
-    } catch (e) {
+    } catch {
       return []; // Return empty array if unauthenticated to avoid hard crashes on mount
     }
   },

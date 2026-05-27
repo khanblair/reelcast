@@ -1,4 +1,4 @@
-import type { VideoStatus } from "@/lib/constants";
+import type { VideoStatus, PrivacyStatus } from "@/lib/constants";
 
 export interface Video {
   _id: string;
@@ -21,6 +21,7 @@ export interface Video {
   publishedAt?: number;
   scheduledPublishAt?: number;
   scheduledGenerationAt?: number;
+  privacyStatus?: PrivacyStatus;
 }
 
 export interface AIConfig {

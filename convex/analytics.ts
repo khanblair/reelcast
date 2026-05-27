@@ -20,7 +20,7 @@ export const getDashboardStats = query({
       .collect();
 
     // 1. Status Distribution
-    const statusCounts = videos.reduce((acc: any, video) => {
+    const statusCounts = videos.reduce((acc: Record<string, number>, video) => {
       acc[video.status] = (acc[video.status] || 0) + 1;
       return acc;
     }, {});

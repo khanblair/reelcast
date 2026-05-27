@@ -2,7 +2,8 @@
 
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import { Bell, Check, Trash2, Loader2, Info, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Id } from "../../../convex/_generated/dataModel";
+import { Bell, Trash2, Loader2, Info, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -15,10 +16,10 @@ export function NotificationsPopover() {
   const markAllAsRead = useMutation(api.notifications.markAllAsRead);
   const clearAll = useMutation(api.notifications.clearAll);
 
-  const unreadCount = notifications?.filter((n: any) => !n.isRead).length || 0;
+  const unreadCount = notifications?.filter((n: { isRead: boolean }) => !n.isRead).length || 0;
 
-  const handleMarkAsRead = async (id: any) => {
-    await markAsRead({ notificationId: id });
+  const handleMarkAsRead = async (id: Id<"notifications">) => {
+    await markAsRead({ notificationId: id as Id<"notifications"> });
   };
 
   const getIcon = (type: string) => {
@@ -40,7 +41,7 @@ export function NotificationsPopover() {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align="end">
+      <PopoverContent className="w-[calc(100vw-2rem)] sm:w-80 p-0" align="end">
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <h4 className="font-semibold text-sm">Notifications</h4>
           {unreadCount > 0 && (
@@ -58,11 +59,11 @@ export function NotificationsPopover() {
           ) : notifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-32 text-center px-4">
               <Bell className="h-8 w-8 text-muted-foreground/30 mb-2" />
-              <p className="text-sm text-muted-foreground">You don't have any notifications yet.</p>
+              <p className="text-sm text-muted-foreground">You don&apos;t have any notifications yet.</p>
             </div>
           ) : (
             <div className="flex flex-col">
-              {notifications.map((notification: any) => (
+              {notifications.map((notification: { _id: Id<"notifications">; type: string; isRead: boolean; title: string; message: string; _creationTime: number }) => (
                 <div 
                   key={notification._id}
                   className={cn(

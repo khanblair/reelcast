@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { VideoCard } from "@/components/video-card";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
+import type { Video as VideoType } from "@/types/video";
 
 export default function DraftsPage() {
   const videos = useQuery(api.videos.list);
@@ -18,13 +19,13 @@ export default function DraftsPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight mb-2">Video Library</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">Video Library</h1>
           <p className="text-muted-foreground">Manage your uploads, drafts, and published content.</p>
         </div>
         <Link href="/upload">
-          <Button>
+          <Button className="w-full sm:w-auto">
             <Plus className="mr-2 h-4 w-4" /> New Upload
           </Button>
         </Link>
@@ -33,7 +34,7 @@ export default function DraftsPage() {
       {videos.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {videos.map((video) => (
-            <VideoCard key={video._id} video={video as any} />
+            <VideoCard key={video._id} video={video as VideoType} />
           ))}
         </div>
       ) : (

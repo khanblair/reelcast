@@ -6,10 +6,11 @@ export interface YouTubeUploadOptions {
   description: string;
   tags: string[];
   videoUrl: string;
+  privacyStatus: "private" | "public" | "unlisted";
 }
 
 export async function uploadToYouTube(options: YouTubeUploadOptions): Promise<string> {
-  const { accessToken, title, description, tags, videoUrl } = options;
+  const { accessToken, title, description, tags, videoUrl, privacyStatus } = options;
 
   const videoResponse = await fetch(videoUrl);
   if (!videoResponse.ok) {
@@ -36,7 +37,7 @@ export async function uploadToYouTube(options: YouTubeUploadOptions): Promise<st
           categoryId: "22", // People & Blogs
         },
         status: {
-          privacyStatus: "private",
+          privacyStatus,
         },
       }),
     }

@@ -99,16 +99,37 @@ export const PRIVACY_LABELS: Record<PrivacyStatus, string> = {
   unlisted: "Unlisted",
 };
 
-// Only models available via Gemini Developer API (AI Studio key).
-// generateAudio and personGeneration require Vertex AI — not included.
 export const VEO_MODELS = [
   {
-    value: "veo-2",
-    label: "Veo 2",
-    modelId: "veo-2.0-generate-001",
-    description: "Stable and reliable. Best compatibility with the Gemini Developer API.",
+    value: "veo-3.1-preview",
+    label: "Veo 3.1 Preview",
+    modelId: "veo-3.1-generate-preview",
+    description: "Latest Veo 3.1 — highest quality video via Gemini Developer API.",
     recommended: true,
     maxDuration: 8,
+    supportsAudio: true,
+    supportedResolutions: ["720p", "1080p"],
+    supportedAspectRatios: ["16:9", "9:16", "1:1"],
+  },
+  {
+    value: "veo-3",
+    label: "Veo 3",
+    modelId: "veo-3.0-generate-001",
+    description: "Veo 3 stable release. Great quality and broad availability.",
+    recommended: false,
+    maxDuration: 8,
+    supportsAudio: true,
+    supportedResolutions: ["720p", "1080p"],
+    supportedAspectRatios: ["16:9", "9:16", "1:1"],
+  },
+  {
+    value: "veo-3.1-fast-preview",
+    label: "Veo 3.1 Fast Preview",
+    modelId: "veo-3.1-fast-generate-preview",
+    description: "Faster Veo 3.1 generation. Good balance of speed and quality.",
+    recommended: false,
+    maxDuration: 8,
+    supportsAudio: true,
     supportedResolutions: ["720p", "1080p"],
     supportedAspectRatios: ["16:9", "9:16", "1:1"],
   },
@@ -116,9 +137,32 @@ export const VEO_MODELS = [
     value: "veo-3-fast",
     label: "Veo 3 Fast",
     modelId: "veo-3.0-fast-generate-001",
-    description: "Faster generation with improved motion quality. Available on paid tiers.",
+    description: "Fast Veo 3 generation. Reliable on paid API tiers.",
     recommended: false,
     maxDuration: 8,
+    supportsAudio: true,
+    supportedResolutions: ["720p", "1080p"],
+    supportedAspectRatios: ["16:9", "9:16", "1:1"],
+  },
+  {
+    value: "veo-3.1-lite",
+    label: "Veo 3.1 Lite Preview",
+    modelId: "veo-3.1-lite-generate-preview",
+    description: "Lightweight and fast. Best for drafts and high-volume generation.",
+    recommended: false,
+    maxDuration: 8,
+    supportsAudio: false,
+    supportedResolutions: ["720p", "1080p"],
+    supportedAspectRatios: ["16:9", "9:16", "1:1"],
+  },
+  {
+    value: "veo-2",
+    label: "Veo 2",
+    modelId: "veo-2.0-generate-001",
+    description: "Stable and reliable. No audio — use Veo 3 for videos with sound.",
+    recommended: false,
+    maxDuration: 8,
+    supportsAudio: false,
     supportedResolutions: ["720p", "1080p"],
     supportedAspectRatios: ["16:9", "9:16", "1:1"],
   },
@@ -137,10 +181,10 @@ export const VEO_ASPECT_RATIOS = [
   { value: "1:1", label: "1:1 Square", default: false },
 ] as const;
 
+// Vertex AI supports only 4s, 6s, 8s for text-to-video
 export const VEO_DURATIONS = [
-  { value: 5, label: "5s" },
+  { value: 4, label: "4s" },
   { value: 6, label: "6s" },
-  { value: 7, label: "7s" },
   { value: 8, label: "8s" },
 ] as const;
 
@@ -153,11 +197,12 @@ export const PROMPT_PRESETS = [
 ] as const;
 
 export const VEO_DEFAULTS = {
-  model: "veo-2" as VeoModelKey,
+  model: "veo-3.1-preview" as VeoModelKey,
   resolution: "720p",
   aspectRatio: "16:9",
   durationSeconds: 8,
   enhancePrompt: true,
+  generateAudio: true,  // active when Vertex AI creds are present
   numberOfVideos: 1,
 } as const;
 

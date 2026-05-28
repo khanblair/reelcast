@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import type { Route } from "next";
 import { useClerk } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
@@ -36,7 +37,7 @@ export default function CustomSignUpPage() {
       <div className="relative z-10 w-full max-w-sm mx-auto">
         <div className="flex flex-col items-center mb-10 space-y-4">
           <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center ring-1 ring-primary/20 shadow-inner">
-            <img src="/icons/logo.png" alt="ReelCast" className="w-8 h-8" />
+            <Image src="/icons/logo.png" alt="ReelCast" width={32} height={32} />
           </div>
           <div className="space-y-2 text-center">
             <h1 className="text-4xl font-extrabold tracking-tight">Join ReelCast</h1>

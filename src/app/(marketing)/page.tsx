@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import type { Route } from "next";
 import { Button } from "@/components/ui/button";
 import { Sparkles, Youtube, Clock } from "lucide-react";
@@ -13,7 +14,7 @@ export default async function LandingPage() {
       {/* Header */}
       <header className="px-6 h-16 flex items-center border-b bg-background/80 backdrop-blur-md sticky top-0 z-50">
         <Link href="/" className="flex items-center gap-2 font-bold text-lg">
-          <img src="/icons/logo.png" alt="ReelCast" className="h-6 w-6" />
+          <Image src="/icons/logo.png" alt="ReelCast" width={24} height={24} />
           <span>ReelCast</span>
         </Link>
         <nav className="ml-auto flex items-center gap-6">
@@ -142,7 +143,7 @@ export default async function LandingPage() {
       <footer className="border-t bg-background py-12 md:py-16">
         <div className="max-w-6xl mx-auto px-4 md:px-6 flex flex-col md:flex-row justify-between items-center gap-6">
           <div className="flex items-center gap-2 font-semibold">
-            <img src="/icons/logo.png" alt="ReelCast" className="h-5 w-5" />
+            <Image src="/icons/logo.png" alt="ReelCast" width={20} height={20} />
             <span>ReelCast</span>
           </div>
           <p className="text-sm text-muted-foreground text-center md:text-left">

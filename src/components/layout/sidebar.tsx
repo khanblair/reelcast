@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import type { Route } from "next";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -32,7 +33,7 @@ export function SidebarNav({ onClick }: { onClick?: () => void }) {
       {/* Logo */}
       <div className="flex h-16 items-center border-b px-6">
         <Link href="/dashboard" className="flex items-center gap-2 font-bold text-lg" onClick={onClick}>
-          <img src="/icons/logo.png" alt="ReelCast" className="h-6 w-6" />
+          <Image src="/icons/logo.png" alt="ReelCast" width={24} height={24} />
           <span>ReelCast</span>
         </Link>
       </div>

@@ -3,7 +3,7 @@
 import { VEO_MODELS, type VeoModelKey } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Zap } from "lucide-react";
+import { Sparkles, Zap, Volume2, VolumeX } from "lucide-react";
 
 interface ModelSelectorProps {
   value: VeoModelKey;
@@ -40,10 +40,16 @@ export function ModelSelector({ value, onChange }: ModelSelectorProps) {
             <p className="text-xs text-muted-foreground leading-relaxed">
               {model.description}
             </p>
-            <div className="flex gap-1 mt-1">
+            <div className="flex gap-1 mt-1 flex-wrap">
               <Badge variant="secondary" className="text-[10px]">{model.maxDuration}s max</Badge>
-              {model.recommended && (
-                <Badge variant="outline" className="text-[10px]">Developer API</Badge>
+              {model.supportsAudio ? (
+                <Badge variant="secondary" className="text-[10px] text-green-700 bg-green-100 dark:bg-green-900/30 dark:text-green-400">
+                  <Volume2 className="w-2.5 h-2.5 mr-1" />Audio
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                  <VolumeX className="w-2.5 h-2.5 mr-1" />No audio
+                </Badge>
               )}
             </div>
           </button>

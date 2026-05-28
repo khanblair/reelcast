@@ -3,7 +3,7 @@
 import { v } from "convex/values";
 import { action } from "../_generated/server";
 import { internal } from "../_generated/api";
-import { GoogleGenAI } from "@google/genai";
+import { createAiClient } from "../lib/ai";
 
 export const generateFromPrompt = action({
   args: {
@@ -13,16 +13,16 @@ export const generateFromPrompt = action({
   handler: async (ctx, args) => {
     console.log(`[generateFromPrompt] Starting — videoId=${args.videoId} prompt="${args.prompt.slice(0, 80)}"`);
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.error("[generateFromPrompt] GEMINI_API_KEY not set — skipping metadata generation");
+    let ai;
+    try {
+      ({ ai } = createAiClient());
+    } catch (err) {
+      console.error("[generateFromPrompt] No AI credentials available — skipping metadata generation:", err);
       return;
     }
 
-    const ai = new GoogleGenAI({ apiKey });
-
     try {
-      console.log("[generateFromPrompt] Calling Gemini gemini-2.5-flash...");
+      console.log("[generateFromPrompt] Calling gemini-2.5-flash for metadata...");
       const aiResponse = await ai.models.generateContent({
         model: "gemini-2.5-flash",
         contents: [{
@@ -40,14 +40,13 @@ Prompt: "${args.prompt}"`,
       });
 
       const text = aiResponse.text ?? "";
-      console.log(`[generateFromPrompt] Gemini response — "${text.slice(0, 200)}"`);
+      console.log(`[generateFromPrompt] Response — "${text.slice(0, 200)}"`);
 
       let parsed: { title?: string; description?: string; tags?: string[] };
       try {
         parsed = JSON.parse(text);
       } catch {
         const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-        console.log(`[generateFromPrompt] Retrying parse after strip — "${cleaned.slice(0, 100)}"`);
         parsed = JSON.parse(cleaned);
       }
 

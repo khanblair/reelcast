@@ -191,22 +191,24 @@ export const pollVeo = action({
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) throw new Error("GEMINI_API_KEY not set — cannot download Veo output");
 
-        // Use URL API to safely append ?alt=media without double-? issues
-        const downloadUrl = new URL(result.videoUri);
+        // Google Files API media-download pattern: append `:download` to the resource
+        // path then add ?alt=media&key=... — plain ?alt=media without :download returns 400.
+        // URI format: https://generativelanguage.googleapis.com/v1beta/files/{id}
+        // Download:   https://generativelanguage.googleapis.com/v1beta/files/{id}:download?alt=media
+        const downloadUrl = new URL(result.videoUri + ":download");
         downloadUrl.searchParams.set("alt", "media");
         downloadUrl.searchParams.set("key", apiKey);
         console.log(`[pollVeo] Download URL: ${downloadUrl.toString().replace(apiKey, "***")}`);
 
         let videoRes = await fetch(downloadUrl.toString());
 
-        // Fallback: some URI formats use x-goog-api-key header instead of key param
+        // Fallback: try without :download suffix (some URI variants don't need it)
         if (!videoRes.ok) {
-          console.log(`[pollVeo] key-param fetch failed (${videoRes.status}) — retrying with header auth`);
-          const headerUrl = new URL(result.videoUri);
-          headerUrl.searchParams.set("alt", "media");
-          videoRes = await fetch(headerUrl.toString(), {
-            headers: { "x-goog-api-key": apiKey },
-          });
+          console.log(`[pollVeo] :download fetch failed (${videoRes.status}) — retrying plain alt=media`);
+          const fallbackUrl = new URL(result.videoUri);
+          fallbackUrl.searchParams.set("alt", "media");
+          fallbackUrl.searchParams.set("key", apiKey);
+          videoRes = await fetch(fallbackUrl.toString());
         }
 
         if (!videoRes.ok) {

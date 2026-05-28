@@ -94,7 +94,8 @@ interface TabsContentProps {
   className?: string;
 }
 
-function TabsContent({ value: _value, children, className }: TabsContentProps) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function TabsContent({ value: _tabValue, children, className }: TabsContentProps) {
   return (
     <div
       className={cn("mt-4", className)}

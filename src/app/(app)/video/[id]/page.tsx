@@ -19,7 +19,8 @@ import { Id } from "../../../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import Image from "next/image";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { VideoStatusBadge } from "@/components/video-status-badge";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
@@ -153,7 +154,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                   }
                   className="w-32"
                 >
-                  {Object.entries(PRIVACY_STATUS).map(([_key, value]) => (
+                  {Object.entries(PRIVACY_STATUS).map(([, value]) => (
                     <option key={value} value={value}>
                       {PRIVACY_LABELS[value as PrivacyStatus]}
                     </option>
@@ -242,10 +243,11 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
             {videoSrc?.startsWith("http") ? (
               <video src={videoSrc} controls className="w-full h-full object-contain" />
             ) : video.thumbnailUrl ? (
-              <img
+              <Image
                 src={video.thumbnailUrl}
                 alt="Thumbnail"
-                className="w-full h-full object-cover opacity-80"
+                fill
+                className="object-cover opacity-80"
               />
             ) : (
               <div className="flex flex-col items-center gap-2 text-white/40">

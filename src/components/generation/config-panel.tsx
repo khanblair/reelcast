@@ -4,7 +4,6 @@ import { VEO_RESOLUTIONS, VEO_ASPECT_RATIOS, VEO_DURATIONS } from "@/lib/constan
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { Monitor, Smartphone, Square } from "lucide-react";
 
 interface ConfigPanelProps {
   resolution: string;
@@ -15,6 +14,9 @@ interface ConfigPanelProps {
   onDurationSecondsChange: (value: number) => void;
   enhancePrompt: boolean;
   onEnhancePromptChange: (value: boolean) => void;
+  generateAudio?: boolean;
+  onGenerateAudioChange?: (value: boolean) => void;
+  modelSupportsAudio?: boolean;
 }
 
 const ASPECT_PREVIEWS: Record<string, string> = {
@@ -32,6 +34,9 @@ export function ConfigPanel({
   onDurationSecondsChange,
   enhancePrompt,
   onEnhancePromptChange,
+  generateAudio,
+  onGenerateAudioChange,
+  modelSupportsAudio,
 }: ConfigPanelProps) {
   return (
     <div className="space-y-5">
@@ -116,13 +121,26 @@ export function ConfigPanel({
         </div>
       </div>
 
-      {/* Enhance Prompt only — generateAudio & personGeneration require Vertex AI */}
-      <div className="flex items-center justify-between rounded-lg border p-3 max-w-xs">
-        <div>
-          <Label className="text-sm font-medium">Enhance Prompt</Label>
-          <p className="text-[11px] text-muted-foreground">Let AI improve your prompt</p>
+      <div className="flex flex-wrap gap-3">
+        {/* Enhance Prompt */}
+        <div className="flex items-center justify-between rounded-lg border p-3 flex-1 min-w-[180px]">
+          <div>
+            <Label className="text-sm font-medium">Enhance Prompt</Label>
+            <p className="text-[11px] text-muted-foreground">Let AI improve your prompt</p>
+          </div>
+          <Switch checked={enhancePrompt} onCheckedChange={onEnhancePromptChange} />
         </div>
-        <Switch checked={enhancePrompt} onCheckedChange={onEnhancePromptChange} />
+
+        {/* Generate Audio — only for Veo 3 models via Vertex AI */}
+        {modelSupportsAudio && onGenerateAudioChange && (
+          <div className="flex items-center justify-between rounded-lg border p-3 flex-1 min-w-[180px]">
+            <div>
+              <Label className="text-sm font-medium">Generate Audio</Label>
+              <p className="text-[11px] text-muted-foreground">Add sound to your video</p>
+            </div>
+            <Switch checked={generateAudio ?? true} onCheckedChange={onGenerateAudioChange} />
+          </div>
+        )}
       </div>
     </div>
   );

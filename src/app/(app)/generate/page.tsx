@@ -11,7 +11,7 @@ import { ModelSelector } from "@/components/generation/model-selector";
 import { PromptEditor } from "@/components/generation/prompt-editor";
 import { ConfigPanel } from "@/components/generation/config-panel";
 import { GenerationProgress } from "@/components/generation/generation-progress";
-import { VEO_DEFAULTS, type VeoModelKey } from "@/lib/constants";
+import { VEO_DEFAULTS, VEO_MODELS, type VeoModelKey } from "@/lib/constants";
 
 export default function GeneratePage() {
   const router = useRouter();
@@ -37,6 +37,10 @@ export default function GeneratePage() {
   const [enhancePrompt, setEnhancePrompt] = useState(
     settings?.veoEnhancePrompt ?? VEO_DEFAULTS.enhancePrompt
   );
+  const [generateAudio, setGenerateAudio] = useState<boolean>(VEO_DEFAULTS.generateAudio);
+
+  const selectedModelDef = VEO_MODELS.find((m) => m.value === model);
+  const modelSupportsAudio = selectedModelDef?.supportsAudio ?? false;
 
   const [submitting, setSubmitting] = useState(false);
   const [generationStatus, setGenerationStatus] = useState<
@@ -62,6 +66,7 @@ export default function GeneratePage() {
           aspectRatio,
           durationSeconds,
           enhancePrompt,
+          generateAudio: modelSupportsAudio ? generateAudio : undefined,
         },
       });
 
@@ -135,6 +140,9 @@ export default function GeneratePage() {
                 onDurationSecondsChange={setDurationSeconds}
                 enhancePrompt={enhancePrompt}
                 onEnhancePromptChange={setEnhancePrompt}
+                generateAudio={generateAudio}
+                onGenerateAudioChange={setGenerateAudio}
+                modelSupportsAudio={modelSupportsAudio}
               />
             </CardContent>
             <CardFooter className="border-t pt-6">

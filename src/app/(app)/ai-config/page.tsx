@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
-import { Wand2, Save, Sparkles, Languages, FileText, BookOpen } from "lucide-react";
+import { Save, Sparkles, Languages, BookOpen } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
@@ -37,36 +37,34 @@ const DEFAULTS: AIConfig = {
 export default function AIConfigPage() {
   const settings = useQuery(api.settings.get);
   const updateSettings = useMutation(api.settings.update);
-  const [config, setConfig] = useState<AIConfig>(DEFAULTS);
+  // Track only local overrides — effective config merges local > saved settings > defaults
+  const [localConfig, setLocalConfig] = useState<Partial<AIConfig>>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    if (settings) {
-      setConfig({
-        aiAutoGenerate:       settings.aiAutoGenerate       ?? DEFAULTS.aiAutoGenerate,
-        aiGenerateTitle:      settings.aiGenerateTitle      ?? DEFAULTS.aiGenerateTitle,
-        aiGenerateDescription:settings.aiGenerateDescription?? DEFAULTS.aiGenerateDescription,
-        aiGenerateTags:       settings.aiGenerateTags       ?? DEFAULTS.aiGenerateTags,
-        aiTone:               (settings.aiTone as string)   ?? DEFAULTS.aiTone,
-        aiLanguage:           (settings.aiLanguage as string)?? DEFAULTS.aiLanguage,
-        aiDescriptionLength:  (settings.aiDescriptionLength as string) ?? DEFAULTS.aiDescriptionLength,
-        aiGuidelines:         (settings.aiGuidelines as string)        ?? DEFAULTS.aiGuidelines,
-      });
-    }
-  }, [settings]);
 
   if (settings === undefined) {
     return <div className="flex h-[80vh] items-center justify-center"><LoadingSpinner /></div>;
   }
 
+  const config: AIConfig = {
+    aiAutoGenerate:        localConfig.aiAutoGenerate        ?? settings?.aiAutoGenerate        ?? DEFAULTS.aiAutoGenerate,
+    aiGenerateTitle:       localConfig.aiGenerateTitle       ?? settings?.aiGenerateTitle       ?? DEFAULTS.aiGenerateTitle,
+    aiGenerateDescription: localConfig.aiGenerateDescription ?? settings?.aiGenerateDescription ?? DEFAULTS.aiGenerateDescription,
+    aiGenerateTags:        localConfig.aiGenerateTags        ?? settings?.aiGenerateTags        ?? DEFAULTS.aiGenerateTags,
+    aiTone:                localConfig.aiTone                ?? (settings?.aiTone as string)   ?? DEFAULTS.aiTone,
+    aiLanguage:            localConfig.aiLanguage            ?? (settings?.aiLanguage as string)?? DEFAULTS.aiLanguage,
+    aiDescriptionLength:   localConfig.aiDescriptionLength   ?? (settings?.aiDescriptionLength as string) ?? DEFAULTS.aiDescriptionLength,
+    aiGuidelines:          localConfig.aiGuidelines          ?? (settings?.aiGuidelines as string)        ?? DEFAULTS.aiGuidelines,
+  };
+
   const set = <K extends keyof AIConfig>(key: K, value: AIConfig[K]) =>
-    setConfig((prev) => ({ ...prev, [key]: value }));
+    setLocalConfig((prev) => ({ ...prev, [key]: value }));
 
   const handleSave = async () => {
     setSaving(true);
     try {
       await updateSettings(config);
+      setLocalConfig({});
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (e) {

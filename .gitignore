@@ -24,6 +24,12 @@
 .DS_Store
 *.pem
 
+# Google service account credentials — never commit
+*.json.key
+gen-lang-client-*.json
+*-service-account*.json
+service-account*.json
+
 # debug
 npm-debug.log*
 yarn-debug.log*

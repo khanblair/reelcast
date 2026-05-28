@@ -22,17 +22,17 @@ export const startVeoGeneration = action({
     const settings = await ctx.runQuery(internal.settings.getByVideoUserId, { userId: video.userId });
 
     const aiConfig = video.aiConfig ?? {};
-    // Default to veo-2 — stable on Gemini Developer API
-    const model           = aiConfig.model           ?? settings?.veoModel           ?? "veo-2";
+    // Default to veo-3.1-preview — latest with audio support
+    const model           = aiConfig.model           ?? settings?.veoModel           ?? "veo-3.1-preview";
     const prompt          = aiConfig.prompt          ?? video.title;
     const resolution      = aiConfig.resolution      ?? settings?.veoResolution      ?? "720p";
     const aspectRatio     = aiConfig.aspectRatio     ?? settings?.veoAspectRatio     ?? "16:9";
     const durationSeconds = aiConfig.durationSeconds ?? settings?.veoDurationSeconds ?? 8;
     const enhancePrompt   = aiConfig.enhancePrompt   ?? settings?.veoEnhancePrompt   ?? true;
     const numberOfVideos  = aiConfig.numberOfVideos  ?? settings?.veoNumberOfVideos  ?? 1;
-    // generateAudio + personGeneration omitted — Vertex AI / Enterprise only
-
-    console.log(`[startVeoGeneration] Config — model=${model} resolution=${resolution} aspectRatio=${aspectRatio} duration=${durationSeconds}s`);
+    // generateAudio is passed through; submitVeoGeneration gates it to Vertex AI models only
+    const generateAudio   = aiConfig.generateAudio   ?? true;
+    console.log(`[startVeoGeneration] Config — model=${model} resolution=${resolution} aspectRatio=${aspectRatio} duration=${durationSeconds}s generateAudio=${generateAudio}`);
     console.log(`[startVeoGeneration] Prompt — "${prompt.slice(0, 120)}"`);
 
     if (!process.env.GEMINI_API_KEY) {
@@ -43,7 +43,7 @@ export const startVeoGeneration = action({
       console.log(`[startVeoGeneration] Submitting to Veo API...`);
       const result = await submitVeoGeneration({
         model, prompt, negativePrompt: aiConfig.negativePrompt,
-        resolution, aspectRatio, durationSeconds, enhancePrompt, numberOfVideos,
+        resolution, aspectRatio, durationSeconds, enhancePrompt, numberOfVideos, generateAudio,
       });
       console.log(`[startVeoGeneration] Veo operation created — operationName=${result.operationName}`);
 
@@ -57,7 +57,7 @@ export const startVeoGeneration = action({
       await ctx.runMutation(internal.generations.internalCreate, {
         userId: video.userId, videoId: args.videoId, model, prompt,
         negativePrompt: aiConfig.negativePrompt, resolution, aspectRatio,
-        durationSeconds, generateAudio: false, veoOperationName: result.operationName,
+        durationSeconds, generateAudio, veoOperationName: result.operationName,
       });
 
       console.log(`[startVeoGeneration] Scheduling first poll in 15s`);

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { formatDistanceToNow } from "date-fns";
 import { Video, Youtube } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,10 +28,11 @@ export function VideoCard({ video }: VideoCardProps) {
       {/* pointer-events-none so the stretch link receives all clicks here */}
       <div className="aspect-video bg-muted relative flex items-center justify-center pointer-events-none">
         {video.thumbnailUrl ? (
-          <img
+          <Image
             src={video.thumbnailUrl}
             alt={video.title}
-            className="object-cover w-full h-full"
+            fill
+            className="object-cover"
           />
         ) : (
           <Video className="w-10 h-10 text-muted-foreground/50 group-hover:text-primary/50 transition-colors" />

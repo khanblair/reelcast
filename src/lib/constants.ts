@@ -99,8 +99,78 @@ export const PRIVACY_LABELS: Record<PrivacyStatus, string> = {
   unlisted: "Unlisted",
 };
 
+// Only models available via Gemini Developer API (AI Studio key).
+// generateAudio and personGeneration require Vertex AI — not included.
+export const VEO_MODELS = [
+  {
+    value: "veo-2",
+    label: "Veo 2",
+    modelId: "veo-2.0-generate-001",
+    description: "Stable and reliable. Best compatibility with the Gemini Developer API.",
+    recommended: true,
+    maxDuration: 8,
+    supportedResolutions: ["720p", "1080p"],
+    supportedAspectRatios: ["16:9", "9:16", "1:1"],
+  },
+  {
+    value: "veo-3-fast",
+    label: "Veo 3 Fast",
+    modelId: "veo-3.0-fast-generate-001",
+    description: "Faster generation with improved motion quality. Available on paid tiers.",
+    recommended: false,
+    maxDuration: 8,
+    supportedResolutions: ["720p", "1080p"],
+    supportedAspectRatios: ["16:9", "9:16", "1:1"],
+  },
+] as const;
+
+export type VeoModelKey = (typeof VEO_MODELS)[number]["value"];
+
+export const VEO_RESOLUTIONS = [
+  { value: "720p", label: "720p HD", description: "Fast & efficient", default: true },
+  { value: "1080p", label: "1080p Full HD", description: "Higher quality", default: false },
+] as const;
+
+export const VEO_ASPECT_RATIOS = [
+  { value: "16:9", label: "16:9 Landscape", default: true },
+  { value: "9:16", label: "9:16 Portrait", default: false },
+  { value: "1:1", label: "1:1 Square", default: false },
+] as const;
+
+export const VEO_DURATIONS = [
+  { value: 5, label: "5s" },
+  { value: 6, label: "6s" },
+  { value: 7, label: "7s" },
+  { value: 8, label: "8s" },
+] as const;
+
+export const PROMPT_PRESETS = [
+  { value: "cinematic", label: "Cinematic Landscape", prompt: "A sweeping cinematic aerial shot of a vast landscape at golden hour, with dramatic clouds and warm sunlight casting long shadows across rolling hills." },
+  { value: "product", label: "Product Showcase", prompt: "A sleek product rotating slowly on a clean white surface with soft studio lighting, gentle reflections, and a premium feel." },
+  { value: "tutorial", label: "Tutorial Intro", prompt: "An engaging animated intro sequence with modern geometric shapes, bold colors, and smooth transitions that sets a professional tone." },
+  { value: "social", label: "Social Media Clip", prompt: "A short, dynamic social media clip with fast cuts, vibrant colors, and trendy motion graphics that grabs attention in the first second." },
+  { value: "abstract", label: "Abstract Motion", prompt: "Abstract fluid motion with vibrant iridescent colors flowing and morphing in slow motion against a dark background." },
+] as const;
+
+export const VEO_DEFAULTS = {
+  model: "veo-2" as VeoModelKey,
+  resolution: "720p",
+  aspectRatio: "16:9",
+  durationSeconds: 8,
+  enhancePrompt: true,
+  numberOfVideos: 1,
+} as const;
+
+export const SOURCE_TYPES = {
+  UPLOAD: "upload",
+  GENERATE: "generate",
+} as const;
+
+export type SourceType = (typeof SOURCE_TYPES)[keyof typeof SOURCE_TYPES];
+
 export const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: "LayoutDashboard" },
+  { href: "/generate", label: "Generate", icon: "Sparkles" },
   { href: "/upload", label: "Upload", icon: "Upload" },
   { href: "/drafts", label: "Drafts", icon: "Film" },
   { href: "/schedule", label: "Schedule", icon: "Calendar" },

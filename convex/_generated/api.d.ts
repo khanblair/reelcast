@@ -8,14 +8,19 @@
  * @module
  */
 
+import type * as actions_deleteVideo from "../actions/deleteVideo.js";
+import type * as actions_generation from "../actions/generation.js";
+import type * as actions_metadata from "../actions/metadata.js";
 import type * as actions_publish from "../actions/publish.js";
 import type * as actions_storage from "../actions/storage.js";
 import type * as actions_telegram from "../actions/telegram.js";
 import type * as actions_testConnections from "../actions/testConnections.js";
 import type * as analytics from "../analytics.js";
 import type * as crons from "../crons.js";
+import type * as generations from "../generations.js";
 import type * as http from "../http.js";
 import type * as jobs from "../jobs.js";
+import type * as lib_ai from "../lib/ai.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_youtube from "../lib/youtube.js";
 import type * as notifications from "../notifications.js";
@@ -33,14 +38,19 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "actions/deleteVideo": typeof actions_deleteVideo;
+  "actions/generation": typeof actions_generation;
+  "actions/metadata": typeof actions_metadata;
   "actions/publish": typeof actions_publish;
   "actions/storage": typeof actions_storage;
   "actions/telegram": typeof actions_telegram;
   "actions/testConnections": typeof actions_testConnections;
   analytics: typeof analytics;
   crons: typeof crons;
+  generations: typeof generations;
   http: typeof http;
   jobs: typeof jobs;
+  "lib/ai": typeof lib_ai;
   "lib/auth": typeof lib_auth;
   "lib/youtube": typeof lib_youtube;
   notifications: typeof notifications;

@@ -1,4 +1,4 @@
-const CACHE_NAME = "reelcast-v1";
+const CACHE_NAME = "reelcast-v2";
 const STATIC_ASSETS = [
   "/",
   "/dashboard",
@@ -10,7 +10,7 @@ const STATIC_ASSETS = [
   "/icons/favicon.ico",
 ];
 
-// Install: cache static assets
+// Install: cache static assets, skip waiting immediately
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
@@ -20,7 +20,7 @@ self.addEventListener("install", (event) => {
   );
 });
 
-// Activate: clean up old caches
+// Activate: clean up ALL old caches (including stale chunk caches)
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
@@ -36,18 +36,19 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Fetch: network-first for API, cache-first for static assets
+// Fetch: never cache Next.js build chunks; cache-first only for our static assets
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
   // Skip non-GET requests and browser extensions
-  if (request.method !== "GET" || url.protocol !== "http:" && url.protocol !== "https:") {
+  if (request.method !== "GET" || (url.protocol !== "http:" && url.protocol !== "https:")) {
     return;
   }
 
-  // API / Convex requests: network only
+  // NEVER cache Next.js chunks — they change on every build
   if (
+    url.pathname.startsWith("/_next/") ||
     url.pathname.startsWith("/api/") ||
     url.pathname.includes("/convex/") ||
     url.pathname.includes("/__")
@@ -55,7 +56,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // For static assets, try cache first then network
+  // For our static assets only, try cache first then network
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
       if (cachedResponse) {

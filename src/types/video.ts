@@ -1,5 +1,24 @@
 import type { VideoStatus, PrivacyStatus } from "@/lib/constants";
 
+export interface AIConfig {
+  model?: string;
+  prompt?: string;
+  negativePrompt?: string;
+  resolution?: string;
+  aspectRatio?: string;
+  durationSeconds?: number;
+  fps?: number;
+  generateAudio?: boolean;
+  enhancePrompt?: boolean;
+  numberOfVideos?: number;
+  personGeneration?: string;
+  seed?: number;
+  preset?: string;
+  quality?: string;
+  captions?: boolean;
+  backgroundMusic?: boolean;
+}
+
 export interface Video {
   _id: string;
   _creationTime: number;
@@ -17,19 +36,14 @@ export interface Video {
   aiDescription?: string;
   aiTags?: string[];
   aiConfig?: AIConfig;
+  veoOperationName?: string;
+  veoOperationDone?: boolean;
+  sourceType?: "upload" | "generate";
   publishedVideoId?: string;
   publishedAt?: number;
   scheduledPublishAt?: number;
   scheduledGenerationAt?: number;
   privacyStatus?: PrivacyStatus;
-}
-
-export interface AIConfig {
-  preset?: string;
-  quality?: string;
-  aspectRatio?: string;
-  captions?: boolean;
-  backgroundMusic?: boolean;
 }
 
 export interface VideoFormData {

@@ -32,13 +32,21 @@ export const create = mutation({
     });
 
     if (args.type === "generation") {
-      // Schedule the mock generation action
-      await ctx.scheduler.runAfter(0, api.scheduled.runGeneration.processGenerationJob, {
-        jobId,
-        videoId: args.videoId,
-      });
+      // Route to the correct generation pipeline based on video source type
+      if (video.sourceType === "generate") {
+        await ctx.scheduler.runAfter(0, api.actions.generation.startVeoGeneration, {
+          jobId,
+          videoId: args.videoId,
+        });
+      } else {
+        // Uploaded video: run Gemini metadata analysis
+        await ctx.scheduler.runAfter(0, api.scheduled.runGeneration.processGenerationJob, {
+          jobId,
+          videoId: args.videoId,
+        });
+      }
     } else if (args.type === "publish") {
-      // Schedule the mock publish action
+      // Schedule the publish action
       await ctx.scheduler.runAfter(0, api.scheduled.runPublish.processPublishJob, {
         jobId,
         videoId: args.videoId,
@@ -174,10 +182,18 @@ export const retryJob = mutation({
     });
 
     if (job.type === "generation") {
-      await ctx.scheduler.runAfter(0, api.scheduled.runGeneration.processGenerationJob, {
-        jobId: args.id,
-        videoId: job.videoId,
-      });
+      const video = await ctx.db.get(job.videoId);
+      if (video?.sourceType === "generate") {
+        await ctx.scheduler.runAfter(0, api.actions.generation.startVeoGeneration, {
+          jobId: args.id,
+          videoId: job.videoId,
+        });
+      } else {
+        await ctx.scheduler.runAfter(0, api.scheduled.runGeneration.processGenerationJob, {
+          jobId: args.id,
+          videoId: job.videoId,
+        });
+      }
     } else if (job.type === "publish") {
       await ctx.scheduler.runAfter(0, api.scheduled.runPublish.processPublishJob, {
         jobId: args.id,

@@ -12,17 +12,17 @@ import {
   History,
   BarChart,
   Settings,
-  Wand2,
+  Sparkles,
 } from "lucide-react";
 
 const NAV_ITEMS = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Generate", href: "/generate", icon: Sparkles },
   { name: "Upload", href: "/upload", icon: Upload },
   { name: "Library", href: "/drafts", icon: Files },
   { name: "Schedule", href: "/schedule", icon: Calendar },
   { name: "History", href: "/history", icon: History },
   { name: "Analytics", href: "/analytics", icon: BarChart },
-  { name: "AI Config", href: "/ai-config", icon: Wand2 },
 ];
 
 export function SidebarNav({ onClick }: { onClick?: () => void }) {

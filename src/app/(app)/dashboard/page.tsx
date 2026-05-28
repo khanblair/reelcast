@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useQuery } from "convex/react";
-import { Upload, Film, Clock, Youtube, HardDrive } from "lucide-react";
+import { Upload, Film, Clock, Youtube, HardDrive, Sparkles } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -161,11 +161,18 @@ export default function DashboardPage() {
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">Welcome back</h1>
           <p className="text-muted-foreground">Here&apos;s what&apos;s happening with your videos.</p>
         </div>
-        <Link href="/upload">
-          <Button>
-            <Upload className="mr-2 h-4 w-4" /> New Upload
-          </Button>
-        </Link>
+        <div className="flex gap-2">
+          <Link href={"/generate" as unknown as "/dashboard"}>
+            <Button className="bg-primary hover:bg-primary/90 text-white">
+              <Sparkles className="mr-2 h-4 w-4" /> Generate Video
+            </Button>
+          </Link>
+          <Link href="/upload">
+            <Button variant="outline">
+              <Upload className="mr-2 h-4 w-4" /> Upload
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Period filters */}

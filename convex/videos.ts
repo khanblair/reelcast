@@ -73,7 +73,7 @@ export const get = query({
 
     const video = await ctx.db.get(args.id);
     if (!video || video.userId !== user._id) {
-      throw new Error("Video not found or unauthorized");
+      return null;
     }
 
     return video;
@@ -230,6 +230,113 @@ export const internalSetPublishedData = internalMutation({
   },
 });
 
+export const internalUpdateVeoOperation = internalMutation({
+  args: {
+    id: v.id("videos"),
+    veoOperationName: v.string(),
+    veoOperationDone: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      veoOperationName: args.veoOperationName,
+      veoOperationDone: args.veoOperationDone,
+    });
+  },
+});
+
+export const internalUpdateProcessedFile = internalMutation({
+  args: {
+    id: v.id("videos"),
+    processedFileKey: v.string(),
+    veoOperationDone: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      processedFileKey: args.processedFileKey,
+      veoOperationDone: args.veoOperationDone,
+    });
+  },
+});
+
+export const updateAiConfig = mutation({
+  args: {
+    id: v.id("videos"),
+    aiConfig: v.optional(
+      v.object({
+        model: v.optional(v.string()),
+        prompt: v.optional(v.string()),
+        negativePrompt: v.optional(v.string()),
+        resolution: v.optional(v.string()),
+        aspectRatio: v.optional(v.string()),
+        durationSeconds: v.optional(v.number()),
+        fps: v.optional(v.number()),
+        generateAudio: v.optional(v.boolean()),
+        enhancePrompt: v.optional(v.boolean()),
+        numberOfVideos: v.optional(v.number()),
+        personGeneration: v.optional(v.string()),
+        seed: v.optional(v.number()),
+        preset: v.optional(v.string()),
+        quality: v.optional(v.string()),
+        captions: v.optional(v.boolean()),
+        backgroundMusic: v.optional(v.boolean()),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    const identity = await getCurrentUserOrThrow(ctx);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .unique();
+    if (!user) throw new Error("User not found in DB");
+
+    const video = await ctx.db.get(args.id);
+    if (!video || video.userId !== user._id) {
+      throw new Error("Video not found or unauthorized");
+    }
+
+    await ctx.db.patch(args.id, { aiConfig: args.aiConfig });
+  },
+});
+
+export const createGenerated = mutation({
+  args: {
+    title: v.string(),
+    aiConfig: v.object({
+      model: v.optional(v.string()),
+      prompt: v.optional(v.string()),
+      negativePrompt: v.optional(v.string()),
+      resolution: v.optional(v.string()),
+      aspectRatio: v.optional(v.string()),
+      durationSeconds: v.optional(v.number()),
+      fps: v.optional(v.number()),
+      generateAudio: v.optional(v.boolean()),
+      enhancePrompt: v.optional(v.boolean()),
+      numberOfVideos: v.optional(v.number()),
+      personGeneration: v.optional(v.string()),
+      seed: v.optional(v.number()),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const identity = await getCurrentUserOrThrow(ctx);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .unique();
+    if (!user) throw new Error("User not found in DB");
+
+    return await ctx.db.insert("videos", {
+      userId: user._id,
+      title: args.title,
+      rawFileKey: "",
+      rawFileSize: 0,
+      status: "draft",
+      aiConfig: args.aiConfig,
+      sourceType: "generate",
+    });
+  },
+});
+
 export const schedulePublish = mutation({
   args: {
     id: v.id("videos"),
@@ -294,6 +401,32 @@ export const listScheduled = query({
       .collect();
 
     return videos.filter((v) => v.scheduledPublishAt !== undefined);
+  },
+});
+
+export const internalDeleteWithRelated = internalMutation({
+  args: { videoId: v.id("videos") },
+  handler: async (ctx, args) => {
+    // Delete related jobs
+    const jobs = await ctx.db
+      .query("jobs")
+      .withIndex("by_video", (q) => q.eq("videoId", args.videoId))
+      .collect();
+    for (const job of jobs) {
+      await ctx.db.delete(job._id);
+    }
+
+    // Delete related generations
+    const generations = await ctx.db
+      .query("generations")
+      .withIndex("by_video", (q) => q.eq("videoId", args.videoId))
+      .collect();
+    for (const gen of generations) {
+      await ctx.db.delete(gen._id);
+    }
+
+    // Delete the video itself
+    await ctx.db.delete(args.videoId);
   },
 });
 

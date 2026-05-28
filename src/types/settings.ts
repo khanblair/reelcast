@@ -8,6 +8,14 @@ export interface UserSettings {
   notifyOnGenerationComplete: boolean;
   notifyOnPublishSuccess: boolean;
   notifyOnPublishFailure: boolean;
+  veoModel?: string;
+  veoResolution?: string;
+  veoAspectRatio?: string;
+  veoDurationSeconds?: number;
+  veoGenerateAudio?: boolean;
+  veoEnhancePrompt?: boolean;
+  veoPersonGeneration?: string;
+  veoNumberOfVideos?: number;
 }
 
 export interface YouTubeConnection {

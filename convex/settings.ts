@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalQuery } from "./_generated/server";
 import { getCurrentUserOrThrow } from "./lib/auth";
 
 export const get = query({
@@ -39,6 +39,14 @@ export const get = query({
         aiLanguage: undefined,
         aiDescriptionLength: undefined,
         aiGuidelines: undefined,
+        veoModel: undefined,
+        veoResolution: undefined,
+        veoAspectRatio: undefined,
+        veoDurationSeconds: undefined,
+        veoGenerateAudio: undefined,
+        veoEnhancePrompt: undefined,
+        veoPersonGeneration: undefined,
+        veoNumberOfVideos: undefined,
       };
     }
 
@@ -67,6 +75,14 @@ export const update = mutation({
     aiLanguage: v.optional(v.string()),
     aiDescriptionLength: v.optional(v.string()),
     aiGuidelines: v.optional(v.string()),
+    veoModel: v.optional(v.string()),
+    veoResolution: v.optional(v.string()),
+    veoAspectRatio: v.optional(v.string()),
+    veoDurationSeconds: v.optional(v.number()),
+    veoGenerateAudio: v.optional(v.boolean()),
+    veoEnhancePrompt: v.optional(v.boolean()),
+    veoPersonGeneration: v.optional(v.string()),
+    veoNumberOfVideos: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const identity = await getCurrentUserOrThrow(ctx);
@@ -84,15 +100,7 @@ export const update = mutation({
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .unique();
 
-    const updateData: Partial<{
-      aiPreset: string; defaultQuality: string; defaultAspectRatio: string;
-      defaultCaptions: boolean; defaultBackgroundMusic: boolean;
-      notificationsEnabled: boolean; telegramChatId: string;
-      aiAutoGenerate: boolean; aiGenerateTitle: boolean;
-      aiGenerateDescription: boolean; aiGenerateTags: boolean;
-      aiTone: string; aiLanguage: string; aiDescriptionLength: string;
-      aiGuidelines: string;
-    }> = {};
+    const updateData: Record<string, unknown> = {};
     if (args.aiPreset !== undefined) updateData.aiPreset = args.aiPreset;
     if (args.defaultQuality !== undefined) updateData.defaultQuality = args.defaultQuality;
     if (args.defaultAspectRatio !== undefined) updateData.defaultAspectRatio = args.defaultAspectRatio;
@@ -108,6 +116,14 @@ export const update = mutation({
     if (args.aiLanguage !== undefined) updateData.aiLanguage = args.aiLanguage;
     if (args.aiDescriptionLength !== undefined) updateData.aiDescriptionLength = args.aiDescriptionLength;
     if (args.aiGuidelines !== undefined) updateData.aiGuidelines = args.aiGuidelines;
+    if (args.veoModel !== undefined) updateData.veoModel = args.veoModel;
+    if (args.veoResolution !== undefined) updateData.veoResolution = args.veoResolution;
+    if (args.veoAspectRatio !== undefined) updateData.veoAspectRatio = args.veoAspectRatio;
+    if (args.veoDurationSeconds !== undefined) updateData.veoDurationSeconds = args.veoDurationSeconds;
+    if (args.veoGenerateAudio !== undefined) updateData.veoGenerateAudio = args.veoGenerateAudio;
+    if (args.veoEnhancePrompt !== undefined) updateData.veoEnhancePrompt = args.veoEnhancePrompt;
+    if (args.veoPersonGeneration !== undefined) updateData.veoPersonGeneration = args.veoPersonGeneration;
+    if (args.veoNumberOfVideos !== undefined) updateData.veoNumberOfVideos = args.veoNumberOfVideos;
 
     if (settings) {
       await ctx.db.patch(settings._id, updateData);
@@ -199,7 +215,6 @@ export const testTelegramConnection = mutation({
       throw new Error("Telegram Chat ID is not connected.");
     }
 
-    // Push a dummy notification to verify
     await ctx.db.insert("notifications", {
       userId: user._id,
       title: "Telegram Connection Verified",
@@ -209,5 +224,15 @@ export const testTelegramConnection = mutation({
     });
     
     return { success: true };
+  },
+});
+
+export const getByVideoUserId = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("settings")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .unique();
   },
 });

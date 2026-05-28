@@ -161,6 +161,31 @@
   50% { opacity: 0.7; }
 }
 
+@keyframes veo-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 3, 53, 0.4); }
+  50% { box-shadow: 0 0 0 12px rgba(255, 3, 53, 0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-veo-pulse {
+  animation: veo-pulse 2s ease-in-out infinite;
+}
+
+.shimmer-loading {
+  background: linear-gradient(
+    90deg,
+    var(--muted) 25%,
+    var(--accent) 50%,
+    var(--muted) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
 /* ── Base Styles ───────────────────────────────────────────────────── */
 
 * {

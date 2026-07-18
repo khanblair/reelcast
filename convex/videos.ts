@@ -370,6 +370,40 @@ export const schedulePublish = mutation({
   },
 });
 
+export const scheduleMetadataForVideo = mutation({
+  args: {
+    id: v.id("videos"),
+    scheduledAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await getCurrentUserOrThrow(ctx);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .unique();
+    if (!user) throw new Error("User not found");
+
+    const video = await ctx.db.get(args.id);
+    if (!video || video.userId !== user._id) throw new Error("Video not found or unauthorized");
+    if (video.status !== "draft") throw new Error("Only draft videos can be queued for metadata generation");
+
+    await ctx.scheduler.runAt(
+      args.scheduledAt,
+      api.actions.metadata.generateForUpload,
+      { videoId: args.id, autoMarkReady: true }
+    );
+
+    await ctx.db.patch(args.id, { metadataScheduledAt: args.scheduledAt });
+  },
+});
+
+export const internalClearMetadataSchedule = internalMutation({
+  args: { id: v.id("videos") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, { metadataScheduledAt: undefined });
+  },
+});
+
 export const cancelSchedule = mutation({
   args: { id: v.id("videos") },
   handler: async (ctx, args) => {

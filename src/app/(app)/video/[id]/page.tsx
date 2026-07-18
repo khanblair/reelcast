@@ -13,6 +13,7 @@ import {
   RotateCcw,
   Loader2,
   Trash2,
+  Wand2,
 } from "lucide-react";
 import { api } from "../../../../../convex/_generated/api";
 import { Id } from "../../../../../convex/_generated/dataModel";
@@ -40,10 +41,13 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
   const triggerPublish = useMutation(api.jobs.create);
   const triggerGeneration = useMutation(api.jobs.create);
   const deleteVideoAction = useAction(api.actions.deleteVideo.deleteVideo);
+  const generateMetadata = useAction(api.actions.metadata.generateForUpload);
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
+  const [regenError, setRegenError] = useState<string | null>(null);
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -88,6 +92,18 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
   const handleGenerate = async () => {
     await updateStatus({ id: video._id, status: "queued" });
     await triggerGeneration({ videoId: video._id, type: "generation" });
+  };
+
+  const handleRegenerateMetadata = async () => {
+    setRegenerating(true);
+    setRegenError(null);
+    try {
+      await generateMetadata({ videoId: video._id });
+    } catch (err) {
+      setRegenError(err instanceof Error ? err.message : "Regeneration failed");
+    } finally {
+      setRegenerating(false);
+    }
   };
 
   const youtubeUrl = video.publishedVideoId
@@ -151,7 +167,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
             <>
               <div className="flex flex-wrap items-center gap-2">
                 <Select
-                  value={video.privacyStatus ?? "private"}
+                  value={video.privacyStatus ?? "public"}
                   onChange={(e) =>
                     updatePrivacy({
                       id: video._id,
@@ -176,7 +192,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
               <p className="text-xs text-muted-foreground">
                 Will upload as:{" "}
                 <span className="font-medium text-foreground">
-                  {PRIVACY_LABELS[(video.privacyStatus ?? "private") as PrivacyStatus]}
+                  {PRIVACY_LABELS[(video.privacyStatus ?? "public") as PrivacyStatus]}
                 </span>
               </p>
             </>
@@ -243,9 +259,9 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
         </DialogContent>
       </Dialog>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-1 space-y-6">
-          <div className="aspect-video bg-black rounded-lg flex items-center justify-center relative overflow-hidden border">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <div className="lg:col-span-2 space-y-6">
+          <div className="aspect-[9/16] max-h-[70vh] bg-black rounded-lg flex items-center justify-center relative overflow-hidden border mx-auto w-full">
             {videoSrc?.startsWith("http") ? (
               <video src={videoSrc} controls className="w-full h-full object-contain" />
             ) : video.thumbnailUrl ? (
@@ -370,7 +386,26 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
           )}
         </div>
 
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-3 space-y-3">
+          <div className="flex items-center justify-between">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRegenerateMetadata}
+              disabled={regenerating}
+            >
+              {regenerating ? (
+                <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Regenerating…</>
+              ) : (
+                <><Wand2 className="mr-2 h-3.5 w-3.5" />Regenerate Metadata</>
+              )}
+            </Button>
+          </div>
+          {regenError && (
+            <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
+              {regenError}
+            </p>
+          )}
           <MetadataEditor video={video as VideoType} />
         </div>
       </div>

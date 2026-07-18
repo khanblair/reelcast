@@ -71,7 +71,7 @@ export const processPublishJob = action({
         description,
         tags,
         videoUrl: videoFileUrl,
-        privacyStatus: video.privacyStatus ?? "private",
+        privacyStatus: video.privacyStatus ?? "public",
       });
 
       await ctx.runMutation(internal.videos.internalUpdateStatus, {
@@ -89,6 +89,12 @@ export const processPublishJob = action({
         id: args.jobId,
         status: "completed",
       });
+
+      // Success notification
+      await ctx.runAction(api.actions.telegram.sendNotification, {
+        userId: video.userId,
+        message: `🎬 Published: "${title}" is now live on YouTube!\nhttps://youtu.be/${youtubeVideoId}`,
+      }).catch(() => {});
 
       // Best-effort Cloudinary cleanup after successful upload
       const cloudinaryUrls: string[] = [];

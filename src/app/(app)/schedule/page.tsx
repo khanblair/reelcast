@@ -6,7 +6,7 @@ import { useQuery, useMutation } from "convex/react";
 import {
   CalendarClock, CalendarCheck, Clock, X, ExternalLink,
   ChevronDown, ChevronUp, ArrowUp, ArrowDown, ListVideo, Zap,
-  Calendar, CheckSquare, Square,
+  Calendar, CheckSquare, Square, Wand2,
 } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
@@ -17,7 +17,7 @@ import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
 import { format, formatDistanceToNow, isFuture, isPast } from "date-fns";
 
-type PageMode = "auto" | "single";
+type PageMode = "auto" | "single" | "metadata";
 type ScheduleFilter = "all" | "upcoming" | "past";
 
 const PRIVACY_OPTIONS = [
@@ -42,6 +42,16 @@ const INTERVALS = [
   { value: 1440, label: "Daily" },
 ];
 
+const META_INTERVALS = [
+  { value: 60, label: "1 hr" },
+  { value: 120, label: "2 hrs" },
+  { value: 240, label: "4 hrs" },
+  { value: 360, label: "6 hrs" },
+  { value: 480, label: "8 hrs" },
+  { value: 720, label: "12 hrs" },
+  { value: 1440, label: "Daily" },
+];
+
 function toLocalDatetimeValue(ms: number) {
   const d = new Date(ms);
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -57,6 +67,7 @@ export default function SchedulePage() {
   const allVideos = useQuery(api.videos.list);
   const schedulePublish = useMutation(api.videos.schedulePublish);
   const cancelSchedule = useMutation(api.videos.cancelSchedule);
+  const scheduleMetadata = useMutation(api.videos.scheduleMetadataForVideo);
 
   const [mode, setMode] = useState<PageMode>("auto");
   const [filter, setFilter] = useState<ScheduleFilter>("upcoming");
@@ -65,7 +76,7 @@ export default function SchedulePage() {
   // Single-video state
   const [selectedVideoId, setSelectedVideoId] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
-  const [privacy, setPrivacy] = useState<"private" | "public" | "unlisted">("private");
+  const [privacy, setPrivacy] = useState<"private" | "public" | "unlisted">("public");
   const [submitting, setSubmitting] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
@@ -73,14 +84,26 @@ export default function SchedulePage() {
   const [queue, setQueue] = useState<string[]>([]);
   const [autoStartTime, setAutoStartTime] = useState("");
   const [intervalMin, setIntervalMin] = useState(1440);
-  const [autoPrivacy, setAutoPrivacy] = useState<"private" | "public" | "unlisted">("private");
+  const [autoPrivacy, setAutoPrivacy] = useState<"private" | "public" | "unlisted">("public");
   const [autoSubmitting, setAutoSubmitting] = useState(false);
   const [autoProgress, setAutoProgress] = useState<{ done: number; total: number } | null>(null);
+
+  // Metadata-schedule state
+  const [metaQueue, setMetaQueue] = useState<string[]>([]);
+  const [metaStartTime, setMetaStartTime] = useState("");
+  const [metaIntervalMin, setMetaIntervalMin] = useState(60);
+  const [metaSubmitting, setMetaSubmitting] = useState(false);
+  const [metaProgress, setMetaProgress] = useState<{ done: number; total: number } | null>(null);
 
   const loading = scheduledVideos === undefined || allVideos === undefined;
 
   const schedulableVideos = useMemo(
     () => allVideos?.filter((v) => v.status === "ready") ?? [],
+    [allVideos]
+  );
+
+  const draftVideos = useMemo(
+    () => allVideos?.filter((v) => v.status === "draft") ?? [],
     [allVideos]
   );
 
@@ -174,6 +197,36 @@ export default function SchedulePage() {
     }
   };
 
+  const toggleMetaVideo = useCallback((id: string) => {
+    setMetaQueue((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }, []);
+
+  const handleScheduleMetadata = async () => {
+    if (metaQueue.length === 0 || !metaStartTime) return;
+    setMetaSubmitting(true);
+    setMetaProgress({ done: 0, total: metaQueue.length });
+    try {
+      const startMs = new Date(metaStartTime).getTime();
+      for (let i = 0; i < metaQueue.length; i++) {
+        await scheduleMetadata({
+          id: metaQueue[i] as Id<"videos">,
+          scheduledAt: startMs + i * metaIntervalMin * 60_000,
+        });
+        setMetaProgress({ done: i + 1, total: metaQueue.length });
+      }
+      setMetaQueue([]);
+      setMetaStartTime("");
+      setShowForm(false);
+    } catch (e) {
+      console.error("Metadata schedule failed:", e);
+    } finally {
+      setMetaSubmitting(false);
+      setMetaProgress(null);
+    }
+  };
+
   const handleCancel = async (id: Id<"videos">) => {
     setCancellingId(id);
     try {
@@ -246,11 +299,183 @@ export default function SchedulePage() {
                 <Calendar className="h-3.5 w-3.5" />
                 Single Video
               </button>
+              <button
+                type="button"
+                onClick={() => setMode("metadata")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  mode === "metadata"
+                    ? "bg-background shadow-sm text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Wand2 className="h-3.5 w-3.5" />
+                Metadata
+              </button>
             </div>
           </CardHeader>
 
           <CardContent className="pt-3">
-            {mode === "single" ? (
+            {mode === "metadata" ? (
+              /* ── Metadata generation schedule ── */
+              <div className="space-y-5">
+                <p className="text-sm text-muted-foreground">
+                  Schedule AI metadata generation for draft videos. Each video is analyzed, titled, and automatically marked <strong>Ready</strong> — you get a Discord notification for each one.
+                </p>
+                <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-700 dark:text-amber-400">
+                  <span className="shrink-0 mt-0.5">⚠</span>
+                  <span>Schedule metadata to finish <strong>before</strong> your publishing window. If both run at the same hour, the publish job finds zero ready videos and skips.</span>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium">
+                      Draft Videos
+                      <span className="ml-1.5 font-normal text-muted-foreground text-xs">
+                        ({draftVideos.length} available)
+                      </span>
+                    </label>
+                    <div className="flex gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setMetaQueue(draftVideos.map((v) => v._id))}
+                        className="text-primary hover:underline"
+                      >
+                        Select all
+                      </button>
+                      {metaQueue.length > 0 && (
+                        <>
+                          <span className="text-muted-foreground">·</span>
+                          <button
+                            type="button"
+                            onClick={() => setMetaQueue([])}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            Clear
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {draftVideos.length === 0 ? (
+                    <div className="border rounded-md flex items-center justify-center h-32 text-sm text-muted-foreground">
+                      No draft videos — upload some first
+                    </div>
+                  ) : (
+                    <div className="border rounded-md divide-y max-h-52 overflow-y-auto">
+                      {draftVideos.map((v) => {
+                        const checked = metaQueue.includes(v._id);
+                        const pos = metaQueue.indexOf(v._id);
+                        return (
+                          <button
+                            key={v._id}
+                            type="button"
+                            onClick={() => toggleMetaVideo(v._id)}
+                            className={`w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/50 transition-colors ${checked ? "bg-primary/5" : ""}`}
+                          >
+                            {checked
+                              ? <CheckSquare className="h-4 w-4 text-primary shrink-0" />
+                              : <Square className="h-4 w-4 text-muted-foreground shrink-0" />
+                            }
+                            <span className="text-sm truncate flex-1">
+                              {(v as any).aiTitle ?? v.title}
+                            </span>
+                            {checked && (
+                              <span className="ml-auto text-xs text-primary font-medium">#{pos + 1}</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-4 pt-1 border-t">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Start generating at</label>
+                    <input
+                      type="datetime-local"
+                      className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      min={minDatetimeValue()}
+                      value={metaStartTime}
+                      onChange={(e) => setMetaStartTime(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Gap between each video</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {META_INTERVALS.map((int) => (
+                        <button
+                          key={int.value}
+                          type="button"
+                          onClick={() => setMetaIntervalMin(int.value)}
+                          className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
+                            metaIntervalMin === int.value
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-background border-input hover:border-primary/50 hover:bg-muted"
+                          }`}
+                        >
+                          {int.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {metaQueue.length > 0 && metaStartTime && (
+                  <div className="bg-muted/50 rounded-lg p-3">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                      Generation Preview
+                    </p>
+                    <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                      {metaQueue.map((id, i) => {
+                        const v = videoMap.get(id);
+                        const time = new Date(metaStartTime).getTime() + i * metaIntervalMin * 60_000;
+                        return (
+                          <div key={id} className="flex items-center justify-between gap-3 text-xs">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-muted-foreground font-mono w-4 shrink-0 tabular-nums">{i + 1}.</span>
+                              <span className="truncate">{(v as any)?.aiTitle ?? v?.title}</span>
+                            </div>
+                            <span className="text-muted-foreground shrink-0">
+                              {format(time, "MMM d, h:mm a")}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-1">
+                  <Button
+                    onClick={handleScheduleMetadata}
+                    disabled={metaQueue.length === 0 || !metaStartTime || metaSubmitting}
+                  >
+                    {metaSubmitting ? (
+                      <>
+                        <LoadingSpinner size="sm" />
+                        <span className="ml-2">
+                          {metaProgress
+                            ? `Scheduling ${metaProgress.done}/${metaProgress.total}…`
+                            : "Scheduling…"}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <Wand2 className="mr-2 h-4 w-4" />
+                        {metaQueue.length > 0
+                          ? `Schedule Metadata for ${metaQueue.length} Video${metaQueue.length !== 1 ? "s" : ""}`
+                          : "Schedule Metadata"}
+                      </>
+                    )}
+                  </Button>
+                  <Button variant="outline" onClick={() => { setShowForm(false); setMetaQueue([]); }}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : mode === "single" ? (
               /* ── Single-video form ── */
               <div className="space-y-4">
                 <div className="grid sm:grid-cols-2 gap-4">

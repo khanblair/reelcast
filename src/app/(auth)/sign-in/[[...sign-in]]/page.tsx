@@ -26,8 +26,8 @@ export default function CustomSignInPage() {
     try {
       await clerk.client.signIn.authenticateWithRedirect({
         strategy: "oauth_google",
-        redirectUrl: "/sso-callback",
-        redirectUrlComplete: "/dashboard",
+        redirectUrl: `${window.location.origin}/sso-callback`,
+        redirectUrlComplete: `${window.location.origin}/dashboard`,
       });
     } catch (err: unknown) {
       // Clerk throws when a session already exists — treat it as already signed in

@@ -25,8 +25,8 @@ export default function CustomSignUpPage() {
     try {
       await clerk.client.signUp.authenticateWithRedirect({
         strategy: "oauth_google",
-        redirectUrl: "/sso-callback",
-        redirectUrlComplete: "/dashboard",
+        redirectUrl: `${window.location.origin}/sso-callback`,
+        redirectUrlComplete: `${window.location.origin}/dashboard`,
       });
     } catch (err: unknown) {
       if (err instanceof Error && err.message.toLowerCase().includes("already signed in")) {

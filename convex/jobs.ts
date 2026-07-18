@@ -123,6 +123,23 @@ export const updateStatus = mutation({
   },
 });
 
+export const internalCreate = internalMutation({
+  args: {
+    userId: v.id("users"),
+    videoId: v.id("videos"),
+    type: v.union(v.literal("generation"), v.literal("publish")),
+    status: v.union(v.literal("pending"), v.literal("processing"), v.literal("completed"), v.literal("failed")),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("jobs", {
+      userId: args.userId,
+      videoId: args.videoId,
+      type: args.type,
+      status: args.status,
+    });
+  },
+});
+
 // Internal mutation — used by scheduled actions (no auth check, trusted context)
 export const internalUpdateStatus = internalMutation({
   args: {

@@ -481,6 +481,28 @@ export const internalDeleteWithRelated = internalMutation({
   },
 });
 
+export const internalGetReadyForUser = internalQuery({
+  args: { userId: v.id("users"), limit: v.number() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("videos")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .order("asc")
+      .filter((q) => q.eq(q.field("status"), "ready"))
+      .take(args.limit);
+  },
+});
+
+export const internalSetPrivacy = internalMutation({
+  args: {
+    id: v.id("videos"),
+    privacyStatus: v.union(v.literal("private"), v.literal("public"), v.literal("unlisted")),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, { privacyStatus: args.privacyStatus });
+  },
+});
+
 export const internalSetCloudinaryDeleted = internalMutation({
   args: { id: v.id("videos") },
   handler: async (ctx, args) => {

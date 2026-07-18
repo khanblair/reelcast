@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useQuery, useMutation } from "convex/react";
 import {
   CalendarClock, CalendarCheck, Clock, X, ExternalLink,
-  ChevronDown, ChevronUp, ArrowUp, ArrowDown, ListVideo, Zap,
+  ChevronDown, ChevronUp, Zap,
   Calendar, CheckSquare, Square, Wand2,
 } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
@@ -65,9 +65,12 @@ function minDatetimeValue() {
 export default function SchedulePage() {
   const scheduledVideos = useQuery(api.videos.listScheduled);
   const allVideos = useQuery(api.videos.list);
+  const userSettings = useQuery(api.settings.get);
   const schedulePublish = useMutation(api.videos.schedulePublish);
   const cancelSchedule = useMutation(api.videos.cancelSchedule);
   const scheduleMetadata = useMutation(api.videos.scheduleMetadataForVideo);
+  const startAutoPublish = useMutation(api.settings.startAutoPublish);
+  const stopAutoPublish = useMutation(api.settings.stopAutoPublish);
 
   const [mode, setMode] = useState<PageMode>("auto");
   const [filter, setFilter] = useState<ScheduleFilter>("upcoming");
@@ -81,12 +84,11 @@ export default function SchedulePage() {
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   // Auto-schedule state
-  const [queue, setQueue] = useState<string[]>([]);
   const [autoStartTime, setAutoStartTime] = useState("");
-  const [intervalMin, setIntervalMin] = useState(1440);
+  const [intervalMin, setIntervalMin] = useState(360);
+  const [autoCount, setAutoCount] = useState(1);
   const [autoPrivacy, setAutoPrivacy] = useState<"private" | "public" | "unlisted">("public");
   const [autoSubmitting, setAutoSubmitting] = useState(false);
-  const [autoProgress, setAutoProgress] = useState<{ done: number; total: number } | null>(null);
 
   // Metadata-schedule state
   const [metaQueue, setMetaQueue] = useState<string[]>([]);
@@ -122,14 +124,7 @@ export default function SchedulePage() {
     });
   }, [scheduledVideos, filter]);
 
-  const previewTimes = useMemo(() => {
-    if (!autoStartTime || queue.length === 0) return [];
-    const startMs = new Date(autoStartTime).getTime();
-    return queue.map((id, i) => ({
-      id,
-      time: startMs + i * intervalMin * 60_000,
-    }));
-  }, [queue, autoStartTime, intervalMin]);
+  const isAutoActive = userSettings?.autoPublishEnabled === true;
 
   const handleScheduleSingle = async () => {
     if (!selectedVideoId || !scheduledAt) return;
@@ -151,49 +146,32 @@ export default function SchedulePage() {
     }
   };
 
-  const toggleVideo = useCallback((id: string) => {
-    setQueue((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  }, []);
-
-  const moveInQueue = useCallback((index: number, dir: -1 | 1) => {
-    setQueue((prev) => {
-      const next = index + dir;
-      if (next < 0 || next >= prev.length) return prev;
-      const arr = [...prev];
-      [arr[index], arr[next]] = [arr[next], arr[index]];
-      return arr;
-    });
-  }, []);
-
-  const removeFromQueue = useCallback((id: string) => {
-    setQueue((prev) => prev.filter((x) => x !== id));
-  }, []);
-
-  const handleAutoSchedule = async () => {
-    if (queue.length === 0 || !autoStartTime) return;
+  const handleStartAutoPublish = async () => {
+    if (!autoStartTime) return;
     setAutoSubmitting(true);
-    setAutoProgress({ done: 0, total: queue.length });
     try {
-      const startMs = new Date(autoStartTime).getTime();
-      for (let i = 0; i < queue.length; i++) {
-        await schedulePublish({
-          id: queue[i] as Id<"videos">,
-          scheduledAt: startMs + i * intervalMin * 60_000,
-          privacyStatus: autoPrivacy,
-        });
-        setAutoProgress({ done: i + 1, total: queue.length });
-      }
-      setQueue([]);
+      await startAutoPublish({
+        scheduledAt: new Date(autoStartTime).getTime(),
+        intervalMs: intervalMin * 60_000,
+        count: autoCount,
+        privacy: autoPrivacy,
+      });
       setAutoStartTime("");
-      setShowForm(false);
-      setFilter("upcoming");
     } catch (e) {
-      console.error("Auto-schedule failed:", e);
+      console.error("Failed to start auto-publish:", e);
     } finally {
       setAutoSubmitting(false);
-      setAutoProgress(null);
+    }
+  };
+
+  const handleStopAutoPublish = async () => {
+    setAutoSubmitting(true);
+    try {
+      await stopAutoPublish();
+    } catch (e) {
+      console.error("Failed to stop auto-publish:", e);
+    } finally {
+      setAutoSubmitting(false);
     }
   };
 
@@ -261,7 +239,6 @@ export default function SchedulePage() {
         <Button
           variant={showForm ? "outline" : "default"}
           onClick={() => setShowForm((p) => !p)}
-          disabled={schedulableVideos.length === 0}
         >
           {showForm
             ? <ChevronUp className="mr-2 h-4 w-4" />
@@ -537,252 +514,175 @@ export default function SchedulePage() {
                 </div>
               </div>
             ) : (
-              /* ── Auto-schedule form ── */
+              /* ── Auto-publish queue drain ── */
               <div className="space-y-5">
-                <div className="grid md:grid-cols-2 gap-4">
-                  {/* Video checklist */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium">Available Videos</label>
-                      <div className="flex gap-2 text-xs">
-                        <button
-                          type="button"
-                          onClick={() => setQueue(schedulableVideos.map((v) => v._id))}
-                          className="text-primary hover:underline"
-                        >
-                          Select all
-                        </button>
-                        {queue.length > 0 && (
-                          <>
-                            <span className="text-muted-foreground">·</span>
-                            <button
-                              type="button"
-                              onClick={() => setQueue([])}
-                              className="text-muted-foreground hover:text-foreground"
-                            >
-                              Clear
-                            </button>
-                          </>
+                {isAutoActive ? (
+                  /* Active state */
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-3 p-4 rounded-lg border border-primary/30 bg-primary/5">
+                      <div className="flex-1 space-y-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-sm">Auto-Publish Active</span>
+                          <Badge className="bg-primary/15 text-primary border-primary/30 text-xs">Running</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Up to {userSettings?.autoPublishCount ?? 1} video{(userSettings?.autoPublishCount ?? 1) !== 1 ? "s" : ""} every{" "}
+                          {INTERVALS.find((i) => i.value === Math.round((userSettings?.autoPublishIntervalMs ?? 0) / 60_000))?.label ?? "interval"}{" "}
+                          · <span className="capitalize">{userSettings?.autoPublishPrivacy ?? "public"}</span>
+                          {" "}· {schedulableVideos.length} ready now
+                        </p>
+                        {userSettings?.autoPublishNextAt && (
+                          <p className="text-xs text-muted-foreground">
+                            Next run {formatDistanceToNow(userSettings.autoPublishNextAt, { addSuffix: true })}
+                          </p>
                         )}
                       </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleStopAutoPublish}
+                        disabled={autoSubmitting}
+                        className="shrink-0 border-destructive/40 text-destructive hover:bg-destructive/5"
+                      >
+                        {autoSubmitting ? <LoadingSpinner size="sm" /> : <X className="h-3.5 w-3.5 mr-1" />}
+                        Stop
+                      </Button>
                     </div>
+
                     {schedulableVideos.length === 0 ? (
-                      <div className="border rounded-md flex items-center justify-center h-32 text-sm text-muted-foreground">
-                        No ready videos available
-                      </div>
+                      <p className="text-sm text-center text-muted-foreground py-3">
+                        No ready videos yet — the metadata cron will fill this pool as it processes your drafts.
+                      </p>
                     ) : (
                       <div className="border rounded-md divide-y max-h-52 overflow-y-auto">
-                        {schedulableVideos.map((v) => {
-                          const checked = queue.includes(v._id);
-                          const pos = queue.indexOf(v._id);
-                          return (
-                            <button
-                              key={v._id}
-                              type="button"
-                              onClick={() => toggleVideo(v._id)}
-                              className={`w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/50 transition-colors ${
-                                checked ? "bg-primary/5" : ""
-                              }`}
-                            >
-                              {checked
-                                ? <CheckSquare className="h-4 w-4 text-primary shrink-0" />
-                                : <Square className="h-4 w-4 text-muted-foreground shrink-0" />
-                              }
-                              <span className="text-sm truncate flex-1">
-                                {(v as any).aiTitle ?? v.title}
-                              </span>
-                              {checked && (
-                                <span className="ml-auto text-xs text-primary font-medium">
-                                  #{pos + 1}
-                                </span>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Queue with reorder */}
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">
-                      Queue
-                      {queue.length > 0 && (
-                        <span className="ml-1.5 text-muted-foreground font-normal text-xs">
-                          ({queue.length} video{queue.length !== 1 ? "s" : ""})
-                        </span>
-                      )}
-                    </label>
-                    {queue.length === 0 ? (
-                      <div className="border rounded-md border-dashed flex items-center justify-center h-32">
-                        <div className="text-center text-sm text-muted-foreground">
-                          <ListVideo className="h-5 w-5 mx-auto mb-1 opacity-40" />
-                          Select videos to queue them
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="border rounded-md divide-y max-h-52 overflow-y-auto">
-                        {queue.map((id, i) => {
-                          const v = videoMap.get(id);
-                          if (!v) return null;
-                          return (
-                            <div key={id} className="flex items-center gap-2 px-3 py-2">
-                              <span className="text-xs text-muted-foreground w-5 shrink-0 font-mono tabular-nums">
-                                {i + 1}
-                              </span>
-                              <span className="text-sm truncate flex-1">
-                                {(v as any).aiTitle ?? v.title}
-                              </span>
-                              <div className="flex items-center gap-0.5 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => moveInQueue(i, -1)}
-                                  disabled={i === 0}
-                                  className="p-1 rounded hover:bg-muted disabled:opacity-30"
-                                >
-                                  <ArrowUp className="h-3 w-3" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => moveInQueue(i, 1)}
-                                  disabled={i === queue.length - 1}
-                                  className="p-1 rounded hover:bg-muted disabled:opacity-30"
-                                >
-                                  <ArrowDown className="h-3 w-3" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => removeFromQueue(id)}
-                                  className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-destructive"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Settings */}
-                <div className="space-y-4 pt-1 border-t">
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium">First publish at</label>
-                      <input
-                        type="datetime-local"
-                        className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                        min={minDatetimeValue()}
-                        value={autoStartTime}
-                        onChange={(e) => setAutoStartTime(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium">Interval between videos</label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {INTERVALS.map((int) => (
-                          <button
-                            key={int.value}
-                            type="button"
-                            onClick={() => setIntervalMin(int.value)}
-                            className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
-                              intervalMin === int.value
-                                ? "bg-primary text-primary-foreground border-primary"
-                                : "bg-background border-input hover:border-primary/50 hover:bg-muted"
-                            }`}
-                          >
-                            {int.label}
-                          </button>
+                        {schedulableVideos.map((v, i) => (
+                          <div key={v._id} className="flex items-center gap-3 px-3 py-2.5">
+                            <span className="text-xs text-muted-foreground font-mono w-4 shrink-0 tabular-nums">{i + 1}</span>
+                            <span className="text-sm truncate flex-1">{(v as any).aiTitle ?? v.title}</span>
+                            <Badge variant="outline" className="text-xs shrink-0 capitalize">
+                              {(v as any).privacyStatus ?? userSettings?.autoPublishPrivacy ?? "public"}
+                            </Badge>
+                          </div>
                         ))}
                       </div>
-                    </div>
+                    )}
                   </div>
+                ) : (
+                  /* Setup form */
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      Set a recurring schedule and ReelCast automatically picks your oldest <strong>ready</strong> videos and publishes them. No manual selection needed — the metadata cron fills the pool, this cron drains it.
+                    </p>
 
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium">Privacy</label>
-                    <div className="flex gap-2">
-                      {PRIVACY_OPTIONS.map((opt) => (
-                        <Button
-                          key={opt.value}
-                          size="sm"
-                          variant={autoPrivacy === opt.value ? "default" : "outline"}
-                          onClick={() => setAutoPrivacy(opt.value)}
-                          type="button"
-                        >
-                          {opt.label}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Live preview */}
-                  {previewTimes.length > 0 && (
-                    <div className="bg-muted/50 rounded-lg p-3">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                        Schedule Preview
-                      </p>
-                      <div className="space-y-1.5 max-h-36 overflow-y-auto">
-                        {previewTimes.map(({ id, time }, i) => {
-                          const v = videoMap.get(id);
-                          return (
-                            <div
-                              key={id}
-                              className="flex items-center justify-between gap-3 text-xs"
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium">First publish at</label>
+                        <input
+                          type="datetime-local"
+                          className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                          min={minDatetimeValue()}
+                          value={autoStartTime}
+                          onChange={(e) => setAutoStartTime(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium">Publish every</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {INTERVALS.map((int) => (
+                            <button
+                              key={int.value}
+                              type="button"
+                              onClick={() => setIntervalMin(int.value)}
+                              className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
+                                intervalMin === int.value
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "bg-background border-input hover:border-primary/50 hover:bg-muted"
+                              }`}
                             >
-                              <div className="flex items-center gap-2 min-w-0">
-                                <span className="text-muted-foreground font-mono w-4 shrink-0 tabular-nums">
-                                  {i + 1}.
-                                </span>
-                                <span className="truncate">
-                                  {(v as any)?.aiTitle ?? v?.title}
-                                </span>
-                              </div>
-                              <span className="text-muted-foreground shrink-0">
-                                {format(time, "MMM d, h:mm a")}
-                              </span>
-                            </div>
-                          );
-                        })}
+                              {int.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
-                  )}
-                </div>
 
-                <div className="flex gap-2 pt-1">
-                  <Button
-                    onClick={handleAutoSchedule}
-                    disabled={queue.length === 0 || !autoStartTime || autoSubmitting}
-                  >
-                    {autoSubmitting ? (
-                      <>
-                        <LoadingSpinner size="sm" />
-                        <span className="ml-2">
-                          {autoProgress
-                            ? `Scheduling ${autoProgress.done}/${autoProgress.total}…`
-                            : "Scheduling…"}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <Zap className="mr-2 h-4 w-4" />
-                        {queue.length > 0
-                          ? `Auto-Schedule ${queue.length} Video${queue.length !== 1 ? "s" : ""}`
-                          : "Auto-Schedule"}
-                      </>
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium">Videos per run</label>
+                        <div className="flex gap-1.5">
+                          {[1, 2, 3, 5].map((n) => (
+                            <button
+                              key={n}
+                              type="button"
+                              onClick={() => setAutoCount(n)}
+                              className={`px-3 py-1 rounded-md text-xs font-medium border transition-colors min-w-[2.5rem] ${
+                                autoCount === n
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "bg-background border-input hover:border-primary/50 hover:bg-muted"
+                              }`}
+                            >
+                              {n}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium">Privacy</label>
+                        <div className="flex gap-2">
+                          {PRIVACY_OPTIONS.map((opt) => (
+                            <Button
+                              key={opt.value}
+                              size="sm"
+                              variant={autoPrivacy === opt.value ? "default" : "outline"}
+                              onClick={() => setAutoPrivacy(opt.value)}
+                              type="button"
+                            >
+                              {opt.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {autoStartTime && (
+                      <div className="bg-muted/50 rounded-lg px-4 py-3 text-sm">
+                        <span className="text-muted-foreground">Starting </span>
+                        <span className="font-medium">{format(new Date(autoStartTime), "MMM d 'at' h:mm a")}</span>
+                        <span className="text-muted-foreground">, then every </span>
+                        <span className="font-medium">{INTERVALS.find((i) => i.value === intervalMin)?.label}</span>
+                        <span className="text-muted-foreground"> · up to </span>
+                        <span className="font-medium">{autoCount} video{autoCount !== 1 ? "s" : ""} per run</span>
+                        <span className="text-muted-foreground"> · </span>
+                        <span className="font-medium capitalize">{autoPrivacy}</span>
+                        {schedulableVideos.length > 0 && (
+                          <span className="text-muted-foreground"> · {schedulableVideos.length} ready now</span>
+                        )}
+                      </div>
                     )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setShowForm(false);
-                      setQueue([]);
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                </div>
+
+                    <div className="flex gap-2 pt-1">
+                      <Button
+                        onClick={handleStartAutoPublish}
+                        disabled={!autoStartTime || autoSubmitting}
+                      >
+                        {autoSubmitting ? (
+                          <>
+                            <LoadingSpinner size="sm" />
+                            <span className="ml-2">Starting…</span>
+                          </>
+                        ) : (
+                          <>
+                            <Zap className="mr-2 h-4 w-4" />
+                            Start Auto-Publish
+                          </>
+                        )}
+                      </Button>
+                      <Button variant="outline" onClick={() => setShowForm(false)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </CardContent>

@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { mutation, query, internalQuery } from "./_generated/server";
+import { mutation, query, internalQuery, internalMutation } from "./_generated/server";
+import { api } from "./_generated/api";
 import { getCurrentUserOrThrow } from "./lib/auth";
 
 export const get = query({
@@ -40,6 +41,12 @@ export const get = query({
         aiLanguage: undefined,
         aiDescriptionLength: undefined,
         aiGuidelines: undefined,
+        autoPublishEnabled: undefined as boolean | undefined,
+        autoPublishIntervalMs: undefined as number | undefined,
+        autoPublishCount: undefined as number | undefined,
+        autoPublishPrivacy: undefined as "private" | "public" | "unlisted" | undefined,
+        autoPublishSchedulerId: undefined,
+        autoPublishNextAt: undefined as number | undefined,
         veoModel: undefined,
         veoResolution: undefined,
         veoAspectRatio: undefined,
@@ -256,5 +263,100 @@ export const getByVideoUserId = internalQuery({
       .query("settings")
       .withIndex("by_user", (q) => q.eq("userId", args.userId))
       .unique();
+  },
+});
+
+export const startAutoPublish = mutation({
+  args: {
+    scheduledAt: v.number(),
+    intervalMs: v.number(),
+    count: v.number(),
+    privacy: v.union(v.literal("private"), v.literal("public"), v.literal("unlisted")),
+  },
+  handler: async (ctx, args) => {
+    const identity = await getCurrentUserOrThrow(ctx);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .unique();
+    if (!user) throw new Error("User not found");
+
+    const settings = await ctx.db
+      .query("settings")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .unique();
+
+    if (settings?.autoPublishSchedulerId) {
+      try { await ctx.scheduler.cancel(settings.autoPublishSchedulerId); } catch {}
+    }
+
+    const schedulerId = await ctx.scheduler.runAt(
+      args.scheduledAt,
+      api.actions.autoPublish.runAutoPublishBatch,
+      { userId: user._id }
+    );
+
+    const autoFields = {
+      autoPublishEnabled: true,
+      autoPublishIntervalMs: args.intervalMs,
+      autoPublishCount: args.count,
+      autoPublishPrivacy: args.privacy,
+      autoPublishSchedulerId: schedulerId,
+      autoPublishNextAt: args.scheduledAt,
+    };
+
+    if (settings) {
+      await ctx.db.patch(settings._id, autoFields);
+    } else {
+      await ctx.db.insert("settings", { userId: user._id, notificationsEnabled: false, ...autoFields });
+    }
+  },
+});
+
+export const stopAutoPublish = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await getCurrentUserOrThrow(ctx);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .unique();
+    if (!user) throw new Error("User not found");
+
+    const settings = await ctx.db
+      .query("settings")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .unique();
+    if (!settings) return;
+
+    if (settings.autoPublishSchedulerId) {
+      try { await ctx.scheduler.cancel(settings.autoPublishSchedulerId); } catch {}
+    }
+
+    await ctx.db.patch(settings._id, {
+      autoPublishEnabled: false,
+      autoPublishSchedulerId: undefined,
+      autoPublishNextAt: undefined,
+    });
+  },
+});
+
+export const internalUpdateAutoPublishNext = internalMutation({
+  args: {
+    userId: v.id("users"),
+    schedulerId: v.id("_scheduled_functions"),
+    nextAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const settings = await ctx.db
+      .query("settings")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .unique();
+    if (settings) {
+      await ctx.db.patch(settings._id, {
+        autoPublishSchedulerId: args.schedulerId,
+        autoPublishNextAt: args.nextAt,
+      });
+    }
   },
 });

@@ -93,6 +93,7 @@ export default defineSchema({
     defaultBackgroundMusic: v.optional(v.boolean()),
     notificationsEnabled: v.boolean(),
     telegramChatId: v.optional(v.string()),
+    discordWebhookUrl: v.optional(v.string()),
     aiAutoGenerate: v.optional(v.boolean()),
     aiGenerateTitle: v.optional(v.boolean()),
     aiGenerateDescription: v.optional(v.boolean()),

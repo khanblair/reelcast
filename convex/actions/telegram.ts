@@ -13,21 +13,35 @@ export const sendNotification = action({
     // 1. Fetch user settings
     const userSettings = await ctx.runQuery(api.settings.getByUserId, { userId: args.userId });
     
-    // 2. Check if telegram is connected and notifications are enabled
-    if (!userSettings || !userSettings.telegramChatId || !userSettings.notificationsEnabled) {
-      return;
+    if (!userSettings || !userSettings.notificationsEnabled) return;
+
+    const tasks: Promise<unknown>[] = [];
+
+    // Telegram
+    if (userSettings.telegramChatId) {
+      const botToken = process.env.TELEGRAM_BOT_TOKEN;
+      if (botToken) {
+        tasks.push(
+          fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: userSettings.telegramChatId, text: args.message }),
+          }).catch(() => {})
+        );
+      }
     }
 
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    if (!botToken) return;
+    // Discord
+    if ((userSettings as any).discordWebhookUrl) {
+      tasks.push(
+        fetch((userSettings as any).discordWebhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: args.message }),
+        }).catch(() => {})
+      );
+    }
 
-    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: userSettings.telegramChatId,
-        text: args.message,
-      }),
-    });
+    await Promise.all(tasks);
   },
 });

@@ -55,6 +55,37 @@ export const testYoutube = action({
   },
 });
 
+export const testDiscord = action({
+  args: {},
+  handler: async (ctx): Promise<{ success: boolean; error?: string }> => {
+    const identity = await getCurrentUserOrThrow(ctx);
+    const user = await ctx.runQuery(api.users.getByClerkId, { clerkId: identity.subject });
+    if (!user) return { success: false, error: "User not found." };
+
+    const settings = await ctx.runQuery(api.settings.getByUserId, { userId: user._id });
+    if (!settings?.discordWebhookUrl) {
+      return { success: false, error: "Discord webhook is not connected." };
+    }
+
+    try {
+      const res = await fetch(settings.discordWebhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          content: "✅ **ReelCast** — test message. Your Discord notifications are working!",
+        }),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        return { success: false, error: `Discord API error: ${res.status}${text ? ` — ${text}` : ""}` };
+      }
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : "Network error." };
+    }
+  },
+});
+
 export const testTelegram = action({
   args: {},
   handler: async (ctx): Promise<{ success: boolean; error?: string }> => {

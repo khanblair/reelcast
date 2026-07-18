@@ -31,6 +31,7 @@ export const get = query({
         youtubeChannelName: user.youtubeChannelName,
         aiPreset: undefined,
         telegramChatId: undefined,
+        discordWebhookUrl: undefined,
         aiAutoGenerate: undefined,
         aiGenerateTitle: undefined,
         aiGenerateDescription: undefined,
@@ -67,6 +68,7 @@ export const update = mutation({
     defaultBackgroundMusic: v.optional(v.boolean()),
     notificationsEnabled: v.optional(v.boolean()),
     telegramChatId: v.optional(v.string()),
+    discordWebhookUrl: v.optional(v.string()),
     aiAutoGenerate: v.optional(v.boolean()),
     aiGenerateTitle: v.optional(v.boolean()),
     aiGenerateDescription: v.optional(v.boolean()),
@@ -108,6 +110,7 @@ export const update = mutation({
     if (args.defaultBackgroundMusic !== undefined) updateData.defaultBackgroundMusic = args.defaultBackgroundMusic;
     if (args.notificationsEnabled !== undefined) updateData.notificationsEnabled = args.notificationsEnabled;
     if (args.telegramChatId !== undefined) updateData.telegramChatId = args.telegramChatId;
+    if (args.discordWebhookUrl !== undefined) updateData.discordWebhookUrl = args.discordWebhookUrl;
     if (args.aiAutoGenerate !== undefined) updateData.aiAutoGenerate = args.aiAutoGenerate;
     if (args.aiGenerateTitle !== undefined) updateData.aiGenerateTitle = args.aiGenerateTitle;
     if (args.aiGenerateDescription !== undefined) updateData.aiGenerateDescription = args.aiGenerateDescription;
@@ -165,6 +168,25 @@ export const disconnectTelegram = mutation({
         telegramChatId: undefined,
         notificationsEnabled: false,
       });
+    }
+  },
+});
+
+export const disconnectDiscord = mutation({
+  handler: async (ctx) => {
+    const identity = await getCurrentUserOrThrow(ctx);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .unique();
+    if (!user) throw new Error("User not found");
+
+    const settings = await ctx.db
+      .query("settings")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .unique();
+    if (settings) {
+      await ctx.db.patch(settings._id, { discordWebhookUrl: undefined });
     }
   },
 });

@@ -1,22 +1,40 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import type { Route } from "next";
-import { useClerk } from "@clerk/nextjs";
+import { useClerk, useUser } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Sparkles } from "lucide-react";
 
 export default function CustomSignUpPage() {
-  const clerk = useClerk();
+  const clerk  = useClerk();
+  const { isSignedIn, isLoaded } = useUser();
+  const router = useRouter();
 
-  const handleGoogleAuth = () => {
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      router.replace("/dashboard");
+    }
+  }, [isLoaded, isSignedIn, router]);
+
+  const handleGoogleAuth = async () => {
     if (!clerk.client) return;
-    clerk.client.signUp.authenticateWithRedirect({
-      strategy: "oauth_google",
-      redirectUrl: "/sso-callback",
-      redirectUrlComplete: "/dashboard",
-    });
+    try {
+      await clerk.client.signUp.authenticateWithRedirect({
+        strategy: "oauth_google",
+        redirectUrl: "/sso-callback",
+        redirectUrlComplete: "/dashboard",
+      });
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message.toLowerCase().includes("already signed in")) {
+        router.replace("/dashboard");
+      } else {
+        throw err;
+      }
+    }
   };
 
   return (

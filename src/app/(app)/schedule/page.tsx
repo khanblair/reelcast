@@ -104,9 +104,26 @@ export default function SchedulePage() {
     [allVideos]
   );
 
+  const now = Date.now();
+
+  // Drafts without a pending metadata job — safe to schedule
   const draftVideos = useMemo(
-    () => allVideos?.filter((v) => v.status === "draft") ?? [],
-    [allVideos]
+    () => allVideos?.filter((v) => {
+      if (v.status !== "draft") return false;
+      const scheduledAt = (v as any).metadataScheduledAt as number | undefined;
+      return !scheduledAt || scheduledAt <= now;
+    }) ?? [],
+    [allVideos, now]
+  );
+
+  // Drafts that already have a future metadata job queued
+  const pendingMetadataVideos = useMemo(
+    () => allVideos?.filter((v) => {
+      if (v.status !== "draft") return false;
+      const scheduledAt = (v as any).metadataScheduledAt as number | undefined;
+      return scheduledAt && scheduledAt > now;
+    }) ?? [],
+    [allVideos, now]
   );
 
   const videoMap = useMemo(
@@ -306,9 +323,10 @@ export default function SchedulePage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-sm font-medium">
-                      Draft Videos
+                      Unscheduled Drafts
                       <span className="ml-1.5 font-normal text-muted-foreground text-xs">
-                        ({draftVideos.length} available)
+                        ({draftVideos.length} to schedule
+                        {pendingMetadataVideos.length > 0 && `, ${pendingMetadataVideos.length} already queued`})
                       </span>
                     </label>
                     <div className="flex gap-2 text-xs">
@@ -334,9 +352,13 @@ export default function SchedulePage() {
                     </div>
                   </div>
 
-                  {draftVideos.length === 0 ? (
+                  {draftVideos.length === 0 && pendingMetadataVideos.length === 0 ? (
                     <div className="border rounded-md flex items-center justify-center h-32 text-sm text-muted-foreground">
                       No draft videos — upload some first
+                    </div>
+                  ) : draftVideos.length === 0 ? (
+                    <div className="border rounded-md flex items-center justify-center h-16 text-sm text-muted-foreground">
+                      All drafts are already queued for metadata
                     </div>
                   ) : (
                     <div className="border rounded-md divide-y max-h-52 overflow-y-auto">
@@ -363,6 +385,30 @@ export default function SchedulePage() {
                           </button>
                         );
                       })}
+                    </div>
+                  )}
+
+                  {pendingMetadataVideos.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide pt-1">
+                        Already Queued ({pendingMetadataVideos.length})
+                      </p>
+                      <div className="border rounded-md divide-y max-h-40 overflow-y-auto border-amber-500/30 bg-amber-500/5">
+                        {pendingMetadataVideos.map((v) => {
+                          const scheduledAt = (v as any).metadataScheduledAt as number;
+                          return (
+                            <div key={v._id} className="flex items-center gap-3 px-3 py-2">
+                              <Wand2 className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                              <span className="text-sm truncate flex-1 text-muted-foreground">
+                                {(v as any).aiTitle ?? v.title}
+                              </span>
+                              <span className="text-xs text-amber-600 dark:text-amber-400 shrink-0">
+                                {formatDistanceToNow(scheduledAt, { addSuffix: true })}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>

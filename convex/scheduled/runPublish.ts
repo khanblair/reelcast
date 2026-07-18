@@ -2,22 +2,43 @@
 
 import { v } from "convex/values";
 import { action } from "../_generated/server";
-import { internal } from "../_generated/api";
+import { api, internal } from "../_generated/api";
 import { uploadToYouTube, refreshYouTubeToken } from "../lib/youtube";
+import {
+  extractCloudinaryPublicId,
+  destroyCloudinaryAsset,
+} from "../lib/cloudinary";
+
+const MAX_RETRIES = 2; // 3 total attempts: 0, 1, 2
 
 export const processPublishJob = action({
-  args: { jobId: v.id("jobs"), videoId: v.id("videos") },
+  args: {
+    jobId: v.id("jobs"),
+    videoId: v.id("videos"),
+    attempt: v.optional(v.number()),
+  },
   handler: async (ctx, args) => {
-    await ctx.runMutation(internal.jobs.internalUpdateStatus, {
-      id: args.jobId,
-      status: "processing",
-    });
+    const attempt = args.attempt ?? 0;
+
+    // Only mark as "processing" on the first attempt
+    if (attempt === 0) {
+      await ctx.runMutation(internal.jobs.internalUpdateStatus, {
+        id: args.jobId,
+        status: "processing",
+      });
+    }
+
+    let title = "Unknown";
 
     try {
-      const video = await ctx.runQuery(internal.videos.internalGet, { id: args.videoId });
+      const video = await ctx.runQuery(internal.videos.internalGet, {
+        id: args.videoId,
+      });
       if (!video) throw new Error("Video not found");
 
-      const user = await ctx.runQuery(internal.users.internalGetById, { userId: video.userId });
+      const user = await ctx.runQuery(internal.users.internalGetById, {
+        userId: video.userId,
+      });
       if (!user) throw new Error("User not found");
       if (!user.youtubeConnected || !user.youtubeAccessToken) {
         throw new Error("YouTube account is not connected");
@@ -40,7 +61,7 @@ export const processPublishJob = action({
       }
 
       const videoFileUrl = video.processedFileKey ?? video.rawFileKey;
-      const title = video.aiTitle ?? video.title;
+      title = video.aiTitle ?? video.title;
       const description = video.aiDescription ?? video.description ?? "";
       const tags = video.aiTags ?? video.tags ?? [];
 
@@ -68,9 +89,63 @@ export const processPublishJob = action({
         id: args.jobId,
         status: "completed",
       });
+
+      // Best-effort Cloudinary cleanup after successful upload
+      const cloudinaryUrls: string[] = [];
+      if (video.processedFileKey?.includes("cloudinary.com")) {
+        cloudinaryUrls.push(video.processedFileKey);
+      }
+      if (
+        video.rawFileKey?.includes("cloudinary.com") &&
+        video.rawFileKey !== video.processedFileKey
+      ) {
+        cloudinaryUrls.push(video.rawFileKey);
+      }
+
+      for (const url of cloudinaryUrls) {
+        const publicId = extractCloudinaryPublicId(url);
+        if (!publicId) {
+          console.warn(`[runPublish] Could not extract Cloudinary publicId from URL: ${url}`);
+          continue;
+        }
+        try {
+          await destroyCloudinaryAsset(publicId, "video");
+        } catch (cleanupErr) {
+          console.warn(
+            `[runPublish] Cloudinary cleanup failed for publicId "${publicId}":`,
+            cleanupErr
+          );
+        }
+      }
+
+      if (cloudinaryUrls.length > 0) {
+        try {
+          await ctx.runMutation(internal.videos.internalSetCloudinaryDeleted, {
+            id: args.videoId,
+          });
+        } catch (cleanupErr) {
+          console.warn(
+            "[runPublish] Failed to record cloudinaryDeletedAt:",
+            cleanupErr
+          );
+        }
+      }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Unknown error";
 
+      if (attempt < MAX_RETRIES) {
+        // Schedule retry with exponential backoff: 60s, 120s
+        const delayMs = 60_000 * Math.pow(2, attempt);
+        await ctx.scheduler.runAfter(
+          delayMs,
+          api.scheduled.runPublish.processPublishJob,
+          { jobId: args.jobId, videoId: args.videoId, attempt: attempt + 1 }
+        );
+        // Do not mark job as failed — it is still pending a retry
+        return;
+      }
+
+      // All retries exhausted — mark as failed
       await ctx.runMutation(internal.jobs.internalUpdateStatus, {
         id: args.jobId,
         status: "failed",
@@ -81,6 +156,25 @@ export const processPublishJob = action({
         id: args.videoId,
         status: "failed",
       });
+
+      // Best-effort Telegram notification
+      try {
+        const video = await ctx.runQuery(internal.videos.internalGet, {
+          id: args.videoId,
+        });
+        if (video) {
+          const notificationTitle = video.aiTitle ?? video.title ?? title;
+          await ctx.runAction(api.actions.telegram.sendNotification, {
+            userId: video.userId,
+            message: `❌ Publish failed: "${notificationTitle}" after 3 attempts.\n\nError: ${message}\n\nCheck your YouTube connection in Settings.`,
+          });
+        }
+      } catch (telegramErr) {
+        console.warn(
+          "[runPublish] Telegram notification failed:",
+          telegramErr
+        );
+      }
     }
   },
 });

@@ -11,7 +11,6 @@
 import type * as actions_deleteVideo from "../actions/deleteVideo.js";
 import type * as actions_generation from "../actions/generation.js";
 import type * as actions_metadata from "../actions/metadata.js";
-import type * as actions_publish from "../actions/publish.js";
 import type * as actions_storage from "../actions/storage.js";
 import type * as actions_telegram from "../actions/telegram.js";
 import type * as actions_testConnections from "../actions/testConnections.js";
@@ -22,6 +21,7 @@ import type * as http from "../http.js";
 import type * as jobs from "../jobs.js";
 import type * as lib_ai from "../lib/ai.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_cloudinary from "../lib/cloudinary.js";
 import type * as lib_youtube from "../lib/youtube.js";
 import type * as notifications from "../notifications.js";
 import type * as scheduled_runGeneration from "../scheduled/runGeneration.js";
@@ -41,7 +41,6 @@ declare const fullApi: ApiFromModules<{
   "actions/deleteVideo": typeof actions_deleteVideo;
   "actions/generation": typeof actions_generation;
   "actions/metadata": typeof actions_metadata;
-  "actions/publish": typeof actions_publish;
   "actions/storage": typeof actions_storage;
   "actions/telegram": typeof actions_telegram;
   "actions/testConnections": typeof actions_testConnections;
@@ -52,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   jobs: typeof jobs;
   "lib/ai": typeof lib_ai;
   "lib/auth": typeof lib_auth;
+  "lib/cloudinary": typeof lib_cloudinary;
   "lib/youtube": typeof lib_youtube;
   notifications: typeof notifications;
   "scheduled/runGeneration": typeof scheduled_runGeneration;

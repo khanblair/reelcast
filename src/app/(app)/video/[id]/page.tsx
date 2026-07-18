@@ -138,6 +138,12 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
               <Youtube className="w-4 h-4" /> View on YouTube <ExternalLink className="w-3 h-3" />
             </a>
           )}
+          {(video as any).cloudinaryDeletedAt && (
+            <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              Storage freed · Cloudinary files deleted after publish
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col items-stretch sm:items-end gap-2 w-full sm:w-auto shrink-0">

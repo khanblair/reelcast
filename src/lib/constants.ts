@@ -15,7 +15,7 @@ export type VideoStatus = (typeof VIDEO_STATUS)[keyof typeof VIDEO_STATUS];
 
 export const JOB_STATUS = {
   PENDING: "pending",
-  RUNNING: "running",
+  RUNNING: "processing",
   COMPLETED: "completed",
   FAILED: "failed",
 } as const;

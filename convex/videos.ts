@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { getCurrentUserOrThrow } from "./lib/auth";
 
 export const create = mutation({
@@ -354,9 +354,17 @@ export const schedulePublish = mutation({
     const video = await ctx.db.get(args.id);
     if (!video || video.userId !== user._id) throw new Error("Video not found or unauthorized");
 
+    if (video.status !== "ready") throw new Error("Only ready videos can be scheduled for publishing");
+
+    const schedulerId = await ctx.scheduler.runAt(
+      args.scheduledAt,
+      internal.videos.processDueSchedules,
+      {}
+    );
     await ctx.db.patch(args.id, {
       status: "scheduled",
       scheduledPublishAt: args.scheduledAt,
+      convexSchedulerId: schedulerId,
       ...(args.privacyStatus ? { privacyStatus: args.privacyStatus } : {}),
     });
   },
@@ -375,9 +383,18 @@ export const cancelSchedule = mutation({
     const video = await ctx.db.get(args.id);
     if (!video || video.userId !== user._id) throw new Error("Video not found or unauthorized");
 
+    if (video.convexSchedulerId) {
+      try {
+        await ctx.scheduler.cancel(video.convexSchedulerId);
+      } catch (e) {
+        console.warn("Failed to cancel scheduled job (may have already fired):", e);
+      }
+    }
+
     await ctx.db.patch(args.id, {
       status: "ready",
       scheduledPublishAt: undefined,
+      convexSchedulerId: undefined,
     });
   },
 });
@@ -427,6 +444,13 @@ export const internalDeleteWithRelated = internalMutation({
 
     // Delete the video itself
     await ctx.db.delete(args.videoId);
+  },
+});
+
+export const internalSetCloudinaryDeleted = internalMutation({
+  args: { id: v.id("videos") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, { cloudinaryDeletedAt: Date.now() });
   },
 });
 

@@ -195,6 +195,8 @@ export const retryJob = mutation({
         });
       }
     } else if (job.type === "publish") {
+      // Reset video status back to scheduled so it doesn't stay stuck at "failed"
+      await ctx.db.patch(job.videoId, { status: "scheduled" });
       await ctx.scheduler.runAfter(0, api.scheduled.runPublish.processPublishJob, {
         jobId: args.id,
         videoId: job.videoId,

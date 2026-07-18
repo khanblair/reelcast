@@ -7,11 +7,9 @@ export interface Job {
   videoId: string;
   type: JobType;
   status: JobStatus;
-  scheduledAt?: number;
   startedAt?: number;
   completedAt?: number;
   error?: string;
-  retryCount: number;
 }
 
 export const JOB_TYPE_LABELS: Record<JobType, string> = {
@@ -21,7 +19,7 @@ export const JOB_TYPE_LABELS: Record<JobType, string> = {
 
 export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
   pending: "Pending",
-  running: "Running",
+  processing: "Processing",
   completed: "Completed",
   failed: "Failed",
 };

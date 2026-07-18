@@ -59,9 +59,7 @@ export default function SchedulePage() {
     return <div className="flex h-[80vh] items-center justify-center"><LoadingSpinner /></div>;
   }
 
-  const schedulableVideos = allVideos.filter(
-    (v) => v.status === "ready" || v.status === "draft"
-  );
+  const schedulableVideos = allVideos.filter((v) => v.status === "ready");
 
   const filtered = scheduledVideos.filter((v) => {
     const t = v.scheduledPublishAt!;
@@ -236,6 +234,11 @@ export default function SchedulePage() {
                           {video.privacyStatus && (
                             <Badge variant="outline" className="text-xs capitalize">
                               {video.privacyStatus}
+                            </Badge>
+                          )}
+                          {(video as any).cloudinaryDeletedAt && (
+                            <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                              Storage freed
                             </Badge>
                           )}
                         </div>

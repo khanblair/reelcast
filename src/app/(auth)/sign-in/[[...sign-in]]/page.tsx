@@ -1,42 +1,22 @@
 "use client";
 
-import { useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import type { Route } from "next";
-import { useClerk, useUser } from "@clerk/nextjs";
-import { useRouter } from "next/navigation";
+import { useClerk } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Sparkles } from "lucide-react";
 
 export default function CustomSignInPage() {
-  const clerk  = useClerk();
-  const { isSignedIn, isLoaded } = useUser();
-  const router = useRouter();
+  const clerk = useClerk();
 
-  // Already signed in (e.g. session carried over from production) → skip sign-in page
-  useEffect(() => {
-    if (isLoaded && isSignedIn) {
-      router.replace("/dashboard");
-    }
-  }, [isLoaded, isSignedIn, router]);
-
-  const handleGoogleAuth = async () => {
+  const handleGoogleAuth = () => {
     if (!clerk.client) return;
-    try {
-      await clerk.client.signIn.authenticateWithRedirect({
-        strategy: "oauth_google",
-        redirectUrl: `${window.location.origin}/sso-callback`,
-        redirectUrlComplete: `${window.location.origin}/dashboard`,
-      });
-    } catch (err: unknown) {
-      // Clerk throws when a session already exists — treat it as already signed in
-      if (err instanceof Error && err.message.toLowerCase().includes("already signed in")) {
-        router.replace("/dashboard");
-      } else {
-        throw err;
-      }
-    }
+    clerk.client.signIn.authenticateWithRedirect({
+      strategy: "oauth_google",
+      redirectUrl: `${window.location.origin}/sso-callback`,
+      redirectUrlComplete: `${window.location.origin}/dashboard`,
+    });
   };
 
   return (

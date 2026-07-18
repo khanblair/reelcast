@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import type { Video as VideoType } from "@/types/video";
 import type { VideoStatus } from "@/lib/constants";
 
+
 type SortOption = "newest" | "oldest" | "name-az" | "name-za" | "size-desc" | "size-asc";
 
 const STATUS_PILLS: { value: VideoStatus | "all"; label: string }[] = [
@@ -34,7 +35,8 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 ];
 
 export default function DraftsPage() {
-  const videos = useQuery(api.videos.list);
+  const videos       = useQuery(api.videos.list);
+  const userSettings = useQuery(api.settings.get);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<VideoStatus | "all">("all");
@@ -44,6 +46,22 @@ export default function DraftsPage() {
     () => (videos ?? []) as VideoType[],
     [videos]
   );
+
+  // Estimated auto-publish time per ready video (oldest-first queue position)
+  const estimatedPublishMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!userSettings?.autoPublishEnabled || !userSettings.autoPublishNextAt) return map;
+    const nextAt     = userSettings.autoPublishNextAt;
+    const intervalMs = userSettings.autoPublishIntervalMs ?? 6 * 3_600_000;
+    const count      = userSettings.autoPublishCount ?? 1;
+    const readyVideos = (videos ?? [])
+      .filter((v) => v.status === "ready")
+      .sort((a, b) => a._creationTime - b._creationTime);
+    readyVideos.forEach((v, i) => {
+      map.set(v._id, nextAt + Math.floor(i / count) * intervalMs);
+    });
+    return map;
+  }, [videos, userSettings]);
 
   const statusCounts = useMemo(() => {
     const counts: Partial<Record<VideoStatus | "all", number>> = { all: typedVideos.length };
@@ -194,7 +212,11 @@ export default function DraftsPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {processedVideos.map((video) => (
-            <VideoCard key={video._id} video={video} />
+            <VideoCard
+              key={video._id}
+              video={video}
+              estimatedPublishAt={estimatedPublishMap.get(video._id)}
+            />
           ))}
         </div>
       )}

@@ -4,13 +4,16 @@ import React, { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { formatDistanceToNow } from "date-fns";
-import { Video, Youtube, CalendarClock, Wand2 } from "lucide-react";
+import { Video, Youtube, CalendarClock, Wand2, Zap } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { VideoStatusBadge } from "./video-status-badge";
 import type { Video as VideoType } from "@/types/video";
+import { formatDateTimeEAT } from "@/lib/eat";
 
 interface VideoCardProps {
   video: VideoType;
+  /** Estimated auto-publish time in ms — only passed for ready videos when auto-publish is active */
+  estimatedPublishAt?: number;
 }
 
 function getCloudinaryThumbnail(url: string): string | null {
@@ -19,7 +22,7 @@ function getCloudinaryThumbnail(url: string): string | null {
   return withTransform.replace(/\.(mp4|mov|avi|mkv|webm|flv|wmv)(\?.*)?$/, ".jpg");
 }
 
-export function VideoCard({ video }: VideoCardProps) {
+export function VideoCard({ video, estimatedPublishAt }: VideoCardProps) {
   const [hovering, setHovering] = useState(false);
 
   const timeAgo = formatDistanceToNow(video._creationTime, { addSuffix: true });
@@ -97,17 +100,23 @@ export function VideoCard({ video }: VideoCardProps) {
         )}
       </div>
 
-      {/* Schedule / metadata banner — slim strip between thumbnail and title */}
-      {video.status === "scheduled" && (video as any).scheduledPublishAt && (
+      {/* Schedule / metadata / auto-publish banners */}
+      {video.status === "scheduled" && video.scheduledPublishAt && (
         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border-t text-xs text-primary pointer-events-none">
           <CalendarClock className="h-3 w-3 shrink-0" />
-          Publishes {formatDistanceToNow((video as any).scheduledPublishAt, { addSuffix: true })}
+          {formatDateTimeEAT(video.scheduledPublishAt)}
         </div>
       )}
-      {video.status === "draft" && (video as any).metadataScheduledAt && (video as any).metadataScheduledAt > Date.now() && (
+      {video.status === "draft" && video.metadataScheduledAt && video.metadataScheduledAt > Date.now() && (
         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 border-t text-xs text-amber-600 dark:text-amber-400 pointer-events-none">
           <Wand2 className="h-3 w-3 shrink-0" />
-          Metadata {formatDistanceToNow((video as any).metadataScheduledAt, { addSuffix: true })}
+          AI metadata · {formatDateTimeEAT(video.metadataScheduledAt)}
+        </div>
+      )}
+      {video.status === "ready" && estimatedPublishAt && (
+        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 border-t text-xs text-primary pointer-events-none">
+          <Zap className="h-3 w-3 shrink-0" />
+          Auto · {formatDateTimeEAT(estimatedPublishAt)}
         </div>
       )}
 

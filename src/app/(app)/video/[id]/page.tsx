@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState } from "react";
+import { use, useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { useRouter } from "next/navigation";
 import {
@@ -14,9 +14,11 @@ import {
   Loader2,
   Trash2,
   Wand2,
+  Zap,
 } from "lucide-react";
 import { api } from "../../../../../convex/_generated/api";
 import { Id } from "../../../../../convex/_generated/dataModel";
+import { formatDateTimeEAT, formatCountdown } from "@/lib/eat";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
@@ -35,7 +37,9 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
   const videoId = unwrappedParams.id as Id<"videos">;
   const router = useRouter();
 
-  const video = useQuery(api.videos.get, { id: videoId });
+  const video        = useQuery(api.videos.get, { id: videoId });
+  const allVideos    = useQuery(api.videos.list);
+  const userSettings = useQuery(api.settings.get);
   const updateStatus = useMutation(api.videos.updateStatus);
   const updatePrivacy = useMutation(api.videos.updatePrivacyStatus);
   const triggerPublish = useMutation(api.jobs.create);
@@ -48,6 +52,35 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [regenerating, setRegenerating] = useState(false);
   const [regenError, setRegenError] = useState<string | null>(null);
+  const [countdownMs, setCountdownMs] = useState(0);
+
+  // Position-based estimated auto-publish time for this video
+  const estimatedPublishAt = useMemo(() => {
+    if (!userSettings?.autoPublishEnabled || !userSettings.autoPublishNextAt) return undefined;
+    if (!video || video.status !== "ready") return undefined;
+    const nextAt     = userSettings.autoPublishNextAt;
+    const intervalMs = userSettings.autoPublishIntervalMs ?? 6 * 3_600_000;
+    const count      = userSettings.autoPublishCount ?? 1;
+    const readyVideos = (allVideos ?? [])
+      .filter((v) => v.status === "ready")
+      .sort((a, b) => a._creationTime - b._creationTime);
+    const idx = readyVideos.findIndex((v) => v._id === video._id);
+    if (idx === -1) return undefined;
+    return nextAt + Math.floor(idx / count) * intervalMs;
+  }, [allVideos, userSettings, video]);
+
+  // Live countdown — ticks every second toward the nearest upcoming event
+  useEffect(() => {
+    const target =
+      video?.status === "draft" && video?.metadataScheduledAt && video.metadataScheduledAt > Date.now()
+        ? video.metadataScheduledAt
+        : estimatedPublishAt;
+    if (!target) { setCountdownMs(0); return; }
+    const tick = () => setCountdownMs(Math.max(0, target - Date.now()));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [video, estimatedPublishAt]);
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -258,6 +291,36 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Metadata schedule banner — shown for draft videos with a pending AI metadata job */}
+      {video.status === "draft" && video.metadataScheduledAt && video.metadataScheduledAt > Date.now() && (
+        <div className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+          <Wand2 className="h-4 w-4 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <span className="font-medium">AI Metadata Scheduled</span>
+            <span className="text-amber-600 dark:text-amber-400 ml-2">
+              {formatDateTimeEAT(video.metadataScheduledAt)}
+            </span>
+            {countdownMs > 0 ? (
+              <span className="ml-2 text-xs opacity-75">({formatCountdown(countdownMs)})</span>
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* Auto-publish banner — shown for ready videos when auto-publish is active */}
+      {video.status === "ready" && estimatedPublishAt && (
+        <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
+          <Zap className="h-4 w-4 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <span className="font-medium">Auto-Publish Scheduled</span>
+            <span className="ml-2">{formatDateTimeEAT(estimatedPublishAt)}</span>
+            {countdownMs > 0 ? (
+              <span className="ml-2 text-xs opacity-75">({formatCountdown(countdownMs)})</span>
+            ) : null}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         <div className="lg:col-span-2 space-y-6">

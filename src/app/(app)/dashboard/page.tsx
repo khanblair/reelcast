@@ -1,16 +1,18 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useQuery } from "convex/react";
-import { Upload, Film, Clock, Youtube, HardDrive, Sparkles } from "lucide-react";
+import { Upload, Film, Zap, Youtube, HardDrive, Sparkles, Wand2, CalendarClock, ArrowRight } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { VideoCard } from "@/components/video-card";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
 import type { Video as VideoType } from "@/types/video";
+import { formatDateTimeEAT, formatCountdown } from "@/lib/eat";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
@@ -58,7 +60,6 @@ function buildTimeline(videos: VideoType[], period: Period) {
   const msDay = 86_400_000;
 
   if (period === "today") {
-    // 6 × 4-hour buckets
     return Array.from({ length: 6 }, (_, i) => {
       const bucketStart = new Date();
       bucketStart.setHours(i * 4, 0, 0, 0);
@@ -84,7 +85,6 @@ function buildTimeline(videos: VideoType[], period: Period) {
   }
 
   if (period === "month") {
-    // 4 weekly buckets
     return Array.from({ length: 4 }, (_, i) => {
       const end   = now - (3 - i) * 7 * msDay;
       const start = end - 7 * msDay;
@@ -96,7 +96,6 @@ function buildTimeline(videos: VideoType[], period: Period) {
     });
   }
 
-  // all — 6 monthly buckets
   return Array.from({ length: 6 }, (_, i) => {
     const d = new Date();
     d.setMonth(d.getMonth() - (5 - i), 1);
@@ -111,9 +110,22 @@ function buildTimeline(videos: VideoType[], period: Period) {
 }
 
 export default function DashboardPage() {
-  const videos = useQuery(api.videos.list);
-  const jobs   = useQuery(api.jobs.list);
+  const videos          = useQuery(api.videos.list);
+  const jobs            = useQuery(api.jobs.list);
+  const userSettings    = useQuery(api.settings.get);
+  const scheduledVideos = useQuery(api.videos.listScheduled);
   const [period, setPeriod] = useState<Period>("week");
+
+  // Live countdown to next auto-publish run
+  const [autoCountdownMs, setAutoCountdownMs] = useState(0);
+  useEffect(() => {
+    const target = userSettings?.autoPublishNextAt;
+    if (!target) { setAutoCountdownMs(0); return; }
+    const tick = () => setAutoCountdownMs(Math.max(0, target - Date.now()));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [userSettings?.autoPublishNextAt]);
 
   const rangeStart     = getRangeStart(period);
   const filteredVideos = useMemo(
@@ -123,10 +135,6 @@ export default function DashboardPage() {
   const filteredJobs = useMemo(
     () => (jobs ?? []).filter(j => j._creationTime >= rangeStart),
     [jobs, rangeStart]
-  );
-  const activeJobs     = useMemo(
-    () => filteredJobs.filter(j => j.status === "pending" || j.status === "processing"),
-    [filteredJobs]
   );
   const publishedCount = useMemo(
     () => filteredVideos.filter(v => v.status === "published").length,
@@ -148,6 +156,46 @@ export default function DashboardPage() {
       count,
     }));
   }, [filteredVideos]);
+
+  // Pipeline counts
+  const metadataQueueCount = useMemo(
+    () => (videos ?? []).filter(v => v.metadataScheduledAt && v.metadataScheduledAt > Date.now()).length,
+    [videos]
+  );
+  const nextMetadataAt = useMemo(() => {
+    const times = (videos ?? [])
+      .map(v => v.metadataScheduledAt)
+      .filter((t): t is number => !!t && t > Date.now());
+    return times.length > 0 ? Math.min(...times) : undefined;
+  }, [videos]);
+  const readyCount = useMemo(
+    () => (videos ?? []).filter(v => v.status === "ready").length,
+    [videos]
+  );
+  const nextScheduledAt = useMemo(() => {
+    const times = (scheduledVideos ?? [])
+      .filter(v => v.status === "scheduled" && v.scheduledPublishAt)
+      .map(v => v.scheduledPublishAt!);
+    return times.length > 0 ? Math.min(...times) : undefined;
+  }, [scheduledVideos]);
+
+  // Estimated publish times for ready videos
+  const estimatedPublishMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (!userSettings?.autoPublishEnabled || !userSettings.autoPublishNextAt) return map;
+    const nextAt      = userSettings.autoPublishNextAt;
+    const intervalMs  = userSettings.autoPublishIntervalMs ?? 6 * 3_600_000;
+    const count       = userSettings.autoPublishCount ?? 1;
+    const readyVideos = (videos ?? [])
+      .filter(v => v.status === "ready")
+      .sort((a, b) => a._creationTime - b._creationTime);
+    readyVideos.forEach((v, i) => {
+      map.set(v._id, nextAt + Math.floor(i / count) * intervalMs);
+    });
+    return map;
+  }, [videos, userSettings]);
+
+  const isAutoActive = userSettings?.autoPublishEnabled === true;
 
   if (videos === undefined || jobs === undefined) {
     return <div className="flex h-full items-center justify-center"><LoadingSpinner /></div>;
@@ -211,13 +259,35 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        {/* Auto-Publish card — replaces old "Active Jobs" */}
+        <Card className={isAutoActive ? "border-primary/30" : ""}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Jobs</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Auto-Publish</CardTitle>
+            <Zap className={`h-4 w-4 ${isAutoActive ? "text-primary" : "text-muted-foreground"}`} />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{activeJobs.length}</div>
+            {isAutoActive ? (
+              <>
+                <div className="text-lg font-bold font-mono tabular-nums leading-tight">
+                  {userSettings?.autoPublishNextAt
+                    ? formatCountdown(autoCountdownMs)
+                    : "—"}
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {readyCount} ready · {userSettings?.autoPublishNextAt ? formatDateTimeEAT(userSettings.autoPublishNextAt) : ""}
+                </p>
+              </>
+            ) : (
+              <>
+                <div className="text-sm font-medium text-muted-foreground">Off</div>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <span className="text-xs text-muted-foreground">{readyCount} ready waiting</span>
+                  <Link href="/schedule" className="text-xs text-primary hover:underline ml-1 inline-flex items-center gap-0.5">
+                    Start <ArrowRight className="h-3 w-3" />
+                  </Link>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -231,6 +301,73 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Pipeline strip */}
+      <Card>
+        <CardContent className="p-0">
+          <div className="grid grid-cols-3 divide-x">
+            {/* Metadata Queue */}
+            <div className="px-4 py-4 space-y-1">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                <Wand2 className="h-3.5 w-3.5" />
+                Metadata Queue
+              </div>
+              <div className="text-2xl font-bold">{metadataQueueCount}</div>
+              <div className="text-xs text-muted-foreground">
+                {nextMetadataAt
+                  ? <>Next: {formatDateTimeEAT(nextMetadataAt)}</>
+                  : "No jobs queued"}
+              </div>
+            </div>
+
+            {/* Arrow + Ready Pool */}
+            <div className="px-4 py-4 space-y-1 relative">
+              <ArrowRight className="absolute -left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40 bg-background" />
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                <Film className="h-3.5 w-3.5" />
+                Ready Pool
+              </div>
+              <div className="text-2xl font-bold">{readyCount}</div>
+              <div className="text-xs text-muted-foreground">available to publish</div>
+            </div>
+
+            {/* Arrow + Next Publish */}
+            <div className="px-4 py-4 space-y-1 relative">
+              <ArrowRight className="absolute -left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40 bg-background" />
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                <CalendarClock className="h-3.5 w-3.5" />
+                Next Publish
+              </div>
+              {isAutoActive && userSettings?.autoPublishNextAt ? (
+                <>
+                  <div className="flex items-center gap-1.5">
+                    <Badge className="bg-primary/15 text-primary border-primary/30 text-xs px-1.5 py-0 h-5">Auto</Badge>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {formatDateTimeEAT(userSettings.autoPublishNextAt)}
+                  </div>
+                </>
+              ) : nextScheduledAt ? (
+                <>
+                  <div className="text-sm font-semibold">
+                    {(scheduledVideos ?? []).filter(v => v.status === "scheduled").length} scheduled
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {formatDateTimeEAT(nextScheduledAt)}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-sm text-muted-foreground">None scheduled</div>
+                  <Link href="/schedule" className="text-xs text-primary hover:underline inline-flex items-center gap-0.5">
+                    Set up <ArrowRight className="h-3 w-3" />
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Charts */}
       <div className="grid gap-4 grid-cols-1 md:grid-cols-7">
@@ -336,7 +473,11 @@ export default function DashboardPage() {
       {filteredVideos.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
           {filteredVideos.slice(0, 8).map((video) => (
-            <VideoCard key={video._id} video={video as VideoType} />
+            <VideoCard
+              key={video._id}
+              video={video as VideoType}
+              estimatedPublishAt={estimatedPublishMap.get(video._id)}
+            />
           ))}
         </div>
       ) : (

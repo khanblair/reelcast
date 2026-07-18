@@ -104,26 +104,30 @@ export default function SchedulePage() {
     [allVideos]
   );
 
-  const now = Date.now();
-
   // Drafts without a pending metadata job — safe to schedule
   const draftVideos = useMemo(
-    () => allVideos?.filter((v) => {
-      if (v.status !== "draft") return false;
-      const scheduledAt = (v as any).metadataScheduledAt as number | undefined;
-      return !scheduledAt || scheduledAt <= now;
-    }) ?? [],
-    [allVideos, now]
+    () => {
+      const now = Date.now();
+      return allVideos?.filter((v) => {
+        if (v.status !== "draft") return false;
+        const scheduledAt = v.metadataScheduledAt;
+        return !scheduledAt || scheduledAt <= now;
+      }) ?? [];
+    },
+    [allVideos]
   );
 
   // Drafts that already have a future metadata job queued
   const pendingMetadataVideos = useMemo(
-    () => allVideos?.filter((v) => {
-      if (v.status !== "draft") return false;
-      const scheduledAt = (v as any).metadataScheduledAt as number | undefined;
-      return scheduledAt && scheduledAt > now;
-    }) ?? [],
-    [allVideos, now]
+    () => {
+      const now = Date.now();
+      return allVideos?.filter((v) => {
+        if (v.status !== "draft") return false;
+        const scheduledAt = v.metadataScheduledAt;
+        return scheduledAt !== undefined && scheduledAt > now;
+      }) ?? [];
+    },
+    [allVideos]
   );
 
   const videoMap = useMemo(
@@ -201,21 +205,24 @@ export default function SchedulePage() {
   const handleScheduleMetadata = async () => {
     if (metaQueue.length === 0 || !metaStartTime) return;
     setMetaSubmitting(true);
-    setMetaProgress({ done: 0, total: metaQueue.length });
+    const queue = [...metaQueue];
+    setMetaProgress({ done: 0, total: queue.length });
     try {
       const startMs = new Date(metaStartTime).getTime();
-      for (let i = 0; i < metaQueue.length; i++) {
-        await scheduleMetadata({
-          id: metaQueue[i] as Id<"videos">,
-          scheduledAt: startMs + i * metaIntervalMin * 60_000,
-        });
-        setMetaProgress({ done: i + 1, total: metaQueue.length });
+      for (let i = 0; i < queue.length; i++) {
+        try {
+          await scheduleMetadata({
+            id: queue[i] as Id<"videos">,
+            scheduledAt: startMs + i * metaIntervalMin * 60_000,
+          });
+          setMetaQueue((prev) => prev.filter((x) => x !== queue[i]));
+        } catch (e) {
+          console.error(`Failed to schedule video ${i + 1}:`, e);
+        }
+        setMetaProgress({ done: i + 1, total: queue.length });
       }
-      setMetaQueue([]);
       setMetaStartTime("");
       setShowForm(false);
-    } catch (e) {
-      console.error("Metadata schedule failed:", e);
     } finally {
       setMetaSubmitting(false);
       setMetaProgress(null);
@@ -395,7 +402,7 @@ export default function SchedulePage() {
                       </p>
                       <div className="border rounded-md divide-y max-h-40 overflow-y-auto border-amber-500/30 bg-amber-500/5">
                         {pendingMetadataVideos.map((v) => {
-                          const scheduledAt = (v as any).metadataScheduledAt as number;
+                          const scheduledAt = v.metadataScheduledAt!;
                           return (
                             <div key={v._id} className="flex items-center gap-3 px-3 py-2">
                               <Wand2 className="h-3.5 w-3.5 text-amber-500 shrink-0" />

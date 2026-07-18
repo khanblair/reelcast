@@ -23,15 +23,13 @@ export const runAutoPublishBatch = action({
     });
 
     for (const video of readyVideos) {
+      let claimed = false;
       try {
-        await ctx.runMutation(internal.videos.internalSetPrivacy, {
+        claimed = await ctx.runMutation(internal.videos.internalClaimForPublishing, {
           id: video._id,
           privacyStatus: privacy,
         });
-        await ctx.runMutation(internal.videos.internalUpdateStatus, {
-          id: video._id,
-          status: "publishing",
-        });
+        if (!claimed) continue; // already taken by schedulePublish or another concurrent run
         const jobId = await ctx.runMutation(internal.jobs.internalCreate, {
           userId: args.userId,
           videoId: video._id,
@@ -44,6 +42,16 @@ export const runAutoPublishBatch = action({
         });
       } catch (err) {
         console.error(`[autoPublish] Failed to queue video ${video._id}:`, err);
+        if (claimed) {
+          try {
+            await ctx.runMutation(internal.videos.internalUpdateStatus, {
+              id: video._id,
+              status: "ready",
+            });
+          } catch (rollbackErr) {
+            console.error(`[autoPublish] Rollback failed for ${video._id}:`, rollbackErr);
+          }
+        }
       }
     }
 

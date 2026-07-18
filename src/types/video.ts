@@ -43,6 +43,7 @@ export interface Video {
   publishedAt?: number;
   scheduledPublishAt?: number;
   scheduledGenerationAt?: number;
+  metadataScheduledAt?: number;
   privacyStatus?: PrivacyStatus;
 }
 

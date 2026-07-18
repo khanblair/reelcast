@@ -286,6 +286,10 @@ export const startAutoPublish = mutation({
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .unique();
 
+    if (args.intervalMs < 3_600_000) {
+      throw new Error("Minimum auto-publish interval is 1 hour");
+    }
+
     if (settings?.autoPublishSchedulerId) {
       try { await ctx.scheduler.cancel(settings.autoPublishSchedulerId); } catch {}
     }
@@ -352,7 +356,8 @@ export const internalUpdateAutoPublishNext = internalMutation({
       .query("settings")
       .withIndex("by_user", (q) => q.eq("userId", args.userId))
       .unique();
-    if (settings) {
+    // Only update if auto-publish is still enabled — stopAutoPublish may have run while batch was in-flight
+    if (settings?.autoPublishEnabled) {
       await ctx.db.patch(settings._id, {
         autoPublishSchedulerId: args.schedulerId,
         autoPublishNextAt: args.nextAt,

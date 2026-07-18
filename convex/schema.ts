@@ -64,6 +64,7 @@ export default defineSchema({
     publishedAt: v.optional(v.number()),
     scheduledPublishAt: v.optional(v.number()),
     metadataScheduledAt: v.optional(v.number()),
+    metadataSchedulerId: v.optional(v.id("_scheduled_functions")),
     convexSchedulerId: v.optional(v.id("_scheduled_functions")),
     cloudinaryDeletedAt: v.optional(v.number()),
     privacyStatus: v.optional(v.union(v.literal("private"), v.literal("public"), v.literal("unlisted"))),

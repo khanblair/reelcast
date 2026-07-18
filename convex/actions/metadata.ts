@@ -42,7 +42,8 @@ async function buildVideoParts(
       .map(r => ({ inlineData: { data: r.value, mimeType: "image/jpeg" } }));
 
     if (parts.length > 0) return parts;
-    // All frame fetches failed — fall through to Files API
+    // All frame fetches returned null — fall through to Files API (50-200× cost increase)
+    console.warn(`[buildVideoParts] Cloudinary frame extraction failed, falling through to Files API`);
   }
 
   // Files API path: works for any publicly accessible HTTPS URL.
@@ -139,15 +140,20 @@ export const generateForUpload = action({
   },
   handler: async (ctx, args): Promise<{ title: string; description: string; tags: string[] }> => {
     const video = await ctx.runQuery(internal.videos.internalGet, { id: args.videoId });
-    if (!video) throw new Error("Video not found");
 
-    // Graceful skip — video was already processed or deleted since scheduling
+    // Video was deleted since scheduling — skip gracefully for scheduled runs
+    if (!video) {
+      if (args.autoMarkReady) return { title: "", description: "", tags: [] };
+      throw new Error("Video not found");
+    }
+
+    // Graceful skip — video was already processed since scheduling
     if (args.autoMarkReady && video.status !== "draft") {
       await ctx.runMutation(internal.videos.internalClearMetadataSchedule, { id: args.videoId });
       return {
-        title: (video as any).aiTitle ?? video.title,
-        description: (video as any).aiDescription ?? "",
-        tags: (video as any).aiTags ?? [],
+        title: video.aiTitle ?? video.title,
+        description: video.aiDescription ?? "",
+        tags: video.aiTags ?? [],
       };
     }
 

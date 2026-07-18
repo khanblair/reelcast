@@ -386,21 +386,31 @@ export const scheduleMetadataForVideo = mutation({
     const video = await ctx.db.get(args.id);
     if (!video || video.userId !== user._id) throw new Error("Video not found or unauthorized");
     if (video.status !== "draft") throw new Error("Only draft videos can be queued for metadata generation");
+    if (video.metadataScheduledAt && video.metadataScheduledAt > Date.now()) {
+      throw new Error("Video already has a pending metadata job scheduled");
+    }
 
-    await ctx.scheduler.runAt(
+    const schedulerId = await ctx.scheduler.runAt(
       args.scheduledAt,
       api.actions.metadata.generateForUpload,
       { videoId: args.id, autoMarkReady: true }
     );
 
-    await ctx.db.patch(args.id, { metadataScheduledAt: args.scheduledAt });
+    await ctx.db.patch(args.id, {
+      metadataScheduledAt: args.scheduledAt,
+      metadataSchedulerId: schedulerId,
+    });
   },
 });
 
 export const internalClearMetadataSchedule = internalMutation({
   args: { id: v.id("videos") },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.id, { metadataScheduledAt: undefined });
+    const video = await ctx.db.get(args.id);
+    if (video?.metadataSchedulerId) {
+      try { await ctx.scheduler.cancel(video.metadataSchedulerId); } catch {}
+    }
+    await ctx.db.patch(args.id, { metadataScheduledAt: undefined, metadataSchedulerId: undefined });
   },
 });
 
@@ -500,6 +510,21 @@ export const internalSetPrivacy = internalMutation({
   },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.id, { privacyStatus: args.privacyStatus });
+  },
+});
+
+// Atomically claim a video for publishing: checks status is still "ready" before flipping to
+// "publishing". Returns false if the video was already taken by another publisher or deleted.
+export const internalClaimForPublishing = internalMutation({
+  args: {
+    id: v.id("videos"),
+    privacyStatus: v.union(v.literal("private"), v.literal("public"), v.literal("unlisted")),
+  },
+  handler: async (ctx, args) => {
+    const video = await ctx.db.get(args.id);
+    if (!video || video.status !== "ready") return false;
+    await ctx.db.patch(args.id, { status: "publishing", privacyStatus: args.privacyStatus });
+    return true;
   },
 });
 

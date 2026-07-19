@@ -25,7 +25,7 @@ function formatDuration(seconds: number) {
 export default function AnalyticsPage() {
   const stats = useQuery(api.analytics.getDashboardStats);
 
-  if (stats === undefined) {
+  if (stats === undefined || stats === null) {
     return <div className="flex h-[80vh] items-center justify-center"><LoadingSpinner /></div>;
   }
 

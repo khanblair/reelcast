@@ -209,7 +209,7 @@ export default function DashboardPage() {
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight mb-2">Welcome back</h1>
           <p className="text-muted-foreground">Here&apos;s what&apos;s happening with your videos.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Link href={"/generate" as unknown as "/dashboard"}>
             <Button className="bg-primary hover:bg-primary/90 text-white">
               <Sparkles className="mr-2 h-4 w-4" /> Generate Video
@@ -238,7 +238,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Videos</CardTitle>
@@ -305,7 +305,7 @@ export default function DashboardPage() {
       {/* Pipeline strip */}
       <Card>
         <CardContent className="p-0">
-          <div className="grid grid-cols-3 divide-x">
+          <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x">
             {/* Metadata Queue */}
             <div className="px-4 py-4 space-y-1">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium uppercase tracking-wide">
@@ -313,16 +313,15 @@ export default function DashboardPage() {
                 Metadata Queue
               </div>
               <div className="text-2xl font-bold">{metadataQueueCount}</div>
-              <div className="text-xs text-muted-foreground">
+              <div className="text-xs text-muted-foreground truncate">
                 {nextMetadataAt
                   ? <>Next: {formatDateTimeEAT(nextMetadataAt)}</>
                   : "No jobs queued"}
               </div>
             </div>
 
-            {/* Arrow + Ready Pool */}
-            <div className="px-4 py-4 space-y-1 relative">
-              <ArrowRight className="absolute -left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40 bg-background" />
+            {/* Ready Pool */}
+            <div className="px-4 py-4 space-y-1">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium uppercase tracking-wide">
                 <Film className="h-3.5 w-3.5" />
                 Ready Pool
@@ -331,9 +330,8 @@ export default function DashboardPage() {
               <div className="text-xs text-muted-foreground">available to publish</div>
             </div>
 
-            {/* Arrow + Next Publish */}
-            <div className="px-4 py-4 space-y-1 relative">
-              <ArrowRight className="absolute -left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40 bg-background" />
+            {/* Next Publish */}
+            <div className="px-4 py-4 space-y-1">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-medium uppercase tracking-wide">
                 <CalendarClock className="h-3.5 w-3.5" />
                 Next Publish
@@ -419,48 +417,50 @@ export default function DashboardPage() {
             <CardDescription>Distribution across current states</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="h-[200px] flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row items-center gap-3">
               {statusData.length > 0 ? (
                 <>
-                  <ResponsiveContainer width="55%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={statusData}
-                        cx="50%" cy="50%"
-                        innerRadius={52} outerRadius={76}
-                        dataKey="count"
-                        paddingAngle={3}
-                        strokeWidth={0}
-                      >
-                        {statusData.map((entry, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill={STATUS_COLORS[entry.name] ?? `hsl(${index * 55}, 60%, 50%)`}
-                          />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{ backgroundColor: "hsl(var(--background))", borderColor: "hsl(var(--border))", fontSize: 12 }}
-                        itemStyle={{ color: "hsl(var(--foreground))" }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
+                  <div className="h-[160px] w-[160px] shrink-0">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={statusData}
+                          cx="50%" cy="50%"
+                          innerRadius={44} outerRadius={68}
+                          dataKey="count"
+                          paddingAngle={3}
+                          strokeWidth={0}
+                        >
+                          {statusData.map((entry, index) => (
+                            <Cell
+                              key={`cell-${index}`}
+                              fill={STATUS_COLORS[entry.name] ?? `hsl(${index * 55}, 60%, 50%)`}
+                            />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{ backgroundColor: "hsl(var(--background))", borderColor: "hsl(var(--border))", fontSize: 12 }}
+                          itemStyle={{ color: "hsl(var(--foreground))" }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
 
-                  <div className="flex flex-col gap-2 text-xs flex-1">
+                  <div className="flex flex-col gap-2 text-xs w-full min-w-0">
                     {statusData.map((entry, index) => (
                       <div key={entry.name} className="flex items-center gap-2">
                         <div
                           className="h-2.5 w-2.5 rounded-full shrink-0"
                           style={{ backgroundColor: STATUS_COLORS[entry.name] ?? `hsl(${index * 55}, 60%, 50%)` }}
                         />
-                        <span className="text-muted-foreground capitalize">{entry.name}</span>
-                        <span className="ml-auto font-semibold">{entry.count}</span>
+                        <span className="text-muted-foreground capitalize truncate">{entry.name}</span>
+                        <span className="ml-auto font-semibold tabular-nums">{entry.count}</span>
                       </div>
                     ))}
                   </div>
                 </>
               ) : (
-                <p className="text-sm text-muted-foreground mx-auto">No data for this period</p>
+                <p className="text-sm text-muted-foreground mx-auto py-4">No data for this period</p>
               )}
             </div>
           </CardContent>

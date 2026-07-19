@@ -201,16 +201,17 @@ export default function SettingsPage() {
           <CardContent className="space-y-4">
             {settings.youtubeConnected ? (
               <>
-                <div className="flex items-center justify-between p-3 border rounded-md bg-secondary/50">
-                  <div>
+                <div className="flex items-center justify-between gap-3 p-3 border rounded-md bg-secondary/50">
+                  <div className="min-w-0">
                     <p className="text-xs text-muted-foreground mb-0.5">Connected channel</p>
-                    <p className="font-medium text-sm">
+                    <p className="font-medium text-sm truncate">
                       {settings.youtubeChannelName ?? "YouTube Channel"}
                     </p>
                   </div>
                   <Button
                     variant="outline"
                     size="sm"
+                    className="shrink-0"
                     disabled={disconnectingYoutube}
                     onClick={handleDisconnectYoutube}
                   >
@@ -261,14 +262,15 @@ export default function SettingsPage() {
           <CardContent className="space-y-4">
             {settings.telegramChatId ? (
               <>
-                <div className="flex items-center justify-between p-3 border rounded-md bg-secondary/50">
-                  <div>
+                <div className="flex items-center justify-between gap-3 p-3 border rounded-md bg-secondary/50">
+                  <div className="min-w-0">
                     <p className="text-xs text-muted-foreground mb-0.5">Connected chat</p>
-                    <p className="font-medium text-sm">@{settings.telegramChatId}</p>
+                    <p className="font-medium text-sm truncate">@{settings.telegramChatId}</p>
                   </div>
                   <Button
                     variant="outline"
                     size="sm"
+                    className="shrink-0"
                     onClick={() => {
                       disconnectTelegram();
                       setTelegramTestResult(null);
@@ -342,17 +344,18 @@ export default function SettingsPage() {
           <CardContent className="space-y-4">
             {(settings as any).discordWebhookUrl ? (
               <>
-                <div className="flex items-center justify-between p-3 border rounded-md bg-secondary/50">
-                  <div>
+                <div className="flex items-center justify-between gap-3 p-3 border rounded-md bg-secondary/50">
+                  <div className="min-w-0">
                     <p className="text-xs text-muted-foreground mb-0.5">Webhook status</p>
                     <p className="font-medium text-sm flex items-center gap-1.5">
-                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
                       Connected
                     </p>
                   </div>
                   <Button
                     variant="outline"
                     size="sm"
+                    className="shrink-0"
                     onClick={() => {
                       disconnectDiscord();
                       setDiscordTestResult(null);

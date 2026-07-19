@@ -180,7 +180,7 @@ export default function GeneratePage() {
       </div>
 
       {/* Tab switcher */}
-      <div className="flex items-center gap-1 p-1 bg-muted rounded-lg w-fit">
+      <div className="flex items-center gap-1 p-1 bg-muted rounded-lg w-full sm:w-fit overflow-x-auto">
         <button
           type="button"
           onClick={() => setActiveTab("video")}
@@ -293,7 +293,7 @@ export default function GeneratePage() {
                   <CardTitle className="text-lg">Generation Summary</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                     <div>
                       <span className="text-muted-foreground">Model:</span>{" "}
                       <span className="font-medium capitalize">{model.replace(/-/g, " ")}</span>

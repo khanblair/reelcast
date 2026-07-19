@@ -290,7 +290,7 @@ export default function HistoryPage() {
                               </div>
                             )}
                             {job.error && (
-                              <div className="text-destructive text-xs pt-0.5">
+                              <div className="text-destructive text-xs pt-0.5 break-words">
                                 Error: {job.error}
                               </div>
                             )}

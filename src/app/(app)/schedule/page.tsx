@@ -369,7 +369,7 @@ export default function SchedulePage() {
       {showForm && (
         <Card>
           <CardHeader className="pb-2 pt-4 px-4">
-            <div className="flex items-center gap-1 p-1 bg-muted rounded-lg w-fit">
+            <div className="flex items-center gap-1 p-1 bg-muted rounded-lg w-full sm:w-fit overflow-x-auto">
               <button
                 type="button"
                 onClick={() => setMode("auto")}
@@ -414,7 +414,7 @@ export default function SchedulePage() {
               /* ── Metadata generation ── */
               <div className="space-y-5">
                 {/* Schedule / Now toggle */}
-                <div className="flex items-center gap-1 p-1 bg-muted rounded-lg w-fit text-xs">
+                <div className="flex items-center gap-1 p-1 bg-muted rounded-lg w-full sm:w-fit overflow-x-auto text-xs">
                   <button
                     type="button"
                     onClick={() => setMetaMode("schedule")}
@@ -787,7 +787,7 @@ export default function SchedulePage() {
                           <span className="font-medium text-sm">Auto-Publish Active</span>
                           <Badge className="bg-primary/15 text-primary border-primary/30 text-xs">Running</Badge>
                         </div>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground break-words">
                           Up to {userSettings?.autoPublishCount ?? 1} video{(userSettings?.autoPublishCount ?? 1) !== 1 ? "s" : ""}{" "}
                           {(userSettings as any)?.autoPublishTimeSlots?.length
                             ? <>at {[...(userSettings as any).autoPublishTimeSlots].sort((a: number, b: number) => a - b).map((h: number) => ALL_HOURS.find((x) => x.hour === h)?.label).join(", ")} EAT</>

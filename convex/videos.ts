@@ -255,6 +255,13 @@ export const internalSetPublishedData = internalMutation({
   },
 });
 
+export const internalSetDuration = internalMutation({
+  args: { id: v.id("videos"), duration: v.number() },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, { duration: args.duration });
+  },
+});
+
 export const internalUpdateVeoOperation = internalMutation({
   args: {
     id: v.id("videos"),

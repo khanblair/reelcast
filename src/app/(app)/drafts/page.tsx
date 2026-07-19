@@ -2,8 +2,8 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { useQuery, useMutation } from "convex/react";
-import { Film, Plus, Search, SortAsc, CheckCircle2, Loader2, AlertTriangle } from "lucide-react";
+import { useQuery, useMutation, useAction } from "convex/react";
+import { Film, Plus, Search, SortAsc, CheckCircle2, Loader2, AlertTriangle, Timer } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { VideoCard } from "@/components/video-card";
@@ -54,10 +54,13 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 export default function DraftsPage() {
   const videos            = useQuery(api.videos.list);
   const userSettings      = useQuery(api.settings.get);
-  const bulkMarkReady     = useMutation(api.videos.bulkMarkDraftsReady);
+  const bulkMarkReady       = useMutation(api.videos.bulkMarkDraftsReady);
+  const backfillDurations   = useAction(api.actions.backfillDurations.backfillDurations);
 
-  const [marking, setMarking]     = useState(false);
-  const [markResult, setMarkResult] = useState<number | null>(null);
+  const [marking, setMarking]         = useState(false);
+  const [markResult, setMarkResult]   = useState<number | null>(null);
+  const [scanning, setScanning]       = useState(false);
+  const [scanResult, setScanResult]   = useState<{ updated: number; total: number } | null>(null);
 
   const draftCount = useMemo(
     () => (videos ?? []).filter((v) => v.status === "draft").length,
@@ -86,6 +89,19 @@ export default function DraftsPage() {
       console.error("Bulk mark ready failed:", e);
     } finally {
       setMarking(false);
+    }
+  };
+
+  const handleScanDurations = async () => {
+    setScanning(true);
+    setScanResult(null);
+    try {
+      const result = await backfillDurations({});
+      setScanResult({ updated: result.updated, total: result.total });
+    } catch (e) {
+      console.error("Duration scan failed:", e);
+    } finally {
+      setScanning(false);
     }
   };
 
@@ -222,6 +238,40 @@ export default function DraftsPage() {
         <div className="flex items-center gap-2.5 rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-700 dark:text-green-400">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
           {markResult} video{markResult !== 1 ? "s" : ""} marked as Ready and added to the auto-publish queue.
+        </div>
+      )}
+
+      {/* Scan durations banner — shown when videos have no duration data yet */}
+      {!scanning && !scanResult && (videos ?? []).some((v) => !(v as any).duration && !(v as any).cloudinaryDeletedAt) && (
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-muted bg-muted/40 px-4 py-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Timer className="h-4 w-4 text-muted-foreground shrink-0" />
+            <p className="text-sm text-muted-foreground">
+              Some videos are missing duration data. Scan Cloudinary to extract it and identify videos that may cause copyright issues.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleScanDurations}
+            disabled={scanning}
+            className="shrink-0 flex items-center gap-1.5 rounded-md border border-input hover:bg-muted text-foreground text-xs font-semibold px-3 py-1.5 transition-colors"
+          >
+            <Timer className="h-3.5 w-3.5" />
+            Scan durations
+          </button>
+        </div>
+      )}
+      {scanning && (
+        <div className="flex items-center gap-2.5 rounded-lg border border-muted bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+          Scanning Cloudinary for video durations… this may take a moment.
+        </div>
+      )}
+      {scanResult !== null && (
+        <div className="flex items-center gap-2.5 rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-700 dark:text-green-400">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          Duration scan complete — {scanResult.updated} of {scanResult.total} video{scanResult.total !== 1 ? "s" : ""} updated.
+          {scanResult.total === 0 && " All videos already have duration data."}
         </div>
       )}
 

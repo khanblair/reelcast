@@ -72,6 +72,7 @@ export const processPublishJob = action({
         tags,
         videoUrl: videoFileUrl,
         privacyStatus: video.privacyStatus ?? "public",
+        publishAs: (video as any).publishAs ?? "short",
       });
 
       await ctx.runMutation(internal.videos.internalUpdateStatus, {

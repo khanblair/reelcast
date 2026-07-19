@@ -7,10 +7,18 @@ export interface YouTubeUploadOptions {
   tags: string[];
   videoUrl: string;
   privacyStatus: "private" | "public" | "unlisted";
+  publishAs?: "short" | "video";
 }
 
 export async function uploadToYouTube(options: YouTubeUploadOptions): Promise<string> {
-  const { accessToken, title, description, tags, videoUrl, privacyStatus } = options;
+  const { accessToken, title, tags, videoUrl, privacyStatus } = options;
+
+  // When publishing as a regular video (not Short), remove #Shorts so YouTube
+  // doesn't classify it as a Short — this changes which Content ID rules apply.
+  const description =
+    options.publishAs === "video"
+      ? options.description.replace(/#Shorts\s*/gi, "").trim()
+      : options.description;
 
   const videoResponse = await fetch(videoUrl);
   if (!videoResponse.ok) {

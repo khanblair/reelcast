@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { useQuery, useMutation } from "convex/react";
-import { Film, Plus, Search, SortAsc, CheckCircle2, Loader2 } from "lucide-react";
+import { Film, Plus, Search, SortAsc, CheckCircle2, Loader2, AlertTriangle } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { VideoCard } from "@/components/video-card";
@@ -61,6 +61,18 @@ export default function DraftsPage() {
 
   const draftCount = useMemo(
     () => (videos ?? []).filter((v) => v.status === "draft").length,
+    [videos]
+  );
+
+  // Videos >60s that are not explicitly set to publish as Video — at risk of Content ID block
+  const atRiskCount = useMemo(
+    () =>
+      (videos ?? []).filter(
+        (v) =>
+          (v as any).duration > 60 &&
+          (v as any).publishAs !== "video" &&
+          v.status !== "published"
+      ).length,
     [videos]
   );
 
@@ -210,6 +222,19 @@ export default function DraftsPage() {
         <div className="flex items-center gap-2.5 rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-700 dark:text-green-400">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
           {markResult} video{markResult !== 1 ? "s" : ""} marked as Ready and added to the auto-publish queue.
+        </div>
+      )}
+
+      {/* Copyright risk banner — videos >60s that will be uploaded as Shorts */}
+      {atRiskCount > 0 && (
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-orange-500/30 bg-orange-500/10 px-4 py-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0" />
+            <p className="text-sm text-orange-700 dark:text-orange-300">
+              <span className="font-semibold">{atRiskCount} video{atRiskCount !== 1 ? "s" : ""}</span>
+              {" "}over 60s — may be blocked by YouTube Content ID when uploaded as Shorts. Open each video to switch to &ldquo;Video&rdquo; mode.
+            </p>
+          </div>
         </div>
       )}
 

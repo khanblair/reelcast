@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { formatDistanceToNow } from "date-fns";
-import { Video, Youtube, CalendarClock, Wand2, Zap } from "lucide-react";
+import { Video, Youtube, CalendarClock, Wand2, Zap, AlertTriangle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { VideoStatusBadge } from "./video-status-badge";
 import type { Video as VideoType } from "@/types/video";
@@ -83,7 +83,16 @@ export function VideoCard({ video, estimatedPublishAt }: VideoCardProps) {
         </div>
 
         {video.duration && (
-          <div className="absolute bottom-2 right-2 z-20 bg-black/80 text-white text-xs px-1.5 py-0.5 rounded">
+          <div
+            className={`absolute bottom-2 right-2 z-20 text-white text-xs px-1.5 py-0.5 rounded flex items-center gap-1 ${
+              video.duration > 60 && (video as any).publishAs !== "video"
+                ? "bg-orange-600/90"
+                : "bg-black/80"
+            }`}
+          >
+            {video.duration > 60 && (video as any).publishAs !== "video" && (
+              <AlertTriangle className="h-3 w-3 shrink-0" />
+            )}
             {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, "0")}
           </div>
         )}

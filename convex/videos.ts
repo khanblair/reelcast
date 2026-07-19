@@ -10,6 +10,7 @@ export const create = mutation({
     tags: v.optional(v.array(v.string())),
     rawFileKey: v.string(),
     rawFileSize: v.number(),
+    duration: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const identity = await getCurrentUserOrThrow(ctx);
@@ -29,6 +30,7 @@ export const create = mutation({
       tags: args.tags,
       rawFileKey: args.rawFileKey,
       rawFileSize: args.rawFileSize,
+      duration: args.duration,
       status: "draft",
     });
   },
@@ -136,6 +138,29 @@ export const updatePrivacyStatus = mutation({
     }
 
     await ctx.db.patch(args.id, { privacyStatus: args.privacyStatus });
+  },
+});
+
+export const updatePublishAs = mutation({
+  args: {
+    id: v.id("videos"),
+    publishAs: v.union(v.literal("short"), v.literal("video")),
+  },
+  handler: async (ctx, args) => {
+    const identity = await getCurrentUserOrThrow(ctx);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .unique();
+
+    if (!user) throw new Error("User not found in DB");
+
+    const video = await ctx.db.get(args.id);
+    if (!video || video.userId !== user._id) {
+      throw new Error("Video not found or unauthorized");
+    }
+
+    await ctx.db.patch(args.id, { publishAs: args.publishAs });
   },
 });
 

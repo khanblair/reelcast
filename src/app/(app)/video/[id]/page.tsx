@@ -15,6 +15,7 @@ import {
   Trash2,
   Wand2,
   Zap,
+  AlertTriangle,
 } from "lucide-react";
 import { api } from "../../../../../convex/_generated/api";
 import { Id } from "../../../../../convex/_generated/dataModel";
@@ -42,6 +43,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
   const userSettings = useQuery(api.settings.get);
   const updateStatus = useMutation(api.videos.updateStatus);
   const updatePrivacy = useMutation(api.videos.updatePrivacyStatus);
+  const updatePublishAs = useMutation(api.videos.updatePublishAs);
   const triggerPublish = useMutation(api.jobs.create);
   const triggerGeneration = useMutation(api.jobs.create);
   const deleteVideoAction = useAction(api.actions.deleteVideo.deleteVideo);
@@ -169,13 +171,30 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
               </Badge>
             )}
           </div>
-          <p className="text-muted-foreground text-sm">
+          <p className="text-muted-foreground text-sm flex flex-wrap items-center gap-1.5">
             {isGenerated
               ? `Created ${new Date(video._creationTime).toLocaleDateString()}`
               : video.rawFileSize > 0
                 ? `${(video.rawFileSize / (1024 * 1024)).toFixed(1)} MB \u2022 Uploaded ${new Date(video._creationTime).toLocaleDateString()}`
                 : `Created ${new Date(video._creationTime).toLocaleDateString()}`
             }
+            {(video as any).duration && (
+              <>
+                <span className="opacity-40">\u00b7</span>
+                <span
+                  className={`inline-flex items-center gap-1 font-medium ${
+                    (video as any).duration > 60 && (video as any).publishAs !== "video"
+                      ? "text-orange-500"
+                      : "text-foreground"
+                  }`}
+                >
+                  {(video as any).duration > 60 && (video as any).publishAs !== "video" && (
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                  )}
+                  {Math.floor((video as any).duration / 60)}:{((video as any).duration % 60).toString().padStart(2, "0")}s
+                </span>
+              </>
+            )}
           </p>
           {youtubeUrl && (
             <a
@@ -199,6 +218,31 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
           {video.status === "ready" && (
             <>
               <div className="flex flex-wrap items-center gap-2">
+                {/* Publish as Short / Video toggle */}
+                <div className="flex rounded-md border border-input overflow-hidden text-xs font-medium">
+                  <button
+                    type="button"
+                    onClick={() => updatePublishAs({ id: video._id, publishAs: "short" })}
+                    className={`px-3 py-1.5 transition-colors ${
+                      (video as any).publishAs !== "video"
+                        ? "bg-primary text-primary-foreground"
+                        : "hover:bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    Short
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updatePublishAs({ id: video._id, publishAs: "video" })}
+                    className={`px-3 py-1.5 transition-colors ${
+                      (video as any).publishAs === "video"
+                        ? "bg-primary text-primary-foreground"
+                        : "hover:bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    Video
+                  </button>
+                </div>
                 <Select
                   value={video.privacyStatus ?? "public"}
                   onChange={(e) =>
@@ -223,10 +267,12 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Will upload as:{" "}
+                Uploading as{" "}
                 <span className="font-medium text-foreground">
-                  {PRIVACY_LABELS[(video.privacyStatus ?? "public") as PrivacyStatus]}
+                  {(video as any).publishAs === "video" ? "regular Video" : "Short"}
                 </span>
+                {" · "}
+                {PRIVACY_LABELS[(video.privacyStatus ?? "public") as PrivacyStatus]}
               </p>
             </>
           )}
@@ -319,6 +365,29 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
               <span className="ml-2 text-xs opacity-75">({formatCountdown(countdownMs)})</span>
             ) : null}
           </div>
+        </div>
+      )}
+
+      {/* Content ID copyright warning — duration >60s published as Short risks copyright block */}
+      {(video as any).duration > 60 && (video as any).publishAs !== "video" && (
+        <div className="flex items-start gap-3 rounded-lg border border-orange-500/40 bg-orange-500/10 px-4 py-3 text-sm text-orange-700 dark:text-orange-400">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+          <div className="flex-1 space-y-1">
+            <p className="font-medium">Possible Content ID block</p>
+            <p className="text-xs opacity-90">
+              This video is {(video as any).duration}s — over 60s. Publishing as a Short
+              may be blocked if the audio is claimed by a rights holder.{" "}
+              <strong>Publish as Video</strong> to avoid this (removes #Shorts from the description,
+              which usually grants more lenient copyright rules).
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => updatePublishAs({ id: video._id, publishAs: "video" })}
+            className="shrink-0 rounded-md bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold px-3 py-1.5 transition-colors"
+          >
+            Switch to Video
+          </button>
         </div>
       )}
 

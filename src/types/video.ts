@@ -45,6 +45,7 @@ export interface Video {
   scheduledGenerationAt?: number;
   metadataScheduledAt?: number;
   privacyStatus?: PrivacyStatus;
+  publishAs?: "short" | "video";
 }
 
 export interface VideoFormData {

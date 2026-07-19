@@ -26,6 +26,21 @@ function formatBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function getVideoDuration(file: File): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const el = document.createElement("video");
+    el.preload = "metadata";
+    el.onloadedmetadata = () => {
+      const dur = isFinite(el.duration) ? Math.round(el.duration) : undefined;
+      URL.revokeObjectURL(url);
+      resolve(dur);
+    };
+    el.onerror = () => { URL.revokeObjectURL(url); resolve(undefined); };
+    el.src = url;
+  });
+}
+
 export default function UploadPage() {
   const createVideo = useMutation(api.videos.create);
   const [items, setItems] = useState<UploadItem[]>([]);
@@ -75,10 +90,12 @@ export default function UploadPage() {
         }
       );
 
+      const duration = await getVideoDuration(item.file);
       const videoId = await createVideo({
         title: item.file.name.replace(/\.[^/.]+$/, ""),
         rawFileKey: cloudinaryData.secure_url,
         rawFileSize: cloudinaryData.bytes || item.file.size,
+        duration,
       });
 
       updateItem(item.id, {

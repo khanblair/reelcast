@@ -94,12 +94,22 @@ export const generateFromPrompt = action({
         contents: [{
           role: "user",
           parts: [{
-            text: `Based on this video generation prompt, create YouTube metadata. Return ONLY a raw JSON object with these exact keys:
-- "title": A highly engaging YouTube title (max 60 characters)
-- "description": A detailed, SEO-optimized YouTube description (2-3 paragraphs)
-- "tags": An array of 5-10 SEO-optimized string tags
+            text: `You are a YouTube Shorts metadata specialist with deep knowledge of YouTube SEO and the VidIQ ranking methodology.
 
-Prompt: "${args.prompt}"`,
+A YouTube Short is being generated from this AI prompt: "${args.prompt}"
+
+Return ONLY this JSON — no markdown, no explanation:
+{
+  "title": "...",
+  "description": "...",
+  "tags": [...]
+}
+
+TITLE (max 55 chars): Write a curiosity-gap or emotional-tension hook. Use patterns like "Why [unexpected claim]", "The Truth About [topic]", "Stop [common action] — Here's Why". Include the specific topic keyword. No hashtags, no ALL CAPS.
+
+DESCRIPTION: Line 1 (100 chars, search snippet): punchy expansion of the title hook. Line 2: what the viewer gains. Line 3: call to action (e.g. "Follow for daily drops"). Line 4: hashtags — always start with #Shorts then 3-4 niche tags.
+
+TAGS (12-15, VidIQ tiered): 2 broad ("shorts" + one category), 3-4 medium niche, 5-6 specific to this video's topic/emotion/scenario, 2-3 long-tail phrase tags people actually search. Never use "viral", "trending", "fyp", "motivationalvideo".`,
           }],
         }],
         config: { responseMimeType: "application/json" },
@@ -177,6 +187,11 @@ export const generateForUpload = action({
       // Build vision parts — frames (Cloudinary) or Files API (R2/other)
       const videoParts = await buildVideoParts(ai, video.rawFileKey);
 
+      // Fetch user settings to personalise the prompt
+      const userSettings = await ctx.runQuery(internal.settings.getByVideoUserId, { userId: video.userId });
+      const guidelines = userSettings?.aiGuidelines as string | undefined;
+      const tone       = userSettings?.aiTone       as string | undefined;
+
       const aiResponse = await ai.models.generateContent({
         model: "gemini-2.5-flash",
         contents: [{
@@ -184,19 +199,49 @@ export const generateForUpload = action({
           parts: [
             ...videoParts,
             {
-              text: `This is a motivational YouTube Short (vertical, under 60 seconds). Its filename or working title is: "${hint}".
+              text: `You are a YouTube Shorts metadata specialist with deep knowledge of YouTube SEO and the VidIQ ranking methodology.
 
-Analyze what is actually shown and said:
-• Read any text overlays, quotes, or captions word-for-word
+This is a YouTube Short (vertical video, under 60 seconds). Working title: "${hint}".${guidelines ? `\nChannel guidelines: ${guidelines}` : ""}${tone ? `\nContent tone: ${tone}` : ""}
+
+Analyze the video frames provided:
+• Read ALL text overlays, quotes, and captions word-for-word
 • Identify the speaker or person quoted if visible
-• Capture the single core motivational message
+• Capture the single core message or emotional insight
 
-Return ONLY a JSON object:
+Return ONLY this JSON — no markdown, no explanation:
 {
-  "title": "<hook-style title that teases the message, max 50 chars, no hashtags>",
-  "description": "<one punchy sentence summarising the message, then a second sentence with a call to action — 2 sentences max, no hashtags in description>",
-  "tags": ["shorts", "motivation", "motivationalvideo", "<topic-specific tag>", "<emotion tag e.g. mindset/success/confidence>", "<speaker name or quote keyword if identifiable>", "<niche tag e.g. selfimprovement/hustle/faith>", "viral"]
-}`,
+  "title": "...",
+  "description": "...",
+  "tags": [...]
+}
+
+═══ TITLE ═══ (max 55 chars — strict)
+Write a curiosity-gap or emotional-tension hook that makes viewers NEED to watch.
+Winning patterns:
+  • "Why [unexpected claim about common belief]"
+  • "The [number] [topic] Nobody Talks About"
+  • "Stop [common action] — Here's Why"
+  • "[Surprising emotional statement]"
+  • "The Truth About [relatable struggle]"
+Rules:
+  ✓ Include the specific topic keyword (what the video is actually about)
+  ✓ Create an open loop — viewer must watch to close it
+  ✓ Use strong, concrete words — NOT "amazing", "inspiring", "motivational"
+  ✗ No hashtags in the title. No ellipsis. No ALL CAPS.
+
+═══ DESCRIPTION ═══
+Line 1 (first 100 chars = YouTube search snippet): one specific, punchy statement expanding the title hook with a concrete detail from the video.
+Line 2: What the viewer will feel, learn, or realise from watching.
+Line 3: Call to action — e.g. "Follow for daily drops" or "Share this with someone who needs to hear it today."
+Line 4: Hashtags on their own line — ALWAYS start with #Shorts, then 3-4 topic/niche hashtags (e.g. #Shorts #Mindset #SelfImprovement #Faith).
+#Shorts is MANDATORY — the YouTube algorithm uses it to classify Shorts correctly.
+
+═══ TAGS ═══ (12-15 tags total, tiered by competition — VidIQ methodology)
+Tier 1 — Broad, high-volume (2 tags): "shorts", and ONE other broad category word
+Tier 2 — Medium competition (3-4 tags): niche words like "selfimprovement", "mindset", "success", "inspiration", "faith"
+Tier 3 — Specific to THIS video (5-6 tags): the exact topic, speaker name or quote keyword, the core emotion, the situation or scenario described in the video
+Tier 4 — Long-tail phrase tags (2-3 tags): 3-5 word phrases people actually search (e.g. "morning motivation shorts 2026", "faith over fear quotes", "mindset shift for success")
+NEVER include: "viral", "trending", "fyp", "foryoupage", "motivationalvideo" — YouTube ignores these and they dilute relevance.`,
             },
           ],
         }],
@@ -243,5 +288,41 @@ Return ONLY a JSON object:
       }
       throw err;
     }
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Bulk regenerate metadata for a list of videos immediately (no scheduling).
+// Processes sequentially with a short delay to respect Gemini rate limits.
+// Works for any video status (draft, ready, etc.).
+// ---------------------------------------------------------------------------
+export const bulkRegenerate = action({
+  args: {
+    videoIds: v.array(v.id("videos")),
+  },
+  handler: async (ctx, args): Promise<{ videoId: string; success: boolean; title?: string; error?: string }[]> => {
+    const results: { videoId: string; success: boolean; title?: string; error?: string }[] = [];
+
+    for (const videoId of args.videoIds) {
+      try {
+        const result = await ctx.runAction(api.actions.metadata.generateForUpload, {
+          videoId,
+          autoMarkReady: false,
+        });
+        results.push({ videoId, success: true, title: result.title });
+      } catch (err) {
+        results.push({
+          videoId,
+          success: false,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      // Brief pause between videos to avoid Gemini rate limits
+      if (args.videoIds.indexOf(videoId) < args.videoIds.length - 1) {
+        await new Promise(r => setTimeout(r, 800));
+      }
+    }
+
+    return results;
   },
 });

@@ -2,11 +2,11 @@
 
 import { useState, useMemo, useCallback } from "react";
 import Link from "next/link";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import {
   CalendarClock, CalendarCheck, Clock, X, ExternalLink,
   ChevronDown, ChevronUp, Zap,
-  Calendar, CheckSquare, Square, Wand2,
+  Calendar, CheckSquare, Square, Wand2, RefreshCw, CheckCircle, XCircle,
 } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
@@ -66,11 +66,12 @@ export default function SchedulePage() {
   const scheduledVideos = useQuery(api.videos.listScheduled);
   const allVideos = useQuery(api.videos.list);
   const userSettings = useQuery(api.settings.get);
-  const schedulePublish = useMutation(api.videos.schedulePublish);
-  const cancelSchedule = useMutation(api.videos.cancelSchedule);
-  const scheduleMetadata = useMutation(api.videos.scheduleMetadataForVideo);
-  const startAutoPublish = useMutation(api.settings.startAutoPublish);
-  const stopAutoPublish = useMutation(api.settings.stopAutoPublish);
+  const schedulePublish    = useMutation(api.videos.schedulePublish);
+  const cancelSchedule     = useMutation(api.videos.cancelSchedule);
+  const scheduleMetadata   = useMutation(api.videos.scheduleMetadataForVideo);
+  const startAutoPublish   = useMutation(api.settings.startAutoPublish);
+  const stopAutoPublish    = useMutation(api.settings.stopAutoPublish);
+  const regenMetadata      = useAction(api.actions.metadata.generateForUpload);
 
   const [mode, setMode] = useState<PageMode>("auto");
   const [filter, setFilter] = useState<ScheduleFilter>("upcoming");
@@ -91,11 +92,16 @@ export default function SchedulePage() {
   const [autoSubmitting, setAutoSubmitting] = useState(false);
 
   // Metadata-schedule state
+  const [metaMode, setMetaMode] = useState<"schedule" | "now">("schedule");
   const [metaQueue, setMetaQueue] = useState<string[]>([]);
   const [metaStartTime, setMetaStartTime] = useState("");
   const [metaIntervalMin, setMetaIntervalMin] = useState(60);
   const [metaSubmitting, setMetaSubmitting] = useState(false);
   const [metaProgress, setMetaProgress] = useState<{ done: number; total: number } | null>(null);
+  // Regenerate-now state
+  const [regenQueue, setRegenQueue] = useState<string[]>([]);
+  const [regenProgress, setRegenProgress] = useState<{ done: number; total: number; results: { id: string; success: boolean }[] } | null>(null);
+  const [regenSubmitting, setRegenSubmitting] = useState(false);
 
   const loading = scheduledVideos === undefined || allVideos === undefined;
 
@@ -127,6 +133,12 @@ export default function SchedulePage() {
         return scheduledAt !== undefined && scheduledAt > now;
       }) ?? [];
     },
+    [allVideos]
+  );
+
+  // All videos eligible for immediate metadata regeneration (draft + ready)
+  const regenEligibleVideos = useMemo(
+    () => allVideos?.filter((v) => v.status === "draft" || v.status === "ready") ?? [],
     [allVideos]
   );
 
@@ -201,6 +213,35 @@ export default function SchedulePage() {
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   }, []);
+
+  const toggleRegenVideo = useCallback((id: string) => {
+    setRegenQueue((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }, []);
+
+  const handleRegenNow = async () => {
+    if (regenQueue.length === 0) return;
+    setRegenSubmitting(true);
+    const queue = [...regenQueue];
+    const results: { id: string; success: boolean }[] = [];
+    setRegenProgress({ done: 0, total: queue.length, results });
+    try {
+      for (let i = 0; i < queue.length; i++) {
+        const id = queue[i];
+        try {
+          await regenMetadata({ videoId: id as Id<"videos">, autoMarkReady: false });
+          results.push({ id, success: true });
+        } catch {
+          results.push({ id, success: false });
+        }
+        setRegenProgress({ done: i + 1, total: queue.length, results: [...results] });
+      }
+      setRegenQueue([]);
+    } finally {
+      setRegenSubmitting(false);
+    }
+  };
 
   const handleScheduleMetadata = async () => {
     if (metaQueue.length === 0 || !metaStartTime) return;
@@ -317,8 +358,121 @@ export default function SchedulePage() {
 
           <CardContent className="pt-3">
             {mode === "metadata" ? (
-              /* ── Metadata generation schedule ── */
+              /* ── Metadata generation ── */
               <div className="space-y-5">
+                {/* Schedule / Now toggle */}
+                <div className="flex items-center gap-1 p-1 bg-muted rounded-lg w-fit text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setMetaMode("schedule")}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-colors ${metaMode === "schedule" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    <CalendarClock className="h-3 w-3" /> Schedule
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setMetaMode("now"); setRegenProgress(null); }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-colors ${metaMode === "now" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    <RefreshCw className="h-3 w-3" /> Regenerate Now
+                  </button>
+                </div>
+
+                {metaMode === "now" ? (
+                  /* ── Regenerate Now panel ── */
+                  <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                      Immediately regenerate AI metadata for selected videos using the improved VidIQ-style prompt — works on both <strong>draft</strong> and <strong>ready</strong> videos. Existing titles and tags are replaced.
+                    </p>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium">
+                          Videos
+                          <span className="ml-1.5 font-normal text-muted-foreground text-xs">
+                            ({regenEligibleVideos.length} eligible)
+                          </span>
+                        </label>
+                        <div className="flex gap-2 text-xs">
+                          <button type="button" onClick={() => setRegenQueue(regenEligibleVideos.map((v) => v._id))} className="text-primary hover:underline">
+                            Select all
+                          </button>
+                          {regenQueue.length > 0 && (
+                            <>
+                              <span className="text-muted-foreground">·</span>
+                              <button type="button" onClick={() => setRegenQueue([])} className="text-muted-foreground hover:text-foreground">Clear</button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {regenEligibleVideos.length === 0 ? (
+                        <div className="border rounded-md flex items-center justify-center h-24 text-sm text-muted-foreground">
+                          No draft or ready videos found
+                        </div>
+                      ) : (
+                        <div className="border rounded-md divide-y max-h-52 overflow-y-auto">
+                          {regenEligibleVideos.map((v) => {
+                            const checked = regenQueue.includes(v._id);
+                            const result = regenProgress?.results.find(r => r.id === v._id);
+                            return (
+                              <button
+                                key={v._id}
+                                type="button"
+                                onClick={() => !regenSubmitting && toggleRegenVideo(v._id)}
+                                disabled={regenSubmitting}
+                                className={`w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-muted/50 transition-colors ${checked ? "bg-primary/5" : ""}`}
+                              >
+                                {result ? (
+                                  result.success
+                                    ? <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />
+                                    : <XCircle className="h-4 w-4 text-destructive shrink-0" />
+                                ) : checked
+                                  ? <CheckSquare className="h-4 w-4 text-primary shrink-0" />
+                                  : <Square className="h-4 w-4 text-muted-foreground shrink-0" />
+                                }
+                                <span className="text-sm truncate flex-1">{(v as any).aiTitle ?? v.title}</span>
+                                <span className={`text-xs shrink-0 ${v.status === "ready" ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
+                                  {v.status}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {regenProgress && (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>Processing {regenProgress.done}/{regenProgress.total}</span>
+                          <span>{regenProgress.results.filter(r => r.success).length} succeeded · {regenProgress.results.filter(r => !r.success).length} failed</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className="h-full bg-primary transition-all duration-300"
+                            style={{ width: `${(regenProgress.done / regenProgress.total) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Button onClick={handleRegenNow} disabled={regenQueue.length === 0 || regenSubmitting}>
+                        {regenSubmitting ? (
+                          <><RefreshCw className="mr-2 h-4 w-4 animate-spin" />Regenerating {regenProgress?.done ?? 0}/{regenProgress?.total ?? regenQueue.length}…</>
+                        ) : (
+                          <><RefreshCw className="mr-2 h-4 w-4" />Regenerate {regenQueue.length > 0 ? `${regenQueue.length} Video${regenQueue.length !== 1 ? "s" : ""}` : "Selected"}</>
+                        )}
+                      </Button>
+                      {regenProgress && !regenSubmitting && (
+                        <Button variant="outline" onClick={() => { setRegenProgress(null); setRegenQueue([]); }}>Done</Button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                /* ── Schedule panel (existing) ── */
+                <div className="space-y-5">
                 <p className="text-sm text-muted-foreground">
                   Schedule AI metadata generation for draft videos. Each video is analyzed, titled, and automatically marked <strong>Ready</strong> — you get a Discord notification for each one.
                 </p>
@@ -504,6 +658,8 @@ export default function SchedulePage() {
                     Cancel
                   </Button>
                 </div>
+                </div>
+                )}
               </div>
             ) : mode === "single" ? (
               /* ── Single-video form ── */

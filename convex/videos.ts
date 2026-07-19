@@ -262,6 +262,40 @@ export const internalSetDuration = internalMutation({
   },
 });
 
+export const internalSetPublishAs = internalMutation({
+  args: { id: v.id("videos"), publishAs: v.union(v.literal("short"), v.literal("video")) },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, { publishAs: args.publishAs });
+  },
+});
+
+// Bulk-switch all videos with duration >60s that haven't been explicitly set yet
+export const bulkSwitchLongVideosToVideo = mutation({
+  args: {},
+  handler: async (ctx): Promise<{ switched: number }> => {
+    const identity = await getCurrentUserOrThrow(ctx);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .unique();
+    if (!user) throw new Error("User not found");
+
+    const videos = await ctx.db
+      .query("videos")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+
+    let switched = 0;
+    for (const video of videos) {
+      if (video.duration && video.duration > 60 && !video.publishAs) {
+        await ctx.db.patch(video._id, { publishAs: "video" });
+        switched++;
+      }
+    }
+    return { switched };
+  },
+});
+
 export const internalUpdateVeoOperation = internalMutation({
   args: {
     id: v.id("videos"),

@@ -12,7 +12,7 @@ import { extractCloudinaryPublicId } from "../lib/cloudinary";
  */
 export const backfillDurations = action({
   args: {},
-  handler: async (ctx): Promise<{ updated: number; skipped: number; total: number }> => {
+  handler: async (ctx): Promise<{ updated: number; switched: number; skipped: number; total: number }> => {
     const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
     const apiKey    = process.env.CLOUDINARY_API_KEY;
     const apiSecret = process.env.CLOUDINARY_API_SECRET;
@@ -35,6 +35,7 @@ export const backfillDurations = action({
     );
 
     let updated = 0;
+    let switched = 0;
     let skipped = 0;
 
     for (const video of toProcess) {
@@ -62,11 +63,22 @@ export const backfillDurations = action({
         const data = await res.json() as { duration?: number };
 
         if (data.duration && isFinite(data.duration) && data.duration > 0) {
+          const dur = Math.round(data.duration);
           await ctx.runMutation(internal.videos.internalSetDuration, {
             id: video._id as any,
-            duration: Math.round(data.duration),
+            duration: dur,
           });
           updated++;
+
+          // Automatically set publishAs = "video" for videos over 60s that haven't
+          // been explicitly configured — avoids Content ID blocks on Shorts.
+          if (dur > 60 && !(video as any).publishAs) {
+            await ctx.runMutation(internal.videos.internalSetPublishAs, {
+              id: video._id as any,
+              publishAs: "video",
+            });
+            switched++;
+          }
         } else {
           skipped++;
         }
@@ -79,6 +91,6 @@ export const backfillDurations = action({
       await new Promise(r => setTimeout(r, 100));
     }
 
-    return { updated, skipped, total: toProcess.length };
+    return { updated, switched, skipped, total: toProcess.length };
   },
 });

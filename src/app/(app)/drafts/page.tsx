@@ -54,13 +54,16 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 export default function DraftsPage() {
   const videos            = useQuery(api.videos.list);
   const userSettings      = useQuery(api.settings.get);
-  const bulkMarkReady       = useMutation(api.videos.bulkMarkDraftsReady);
-  const backfillDurations   = useAction(api.actions.backfillDurations.backfillDurations);
+  const bulkMarkReady         = useMutation(api.videos.bulkMarkDraftsReady);
+  const bulkSwitchToVideo     = useMutation(api.videos.bulkSwitchLongVideosToVideo);
+  const backfillDurations     = useAction(api.actions.backfillDurations.backfillDurations);
 
-  const [marking, setMarking]         = useState(false);
-  const [markResult, setMarkResult]   = useState<number | null>(null);
-  const [scanning, setScanning]       = useState(false);
-  const [scanResult, setScanResult]   = useState<{ updated: number; total: number } | null>(null);
+  const [marking, setMarking]             = useState(false);
+  const [markResult, setMarkResult]       = useState<number | null>(null);
+  const [scanning, setScanning]           = useState(false);
+  const [scanResult, setScanResult]       = useState<{ updated: number; switched: number; total: number } | null>(null);
+  const [switching, setSwitching]         = useState(false);
+  const [switchResult, setSwitchResult]   = useState<number | null>(null);
 
   const draftCount = useMemo(
     () => (videos ?? []).filter((v) => v.status === "draft").length,
@@ -97,11 +100,24 @@ export default function DraftsPage() {
     setScanResult(null);
     try {
       const result = await backfillDurations({});
-      setScanResult({ updated: result.updated, total: result.total });
+      setScanResult({ updated: result.updated, switched: result.switched, total: result.total });
     } catch (e) {
       console.error("Duration scan failed:", e);
     } finally {
       setScanning(false);
+    }
+  };
+
+  const handleBulkSwitchToVideo = async () => {
+    setSwitching(true);
+    setSwitchResult(null);
+    try {
+      const result = await bulkSwitchToVideo({});
+      setSwitchResult(result.switched);
+    } catch (e) {
+      console.error("Bulk switch failed:", e);
+    } finally {
+      setSwitching(false);
     }
   };
 
@@ -270,21 +286,41 @@ export default function DraftsPage() {
       {scanResult !== null && (
         <div className="flex items-center gap-2.5 rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-700 dark:text-green-400">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
-          Duration scan complete — {scanResult.updated} of {scanResult.total} video{scanResult.total !== 1 ? "s" : ""} updated.
-          {scanResult.total === 0 && " All videos already have duration data."}
+          <span>
+            Scan complete — {scanResult.updated} video{scanResult.updated !== 1 ? "s" : ""} updated
+            {scanResult.switched > 0 && (
+              <>, <strong>{scanResult.switched} automatically switched to Video mode</strong> (over 60s)</>
+            )}
+            {scanResult.total === 0 && " — all videos already had duration data"}.
+          </span>
         </div>
       )}
 
       {/* Copyright risk banner — videos >60s that will be uploaded as Shorts */}
-      {atRiskCount > 0 && (
+      {atRiskCount > 0 && switchResult === null && (
         <div className="flex items-center justify-between gap-4 rounded-lg border border-orange-500/30 bg-orange-500/10 px-4 py-3">
           <div className="flex items-center gap-2.5 min-w-0">
             <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0" />
             <p className="text-sm text-orange-700 dark:text-orange-300">
               <span className="font-semibold">{atRiskCount} video{atRiskCount !== 1 ? "s" : ""}</span>
-              {" "}over 60s — may be blocked by YouTube Content ID when uploaded as Shorts. Open each video to switch to &ldquo;Video&rdquo; mode.
+              {" "}over 60s — risk YouTube Content ID block as Shorts.
             </p>
           </div>
+          <button
+            type="button"
+            onClick={handleBulkSwitchToVideo}
+            disabled={switching}
+            className="shrink-0 flex items-center gap-1.5 rounded-md bg-orange-500 hover:bg-orange-600 disabled:opacity-60 text-white text-xs font-semibold px-3 py-1.5 transition-colors"
+          >
+            {switching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <AlertTriangle className="h-3.5 w-3.5" />}
+            {switching ? "Switching…" : "Switch all to Video"}
+          </button>
+        </div>
+      )}
+      {switchResult !== null && (
+        <div className="flex items-center gap-2.5 rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-700 dark:text-green-400">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          {switchResult} video{switchResult !== 1 ? "s" : ""} switched to Video mode — they&apos;ll no longer upload as Shorts.
         </div>
       )}
 

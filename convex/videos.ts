@@ -535,6 +535,32 @@ export const internalSetCloudinaryDeleted = internalMutation({
   },
 });
 
+// Mark all draft videos for the current user as "ready", preserving all existing metadata.
+// Only transitions videos that are actually in "draft" status.
+export const bulkMarkDraftsReady = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await getCurrentUserOrThrow(ctx);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .unique();
+    if (!user) throw new Error("User not found");
+
+    const drafts = await ctx.db
+      .query("videos")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .filter((q) => q.eq(q.field("status"), "draft"))
+      .collect();
+
+    for (const video of drafts) {
+      await ctx.db.patch(video._id, { status: "ready" });
+    }
+
+    return { count: drafts.length };
+  },
+});
+
 export const processDueSchedules = internalMutation({
   args: {},
   handler: async (ctx) => {

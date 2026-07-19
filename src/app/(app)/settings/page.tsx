@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
-import { Youtube, MessageCircle, CheckCircle, XCircle, Settings } from "lucide-react";
+import { Youtube, MessageCircle, CheckCircle, XCircle, Settings, Sparkles } from "lucide-react";
+import { AISettingsModal } from "@/components/settings/ai-settings-modal";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
@@ -32,6 +33,7 @@ export default function SettingsPage() {
   const testTelegram = useAction(api.actions.testConnections.testTelegram);
   const testDiscord = useAction(api.actions.testConnections.testDiscord);
 
+  const [aiModalOpen, setAiModalOpen] = useState(false);
   const [telegramInput, setTelegramInput] = useState("");
   const [savingTelegram, setSavingTelegram] = useState(false);
   const [discordInput, setDiscordInput] = useState("");
@@ -164,6 +166,25 @@ export default function SettingsPage() {
           Manage your connections, notifications, and default preferences.
         </p>
       </div>
+
+      {/* AI Settings */}
+      <button type="button" onClick={() => setAiModalOpen(true)} className="w-full text-left group">
+        <Card className="transition-colors hover:border-primary/40 hover:bg-muted/30">
+          <CardContent className="flex items-center gap-4 py-4 px-5">
+            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10 ring-1 ring-primary/20 shrink-0">
+              <Sparkles className="h-5 w-5 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm">AI Settings</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Metadata tone, language, channel guidelines, Veo model defaults
+              </p>
+            </div>
+            <span className="text-xs text-primary font-medium group-hover:underline shrink-0">Configure →</span>
+          </CardContent>
+        </Card>
+      </button>
+      <AISettingsModal open={aiModalOpen} onClose={() => setAiModalOpen(false)} />
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* YouTube Connection */}

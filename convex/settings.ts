@@ -272,6 +272,8 @@ export const startAutoPublish = mutation({
     intervalMs: v.number(),
     count: v.number(),
     privacy: v.union(v.literal("private"), v.literal("public"), v.literal("unlisted")),
+    timeSlots: v.optional(v.array(v.number())),
+    timezoneOffset: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const identity = await getCurrentUserOrThrow(ctx);
@@ -307,6 +309,8 @@ export const startAutoPublish = mutation({
       autoPublishPrivacy: args.privacy,
       autoPublishSchedulerId: schedulerId,
       autoPublishNextAt: args.scheduledAt,
+      autoPublishTimeSlots: args.timeSlots,
+      autoPublishTimezoneOffset: args.timezoneOffset,
     };
 
     if (settings) {

@@ -2,8 +2,8 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { useQuery } from "convex/react";
-import { Film, Plus, Search, SortAsc } from "lucide-react";
+import { useQuery, useMutation } from "convex/react";
+import { Film, Plus, Search, SortAsc, CheckCircle2, Loader2 } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { VideoCard } from "@/components/video-card";
@@ -14,6 +14,23 @@ import type { VideoStatus } from "@/lib/constants";
 
 
 type SortOption = "newest" | "oldest" | "name-az" | "name-za" | "size-desc" | "size-asc";
+
+function nextSlotAfter(slots: number[], afterMs: number, tzOffsetHours: number): number {
+  const TZ_MS = tzOffsetHours * 3_600_000;
+  const shifted = new Date(afterMs + TZ_MS);
+  const msSinceMidnight =
+    shifted.getUTCHours() * 3_600_000 +
+    shifted.getUTCMinutes() * 60_000 +
+    shifted.getUTCSeconds() * 1_000 +
+    shifted.getUTCMilliseconds();
+  const midnight = afterMs - msSinceMidnight;
+  const sorted = [...slots].sort((a, b) => a - b);
+  for (const h of sorted) {
+    const slotMs = midnight + h * 3_600_000;
+    if (slotMs > afterMs) return slotMs;
+  }
+  return midnight + 24 * 3_600_000 + sorted[0] * 3_600_000;
+}
 
 const STATUS_PILLS: { value: VideoStatus | "all"; label: string }[] = [
   { value: "all", label: "All" },
@@ -35,8 +52,30 @@ const SORT_OPTIONS: { value: SortOption; label: string }[] = [
 ];
 
 export default function DraftsPage() {
-  const videos       = useQuery(api.videos.list);
-  const userSettings = useQuery(api.settings.get);
+  const videos            = useQuery(api.videos.list);
+  const userSettings      = useQuery(api.settings.get);
+  const bulkMarkReady     = useMutation(api.videos.bulkMarkDraftsReady);
+
+  const [marking, setMarking]     = useState(false);
+  const [markResult, setMarkResult] = useState<number | null>(null);
+
+  const draftCount = useMemo(
+    () => (videos ?? []).filter((v) => v.status === "draft").length,
+    [videos]
+  );
+
+  const handleBulkMarkReady = async () => {
+    setMarking(true);
+    setMarkResult(null);
+    try {
+      const result = await bulkMarkReady({});
+      setMarkResult(result.count);
+    } catch (e) {
+      console.error("Bulk mark ready failed:", e);
+    } finally {
+      setMarking(false);
+    }
+  };
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<VideoStatus | "all">("all");
@@ -54,12 +93,28 @@ export default function DraftsPage() {
     const nextAt     = userSettings.autoPublishNextAt;
     const intervalMs = userSettings.autoPublishIntervalMs ?? 6 * 3_600_000;
     const count      = userSettings.autoPublishCount ?? 1;
+    const timeSlots  = (userSettings as any).autoPublishTimeSlots as number[] | undefined;
+    const tzOffset   = ((userSettings as any).autoPublishTimezoneOffset as number | undefined) ?? 3;
+
     const readyVideos = (videos ?? [])
       .filter((v) => v.status === "ready")
       .sort((a, b) => a._creationTime - b._creationTime);
-    readyVideos.forEach((v, i) => {
-      map.set(v._id, nextAt + Math.floor(i / count) * intervalMs);
-    });
+
+    if (timeSlots?.length) {
+      // Pre-compute each run's wall-clock slot time so we only iterate slots once
+      const totalRuns = Math.ceil(readyVideos.length / count);
+      const slotTimes: number[] = [nextAt];
+      for (let r = 1; r < totalRuns; r++) {
+        slotTimes.push(nextSlotAfter(timeSlots, slotTimes[r - 1], tzOffset));
+      }
+      readyVideos.forEach((v, i) => {
+        map.set(v._id, slotTimes[Math.floor(i / count)]);
+      });
+    } else {
+      readyVideos.forEach((v, i) => {
+        map.set(v._id, nextAt + Math.floor(i / count) * intervalMs);
+      });
+    }
     return map;
   }, [videos, userSettings]);
 
@@ -129,6 +184,34 @@ export default function DraftsPage() {
           </Button>
         </Link>
       </div>
+
+      {/* Bulk mark ready banner */}
+      {draftCount > 0 && !markResult && (
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <CheckCircle2 className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <p className="text-sm text-amber-700 dark:text-amber-300">
+              <span className="font-semibold">{draftCount} draft video{draftCount !== 1 ? "s" : ""}</span>
+              {" "}with existing metadata — mark them all as Ready to join the auto-publish queue.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleBulkMarkReady}
+            disabled={marking}
+            className="shrink-0 flex items-center gap-1.5 rounded-md bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white text-xs font-semibold px-3 py-1.5 transition-colors"
+          >
+            {marking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+            {marking ? "Marking…" : "Mark all Ready"}
+          </button>
+        </div>
+      )}
+      {markResult !== null && (
+        <div className="flex items-center gap-2.5 rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-700 dark:text-green-400">
+          <CheckCircle2 className="h-4 w-4 shrink-0" />
+          {markResult} video{markResult !== 1 ? "s" : ""} marked as Ready and added to the auto-publish queue.
+        </div>
+      )}
 
       {/* Controls row */}
       <div className="flex flex-wrap items-center gap-3">

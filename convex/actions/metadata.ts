@@ -264,9 +264,12 @@ NEVER include: "viral", "trending", "fyp", "foryoupage", "motivationalvideo" —
         aiTags: parsed.tags,
       });
 
+      // Always clear any pending metadata schedule — a manual or bulk regeneration makes
+      // the queued job redundant, and leaving it alive would overwrite these fresh results.
+      await ctx.runMutation(internal.videos.internalClearMetadataSchedule, { id: args.videoId });
+
       if (args.autoMarkReady) {
         await ctx.runMutation(internal.videos.internalUpdateStatus, { id: args.videoId, status: "ready" });
-        await ctx.runMutation(internal.videos.internalClearMetadataSchedule, { id: args.videoId });
         await ctx.runAction(api.actions.telegram.sendNotification, {
           userId: video.userId,
           message: `✅ Metadata ready: "${parsed.title ?? hint}" is now ready for YouTube publishing.`,
@@ -279,8 +282,8 @@ NEVER include: "viral", "trending", "fyp", "foryoupage", "motivationalvideo" —
         tags: parsed.tags ?? [],
       };
     } catch (err) {
+      await ctx.runMutation(internal.videos.internalClearMetadataSchedule, { id: args.videoId });
       if (args.autoMarkReady) {
-        await ctx.runMutation(internal.videos.internalClearMetadataSchedule, { id: args.videoId });
         await ctx.runAction(api.actions.telegram.sendNotification, {
           userId: video.userId,
           message: `❌ Metadata failed: "${hint}" — ${err instanceof Error ? err.message : "Unknown error"}. Video remains as draft.`,

@@ -4,6 +4,27 @@ import { v } from "convex/values";
 import { action } from "../_generated/server";
 import { api, internal } from "../_generated/api";
 
+// Compute the next timezone-aligned time slot after nowMs (always at least 60s in future).
+// timeSlots is an array of local hours (0–23). timezoneOffsetHours defaults to EAT (+3).
+function nextSlotMs(timeSlots: number[], nowMs: number, timezoneOffsetHours = 3): number {
+  const TZ_OFFSET_MS = timezoneOffsetHours * 60 * 60 * 1000;
+  const eatMs = nowMs + TZ_OFFSET_MS;
+  const eatDate = new Date(eatMs);
+  const msSinceEatMidnight =
+    eatDate.getUTCHours() * 3_600_000 +
+    eatDate.getUTCMinutes() * 60_000 +
+    eatDate.getUTCSeconds() * 1_000 +
+    eatDate.getUTCMilliseconds();
+  const eatMidnightMs = nowMs - msSinceEatMidnight;
+  const sorted = [...timeSlots].sort((a, b) => a - b);
+  const minFutureMs = nowMs + 60_000;
+  for (const h of sorted) {
+    const slotMs = eatMidnightMs + h * 3_600_000;
+    if (slotMs >= minFutureMs) return slotMs;
+  }
+  return eatMidnightMs + 24 * 3_600_000 + sorted[0] * 3_600_000;
+}
+
 export const runAutoPublishBatch = action({
   args: { userId: v.id("users") },
   handler: async (ctx, args) => {
@@ -55,7 +76,11 @@ export const runAutoPublishBatch = action({
       }
     }
 
-    const nextAt = Date.now() + intervalMs;
+    const timeSlots = (settings as any).autoPublishTimeSlots as number[] | undefined;
+    const tzOffset = (settings as any).autoPublishTimezoneOffset as number | undefined;
+    const nextAt = timeSlots?.length
+      ? nextSlotMs(timeSlots, Date.now(), tzOffset ?? 3)
+      : Date.now() + intervalMs;
     const schedulerId = await ctx.scheduler.runAt(
       nextAt,
       api.actions.autoPublish.runAutoPublishBatch,

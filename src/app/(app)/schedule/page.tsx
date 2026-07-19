@@ -42,6 +42,51 @@ const INTERVALS = [
   { value: 1440, label: "Daily" },
 ];
 
+// Research-backed optimal YouTube Shorts posting times (EAT / UTC+3)
+const OPTIMAL_SLOTS = [
+  { hour: 7,  label: "7 AM",  reason: "Morning commute" },
+  { hour: 12, label: "12 PM", reason: "Lunch peak" },
+  { hour: 17, label: "5 PM",  reason: "After work" },
+  { hour: 20, label: "8 PM",  reason: "Prime time" },
+];
+
+// All 24 hours for custom selection
+const ALL_HOURS = Array.from({ length: 24 }, (_, h) => ({
+  hour: h,
+  label: h === 0 ? "12 AM" : h < 12 ? `${h} AM` : h === 12 ? "12 PM" : `${h - 12} PM`,
+}));
+
+const TIMEZONE_OPTIONS = [
+  { value: -8,   label: "PST (UTC−8)",    desc: "US Pacific" },
+  { value: -5,   label: "EST (UTC−5)",    desc: "US Eastern" },
+  { value: 0,    label: "UTC",            desc: "Global / UK" },
+  { value: 1,    label: "WAT (UTC+1)",    desc: "West Africa / Nigeria" },
+  { value: 3,    label: "EAT (UTC+3)",    desc: "East Africa / Nairobi" },
+  { value: 5.5,  label: "IST (UTC+5:30)", desc: "India" },
+  { value: 8,    label: "SGT (UTC+8)",    desc: "China / Singapore" },
+];
+
+function nextEATSlot(slots: number[], tzOffsetHours = 3): number {
+  const TZ_OFFSET_MS = tzOffsetHours * 60 * 60 * 1000;
+  const now = Date.now();
+  const eatMs = now + TZ_OFFSET_MS;
+  const eatDate = new Date(eatMs);
+  const msSinceEatMidnight =
+    eatDate.getUTCHours() * 3_600_000 +
+    eatDate.getUTCMinutes() * 60_000 +
+    eatDate.getUTCSeconds() * 1_000 +
+    eatDate.getUTCMilliseconds();
+  const eatMidnightMs = now - msSinceEatMidnight;
+
+  const sorted = [...slots].sort((a, b) => a - b);
+  const minFuture = now + 60_000;
+  for (const h of sorted) {
+    const slotMs = eatMidnightMs + h * 3_600_000;
+    if (slotMs >= minFuture) return slotMs;
+  }
+  return eatMidnightMs + 24 * 3_600_000 + sorted[0] * 3_600_000;
+}
+
 const META_INTERVALS = [
   { value: 60, label: "1 hr" },
   { value: 120, label: "2 hrs" },
@@ -90,6 +135,9 @@ export default function SchedulePage() {
   const [autoCount, setAutoCount] = useState(1);
   const [autoPrivacy, setAutoPrivacy] = useState<"private" | "public" | "unlisted">("public");
   const [autoSubmitting, setAutoSubmitting] = useState(false);
+  const [timeSlots, setTimeSlots] = useState<number[]>([7, 12, 17, 20]);
+  const [showAllHours, setShowAllHours] = useState(false);
+  const [tzOffset, setTzOffset] = useState(3); // default EAT
 
   // Metadata-schedule state
   const [metaMode, setMetaMode] = useState<"schedule" | "now">("schedule");
@@ -180,14 +228,19 @@ export default function SchedulePage() {
   };
 
   const handleStartAutoPublish = async () => {
-    if (!autoStartTime) return;
+    if (timeSlots.length === 0) return;
     setAutoSubmitting(true);
     try {
+      const scheduledAt = autoStartTime
+        ? new Date(autoStartTime).getTime()
+        : nextEATSlot(timeSlots, tzOffset);
       await startAutoPublish({
-        scheduledAt: new Date(autoStartTime).getTime(),
+        scheduledAt,
         intervalMs: intervalMin * 60_000,
         count: autoCount,
         privacy: autoPrivacy,
+        timeSlots,
+        timezoneOffset: tzOffset,
       });
       setAutoStartTime("");
     } catch (e) {
@@ -735,8 +788,11 @@ export default function SchedulePage() {
                           <Badge className="bg-primary/15 text-primary border-primary/30 text-xs">Running</Badge>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          Up to {userSettings?.autoPublishCount ?? 1} video{(userSettings?.autoPublishCount ?? 1) !== 1 ? "s" : ""} every{" "}
-                          {INTERVALS.find((i) => i.value === Math.round((userSettings?.autoPublishIntervalMs ?? 0) / 60_000))?.label ?? "interval"}{" "}
+                          Up to {userSettings?.autoPublishCount ?? 1} video{(userSettings?.autoPublishCount ?? 1) !== 1 ? "s" : ""}{" "}
+                          {(userSettings as any)?.autoPublishTimeSlots?.length
+                            ? <>at {[...(userSettings as any).autoPublishTimeSlots].sort((a: number, b: number) => a - b).map((h: number) => ALL_HOURS.find((x) => x.hour === h)?.label).join(", ")} EAT</>
+                            : <>every {INTERVALS.find((i) => i.value === Math.round((userSettings?.autoPublishIntervalMs ?? 0) / 60_000))?.label ?? "interval"}</>
+                          }{" "}
                           · <span className="capitalize">{userSettings?.autoPublishPrivacy ?? "public"}</span>
                           {" "}· {schedulableVideos.length} ready now
                         </p>
@@ -785,46 +841,34 @@ export default function SchedulePage() {
 
                     <div className="grid sm:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
-                        <label className="text-sm font-medium">First publish at</label>
-                        <input
-                          type="datetime-local"
+                        <label className="text-sm font-medium">Audience Timezone</label>
+                        <p className="text-xs text-muted-foreground">
+                          Where most of your viewers are. The first engagement hour matters most for the algorithm.
+                        </p>
+                        <select
                           className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                          min={minDatetimeValue()}
-                          value={autoStartTime}
-                          onChange={(e) => setAutoStartTime(e.target.value)}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium">Publish every</label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {INTERVALS.map((int) => (
-                            <button
-                              key={int.value}
-                              type="button"
-                              onClick={() => setIntervalMin(int.value)}
-                              className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors ${
-                                intervalMin === int.value
-                                  ? "bg-primary text-primary-foreground border-primary"
-                                  : "bg-background border-input hover:border-primary/50 hover:bg-muted"
-                              }`}
-                            >
-                              {int.label}
-                            </button>
+                          value={tzOffset}
+                          onChange={(e) => setTzOffset(Number(e.target.value))}
+                        >
+                          {TIMEZONE_OPTIONS.map((tz) => (
+                            <option key={tz.value} value={tz.value}>
+                              {tz.label} — {tz.desc}
+                            </option>
                           ))}
-                        </div>
+                        </select>
                       </div>
-                    </div>
-
-                    <div className="grid sm:grid-cols-2 gap-4">
                       <div className="space-y-1.5">
-                        <label className="text-sm font-medium">Videos per run</label>
-                        <div className="flex gap-1.5">
+                        <label className="text-sm font-medium">Videos per slot</label>
+                        <p className="text-xs text-muted-foreground">
+                          How many videos to publish at each time slot.
+                        </p>
+                        <div className="flex gap-1.5 pt-1">
                           {[1, 2, 3, 5].map((n) => (
                             <button
                               key={n}
                               type="button"
                               onClick={() => setAutoCount(n)}
-                              className={`px-3 py-1 rounded-md text-xs font-medium border transition-colors min-w-[2.5rem] ${
+                              className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors min-w-[2.5rem] ${
                                 autoCount === n
                                   ? "bg-primary text-primary-foreground border-primary"
                                   : "bg-background border-input hover:border-primary/50 hover:bg-muted"
@@ -835,44 +879,132 @@ export default function SchedulePage() {
                           ))}
                         </div>
                       </div>
-                      <div className="space-y-1.5">
-                        <label className="text-sm font-medium">Privacy</label>
-                        <div className="flex gap-2">
-                          {PRIVACY_OPTIONS.map((opt) => (
-                            <Button
-                              key={opt.value}
-                              size="sm"
-                              variant={autoPrivacy === opt.value ? "default" : "outline"}
-                              onClick={() => setAutoPrivacy(opt.value)}
-                              type="button"
-                            >
-                              {opt.label}
-                            </Button>
-                          ))}
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm font-medium">
+                          Posting Times
+                          <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                            {TIMEZONE_OPTIONS.find((t) => t.value === tzOffset)?.label ?? "UTC+3"}
+                          </span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setShowAllHours((p) => !p)}
+                          className="text-xs text-primary hover:underline"
+                        >
+                          {showAllHours ? "Show optimal only" : "Custom hours"}
+                        </button>
+                      </div>
+
+                      {!showAllHours ? (
+                        <div className="space-y-1.5">
+                          <p className="text-xs text-muted-foreground">Research-backed peak times for YouTube Shorts engagement:</p>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            {OPTIMAL_SLOTS.map(({ hour, label, reason }) => {
+                              const on = timeSlots.includes(hour);
+                              return (
+                                <button
+                                  key={hour}
+                                  type="button"
+                                  onClick={() => setTimeSlots((prev) =>
+                                    on ? prev.filter((h) => h !== hour) : [...prev, hour]
+                                  )}
+                                  className={`flex flex-col items-center gap-0.5 px-3 py-2.5 rounded-lg border text-xs font-medium transition-colors ${
+                                    on
+                                      ? "bg-primary text-primary-foreground border-primary"
+                                      : "bg-background border-input hover:border-primary/50 hover:bg-muted"
+                                  }`}
+                                >
+                                  <span className="text-sm font-semibold">{label}</span>
+                                  <span className={`font-normal ${on ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{reason}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5">
+                          {ALL_HOURS.map(({ hour, label }) => {
+                            const on = timeSlots.includes(hour);
+                            const isOptimal = OPTIMAL_SLOTS.some((s) => s.hour === hour);
+                            return (
+                              <button
+                                key={hour}
+                                type="button"
+                                onClick={() => setTimeSlots((prev) =>
+                                  on ? prev.filter((h) => h !== hour) : [...prev, hour]
+                                )}
+                                className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-colors relative ${
+                                  on
+                                    ? "bg-primary text-primary-foreground border-primary"
+                                    : isOptimal
+                                    ? "bg-primary/5 border-primary/30 hover:border-primary/60"
+                                    : "bg-background border-input hover:border-primary/50 hover:bg-muted"
+                                }`}
+                              >
+                                {label}
+                                {isOptimal && !on && <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-primary" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {timeSlots.length === 0 && (
+                        <p className="text-xs text-destructive">Select at least one posting time.</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-sm font-medium">Privacy</label>
+                      <div className="flex gap-2">
+                        {PRIVACY_OPTIONS.map((opt) => (
+                          <Button
+                            key={opt.value}
+                            size="sm"
+                            variant={autoPrivacy === opt.value ? "default" : "outline"}
+                            onClick={() => setAutoPrivacy(opt.value)}
+                            type="button"
+                          >
+                            {opt.label}
+                          </Button>
+                        ))}
                       </div>
                     </div>
 
-                    {autoStartTime && (
-                      <div className="bg-muted/50 rounded-lg px-4 py-3 text-sm">
-                        <span className="text-muted-foreground">Starting </span>
-                        <span className="font-medium">{format(new Date(autoStartTime), "MMM d 'at' h:mm a")}</span>
-                        <span className="text-muted-foreground">, then every </span>
-                        <span className="font-medium">{INTERVALS.find((i) => i.value === intervalMin)?.label}</span>
-                        <span className="text-muted-foreground"> · up to </span>
-                        <span className="font-medium">{autoCount} video{autoCount !== 1 ? "s" : ""} per run</span>
-                        <span className="text-muted-foreground"> · </span>
-                        <span className="font-medium capitalize">{autoPrivacy}</span>
-                        {schedulableVideos.length > 0 && (
-                          <span className="text-muted-foreground"> · {schedulableVideos.length} ready now</span>
-                        )}
+                    {timeSlots.length > 0 && (
+                      <div className="bg-muted/50 rounded-lg px-4 py-3 text-sm space-y-1">
+                        <div>
+                          <span className="text-muted-foreground">First post </span>
+                          <span className="font-medium">
+                            {format(nextEATSlot(timeSlots, tzOffset), "MMM d 'at' h:mm a")}
+                          </span>
+                          <span className="text-muted-foreground"> {TIMEZONE_OPTIONS.find((t) => t.value === tzOffset)?.label ?? "UTC"}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Slots: </span>
+                          <span className="font-medium">
+                            {[...timeSlots].sort((a, b) => a - b).map((h) =>
+                              ALL_HOURS.find((x) => x.hour === h)?.label
+                            ).join(", ")}
+                          </span>
+                          <span className="text-muted-foreground"> · up to </span>
+                          <span className="font-medium">{autoCount} video{autoCount !== 1 ? "s" : ""} per slot</span>
+                          <span className="text-muted-foreground"> · </span>
+                          <span className="font-medium capitalize">{autoPrivacy}</span>
+                          {schedulableVideos.length > 0 && (
+                            <span className="text-muted-foreground"> · {schedulableVideos.length} ready now</span>
+                          )}
+                        </div>
                       </div>
                     )}
 
                     <div className="flex gap-2 pt-1">
                       <Button
                         onClick={handleStartAutoPublish}
-                        disabled={!autoStartTime || autoSubmitting}
+                        disabled={timeSlots.length === 0 || autoSubmitting}
                       >
                         {autoSubmitting ? (
                           <>

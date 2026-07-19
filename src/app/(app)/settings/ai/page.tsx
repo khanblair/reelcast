@@ -40,6 +40,7 @@ export default function AISettingsPage() {
   const [aiTone, setAiTone] = useState(settings?.aiTone ?? "professional");
   const [aiLanguage, setAiLanguage] = useState(settings?.aiLanguage ?? "en");
   const [aiDescriptionLength, setAiDescriptionLength] = useState(settings?.aiDescriptionLength ?? "medium");
+  const [aiGuidelines, setAiGuidelines] = useState(settings?.aiGuidelines ?? "");
 
   const handleSave = async () => {
     setSaving(true);
@@ -58,6 +59,7 @@ export default function AISettingsPage() {
         aiTone,
         aiLanguage,
         aiDescriptionLength,
+        aiGuidelines: aiGuidelines.trim() || undefined,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -186,9 +188,10 @@ export default function AISettingsPage() {
             ))}
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid sm:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label className="text-sm font-medium">Tone</Label>
+              <p className="text-[11px] text-muted-foreground">Voice/energy of titles and descriptions</p>
               <Select value={aiTone} onChange={(e) => setAiTone(e.target.value)}>
                 {AI_TONES.map((t) => (
                   <option key={t.value} value={t.value}>{t.label}</option>
@@ -197,6 +200,7 @@ export default function AISettingsPage() {
             </div>
             <div className="space-y-2">
               <Label className="text-sm font-medium">Language</Label>
+              <p className="text-[11px] text-muted-foreground">Output language for metadata</p>
               <Select value={aiLanguage} onChange={(e) => setAiLanguage(e.target.value)}>
                 {AI_LANGUAGES.map((l) => (
                   <option key={l.value} value={l.value}>{l.label}</option>
@@ -205,12 +209,30 @@ export default function AISettingsPage() {
             </div>
             <div className="space-y-2">
               <Label className="text-sm font-medium">Description Length</Label>
+              <p className="text-[11px] text-muted-foreground">How detailed descriptions are</p>
               <Select value={aiDescriptionLength} onChange={(e) => setAiDescriptionLength(e.target.value)}>
                 {AI_DESCRIPTION_LENGTHS.map((d) => (
                   <option key={d.value} value={d.value}>{d.label}</option>
                 ))}
               </Select>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Channel Guidelines</Label>
+            <p className="text-[11px] text-muted-foreground">
+              Tell the AI about your channel — niche, audience, recurring themes, things to always or never include. This is injected into every metadata generation prompt.
+            </p>
+            <textarea
+              value={aiGuidelines}
+              onChange={(e) => setAiGuidelines(e.target.value)}
+              placeholder={`e.g. "This is a faith-based motivational channel targeting young African professionals. Always reference resilience and purpose. Avoid political topics. Titles should feel urgent and personal."`}
+              rows={4}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring resize-none placeholder:text-muted-foreground/60"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              {aiGuidelines.length}/500 characters
+            </p>
           </div>
         </CardContent>
       </Card>

@@ -110,6 +110,8 @@ export default defineSchema({
     autoPublishPrivacy: v.optional(v.union(v.literal("private"), v.literal("public"), v.literal("unlisted"))),
     autoPublishSchedulerId: v.optional(v.id("_scheduled_functions")),
     autoPublishNextAt: v.optional(v.number()),
+    autoPublishTimeSlots: v.optional(v.array(v.number())),
+    autoPublishTimezoneOffset: v.optional(v.number()),
     veoModel: v.optional(v.string()),
     veoResolution: v.optional(v.string()),
     veoAspectRatio: v.optional(v.string()),

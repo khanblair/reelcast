@@ -3,8 +3,10 @@
 import * as crypto from "crypto";
 
 export function extractCloudinaryPublicId(url: string): string | null {
-  const match = url.match(/\/upload\/(?:v\d+\/)?(.+)\.[^.]+$/);
-  return match ? match[1] : null;
+  const match = url.match(/\/upload\/(?:v\d+\/)?(.+)$/);
+  if (!match) return null;
+  // Strip trailing file extension if present (e.g. .mp4), but keep folder separators
+  return match[1].replace(/\.[^./]+$/, "");
 }
 
 export async function destroyCloudinaryAsset(

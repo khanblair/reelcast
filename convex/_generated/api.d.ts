@@ -9,6 +9,7 @@
  */
 
 import type * as actions_autoPublish from "../actions/autoPublish.js";
+import type * as actions_backfillDurations from "../actions/backfillDurations.js";
 import type * as actions_deleteVideo from "../actions/deleteVideo.js";
 import type * as actions_generation from "../actions/generation.js";
 import type * as actions_metadata from "../actions/metadata.js";
@@ -40,6 +41,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "actions/autoPublish": typeof actions_autoPublish;
+  "actions/backfillDurations": typeof actions_backfillDurations;
   "actions/deleteVideo": typeof actions_deleteVideo;
   "actions/generation": typeof actions_generation;
   "actions/metadata": typeof actions_metadata;

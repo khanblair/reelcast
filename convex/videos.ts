@@ -627,6 +627,39 @@ export const bulkMarkDraftsReady = mutation({
   },
 });
 
+/** Returns all videos for a specific user (by clerkId) or all users if clerkId is omitted. */
+export const listForBackfill = internalQuery({
+  args: { clerkId: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    if (args.clerkId) {
+      const user = await ctx.db
+        .query("users")
+        .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId!))
+        .unique();
+      if (!user) return [];
+      return ctx.db.query("videos").withIndex("by_user", (q) => q.eq("userId", user._id)).collect();
+    }
+    return ctx.db.query("videos").collect();
+  },
+});
+
+/** Debug helper — returns summary of all videos. Run via CLI. */
+export const debugListAll = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const all = await ctx.db.query("videos").collect();
+    return all.map((v) => ({
+      id: v._id,
+      title: v.title.substring(0, 40),
+      rawFileKey: v.rawFileKey?.substring(0, 80),
+      duration: v.duration,
+      cloudinaryDeletedAt: v.cloudinaryDeletedAt,
+      publishAs: v.publishAs,
+      status: v.status,
+    }));
+  },
+});
+
 export const processDueSchedules = internalMutation({
   args: {},
   handler: async (ctx) => {

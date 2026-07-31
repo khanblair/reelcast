@@ -8,7 +8,7 @@ async function getUserId(ctx: QueryCtx) {
   }
   const user = await ctx.db
     .query("users")
-    .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+    .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
     .first();
   
   if (!user) {

@@ -3,11 +3,12 @@ import Image from "next/image";
 import type { Route } from "next";
 import { Button } from "@/components/ui/button";
 import { Sparkles, Youtube, Clock } from "lucide-react";
-import { auth } from "@clerk/nextjs/server";
+import { createClient } from "@/lib/supabase/server";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export default async function LandingPage() {
-  const { userId } = await auth();
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -25,7 +26,7 @@ export default async function LandingPage() {
             How it Works
           </Link>
           <ThemeToggle />
-          {userId ? (
+          {user ? (
             <Link href="/dashboard">
               <Button size="sm">Dashboard</Button>
             </Link>
@@ -55,7 +56,7 @@ export default async function LandingPage() {
             and schedules it directly to your YouTube channel.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 z-10">
-            {userId ? (
+            {user ? (
               <Link href="/dashboard">
                 <Button size="lg" className="w-full sm:w-auto font-semibold h-12 px-8">
                   Go to Dashboard

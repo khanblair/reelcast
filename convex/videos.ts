@@ -16,7 +16,7 @@ export const create = mutation({
     const identity = await getCurrentUserOrThrow(ctx);
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
 
     if (!user) {
@@ -45,7 +45,7 @@ export const list = query({
     }
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
 
     if (!user) {
@@ -66,7 +66,7 @@ export const get = query({
     const identity = await getCurrentUserOrThrow(ctx);
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
 
     if (!user) {
@@ -100,7 +100,7 @@ export const updateStatus = mutation({
     const identity = await getCurrentUserOrThrow(ctx);
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
 
     if (!user) {
@@ -125,7 +125,7 @@ export const updatePrivacyStatus = mutation({
     const identity = await getCurrentUserOrThrow(ctx);
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
 
     if (!user) {
@@ -150,7 +150,7 @@ export const updatePublishAs = mutation({
     const identity = await getCurrentUserOrThrow(ctx);
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
 
     if (!user) throw new Error("User not found in DB");
@@ -276,7 +276,7 @@ export const bulkSwitchLongVideosToVideo = mutation({
     const identity = await getCurrentUserOrThrow(ctx);
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
     if (!user) throw new Error("User not found");
 
@@ -352,7 +352,7 @@ export const updateAiConfig = mutation({
     const identity = await getCurrentUserOrThrow(ctx);
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
     if (!user) throw new Error("User not found in DB");
 
@@ -387,7 +387,7 @@ export const createGenerated = mutation({
     const identity = await getCurrentUserOrThrow(ctx);
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
     if (!user) throw new Error("User not found in DB");
 
@@ -413,7 +413,7 @@ export const schedulePublish = mutation({
     const identity = await getCurrentUserOrThrow(ctx);
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
     if (!user) throw new Error("User not found");
 
@@ -445,7 +445,7 @@ export const scheduleMetadataForVideo = mutation({
     const identity = await getCurrentUserOrThrow(ctx);
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
     if (!user) throw new Error("User not found");
 
@@ -486,7 +486,7 @@ export const cancelSchedule = mutation({
     const identity = await getCurrentUserOrThrow(ctx);
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
     if (!user) throw new Error("User not found");
 
@@ -517,7 +517,7 @@ export const listScheduled = query({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
     if (!user) return [];
 
@@ -609,7 +609,7 @@ export const bulkMarkDraftsReady = mutation({
     const identity = await getCurrentUserOrThrow(ctx);
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
     if (!user) throw new Error("User not found");
 
@@ -627,14 +627,14 @@ export const bulkMarkDraftsReady = mutation({
   },
 });
 
-/** Returns all videos for a specific user (by clerkId) or all users if clerkId is omitted. */
+/** Returns all videos for a specific user (by supabaseId) or all users if omitted. */
 export const listForBackfill = internalQuery({
-  args: { clerkId: v.optional(v.string()) },
+  args: { supabaseId: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    if (args.clerkId) {
+    if (args.supabaseId) {
       const user = await ctx.db
         .query("users")
-        .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId!))
+        .withIndex("by_supabase_id", (q) => q.eq("supabaseId", args.supabaseId!))
         .unique();
       if (!user) return [];
       return ctx.db.query("videos").withIndex("by_user", (q) => q.eq("userId", user._id)).collect();

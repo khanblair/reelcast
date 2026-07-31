@@ -12,7 +12,7 @@ export const get = query({
     }
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
 
     if (!user) {
@@ -97,7 +97,7 @@ export const update = mutation({
     const identity = await getCurrentUserOrThrow(ctx);
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
 
     if (!user) {
@@ -162,7 +162,7 @@ export const disconnectTelegram = mutation({
     const identity = await getCurrentUserOrThrow(ctx);
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
     if (!user) throw new Error("User not found");
 
@@ -184,7 +184,7 @@ export const disconnectDiscord = mutation({
     const identity = await getCurrentUserOrThrow(ctx);
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
     if (!user) throw new Error("User not found");
 
@@ -203,7 +203,7 @@ export const testYoutubeConnection = mutation({
     const identity = await getCurrentUserOrThrow(ctx);
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
 
     if (!user) throw new Error("User not found");
@@ -230,7 +230,7 @@ export const testTelegramConnection = mutation({
     const identity = await getCurrentUserOrThrow(ctx);
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
 
     if (!user) throw new Error("User not found");
@@ -279,7 +279,7 @@ export const startAutoPublish = mutation({
     const identity = await getCurrentUserOrThrow(ctx);
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
     if (!user) throw new Error("User not found");
 
@@ -327,7 +327,7 @@ export const stopAutoPublish = mutation({
     const identity = await getCurrentUserOrThrow(ctx);
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
     if (!user) throw new Error("User not found");
 

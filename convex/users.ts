@@ -2,26 +2,47 @@ import { v } from "convex/values";
 import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
 import { getCurrentUserOrThrow } from "./lib/auth";
 
+async function getUserBySupabaseId(ctx: any, supabaseId: string) {
+  return ctx.db
+    .query("users")
+    .withIndex("by_supabase_id", (q: any) => q.eq("supabaseId", supabaseId))
+    .unique();
+}
+
 export const store = mutation({
   args: {},
   handler: async (ctx) => {
     const identity = await getCurrentUserOrThrow(ctx);
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
-      .unique();
 
-    if (user !== null) {
-      // If we've seen this identity before but the name has changed, patch it.
-      if (user.name !== identity.name) {
-        await ctx.db.patch(user._id, { name: identity.name });
+    // Returning user — fast path
+    const existing = await getUserBySupabaseId(ctx, identity.subject);
+    if (existing) {
+      if (existing.name !== identity.name) {
+        await ctx.db.patch(existing._id, { name: identity.name });
       }
-      return user._id;
+      return existing._id;
     }
-    
-    // If it's a new identity, create a new `User`.
-    return await ctx.db.insert("users", {
-      clerkId: identity.subject,
+
+    // Migrated user: find by email so all their existing videos/settings stay linked
+    if (identity.email) {
+      const byEmail = await ctx.db
+        .query("users")
+        .withIndex("by_email", (q: any) => q.eq("email", identity.email))
+        .unique();
+
+      if (byEmail) {
+        await ctx.db.patch(byEmail._id, {
+          supabaseId: identity.subject,
+          name: identity.name ?? byEmail.name,
+          imageUrl: identity.pictureUrl ?? byEmail.imageUrl,
+        });
+        return byEmail._id;
+      }
+    }
+
+    // Brand new user
+    return ctx.db.insert("users", {
+      supabaseId: identity.subject,
       email: identity.email!,
       name: identity.name,
       imageUrl: identity.pictureUrl,
@@ -34,44 +55,8 @@ export const current = query({
   args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      return null;
-    }
-    return await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
-      .unique();
-  },
-});
-
-export const upsertFromClerk = internalMutation({
-  args: {
-    clerkId: v.string(),
-    email: v.string(),
-    name: v.optional(v.string()),
-    imageUrl: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .unique();
-
-    if (user !== null) {
-      await ctx.db.patch(user._id, {
-        name: args.name,
-        imageUrl: args.imageUrl,
-        email: args.email,
-      });
-    } else {
-      await ctx.db.insert("users", {
-        clerkId: args.clerkId,
-        email: args.email,
-        name: args.name,
-        imageUrl: args.imageUrl,
-        youtubeConnected: false,
-      });
-    }
+    if (!identity) return null;
+    return getUserBySupabaseId(ctx, identity.subject);
   },
 });
 
@@ -84,12 +69,8 @@ export const saveYoutubeTokens = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await getCurrentUserOrThrow(ctx);
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
-      .unique();
+    const user = await getUserBySupabaseId(ctx, identity.subject);
     if (!user) throw new Error("User not found");
-
     await ctx.db.patch(user._id, {
       youtubeConnected: true,
       youtubeChannelName: args.channelName,
@@ -104,12 +85,8 @@ export const disconnectYoutube = mutation({
   args: {},
   handler: async (ctx) => {
     const identity = await getCurrentUserOrThrow(ctx);
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
-      .unique();
+    const user = await getUserBySupabaseId(ctx, identity.subject);
     if (!user) throw new Error("User not found");
-
     await ctx.db.patch(user._id, {
       youtubeConnected: false,
       youtubeChannelName: undefined,
@@ -120,31 +97,9 @@ export const disconnectYoutube = mutation({
   },
 });
 
-export const getByClerkId = query({
-  args: { clerkId: v.string() },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .unique();
-  },
-});
-
 export const internalGetById = internalQuery({
   args: { userId: v.id("users") },
-  handler: async (ctx, args) => {
-    return await ctx.db.get(args.userId);
-  },
-});
-
-export const internalGetByClerkId = internalQuery({
-  args: { clerkId: v.string() },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .unique();
-  },
+  handler: async (ctx, args) => ctx.db.get(args.userId),
 });
 
 export const internalUpdateYoutubeTokens = internalMutation({
@@ -161,6 +116,27 @@ export const internalUpdateYoutubeTokens = internalMutation({
   },
 });
 
+// Kept for data-import compatibility only — not used in new code
+export const upsertFromClerk = internalMutation({
+  args: {
+    clerkId: v.string(),
+    email: v.string(),
+    name: v.optional(v.string()),
+    imageUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
+      .unique();
+    if (user) {
+      await ctx.db.patch(user._id, { name: args.name, imageUrl: args.imageUrl, email: args.email });
+    } else {
+      await ctx.db.insert("users", { clerkId: args.clerkId, email: args.email, name: args.name, imageUrl: args.imageUrl, youtubeConnected: false });
+    }
+  },
+});
+
 export const deleteFromClerk = internalMutation({
   args: { clerkId: v.string() },
   handler: async (ctx, args) => {
@@ -168,9 +144,6 @@ export const deleteFromClerk = internalMutation({
       .query("users")
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
       .unique();
-
-    if (user !== null) {
-      await ctx.db.delete(user._id);
-    }
+    if (user) await ctx.db.delete(user._id);
   },
 });

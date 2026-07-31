@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { createClient } from "@/lib/supabase/server";
 import { v2 as cloudinary } from "cloudinary";
 
 cloudinary.config({
@@ -9,22 +9,20 @@ cloudinary.config({
 });
 
 export async function POST() {
-  // Only authenticated users can get an upload signature
-  const { userId } = await auth();
-  if (!userId) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const apiSecret = process.env.CLOUDINARY_API_SECRET;
   if (!apiSecret) {
-    console.error("CLOUDINARY_API_SECRET is not set");
     return NextResponse.json({ error: "Server misconfiguration" }, { status: 500 });
   }
 
   try {
     const timestamp = Math.round(Date.now() / 1000);
     const signature = cloudinary.utils.api_sign_request({ timestamp }, apiSecret);
-
     return NextResponse.json({
       signature,
       timestamp,

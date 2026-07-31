@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { createClient } from "@/lib/supabase/server";
 import { fetchMutation } from "convex/nextjs";
 import { api } from "../../../../../convex/_generated/api";
 
@@ -60,10 +60,10 @@ export async function GET(request: Request) {
     // Non-fatal — we still save the tokens even if the channel name fetch fails
   }
 
-  const { getToken } = await auth();
-  const convexToken = await getToken({ template: "convex" });
+  const supabase = await createClient();
+  const { data: { session } } = await supabase.auth.getSession();
 
-  if (!convexToken) {
+  if (!session) {
     return new Response("Not authenticated — please sign in first", { status: 401 });
   }
 
@@ -75,7 +75,7 @@ export async function GET(request: Request) {
       expiresIn: tokens.expires_in,
       channelName,
     },
-    { token: convexToken }
+    { token: session.access_token }
   );
 
   return Response.redirect(`${origin}/settings?youtube=connected`, 302);

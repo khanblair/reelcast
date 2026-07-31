@@ -27,7 +27,7 @@ export const backfillDurations = action({
     // (no auth). When authenticated, only processes the calling user's videos.
     const identity = await ctx.auth.getUserIdentity();
     const videos = await ctx.runQuery(internal.videos.listForBackfill, {
-      clerkId: identity?.subject,
+      supabaseId: identity?.subject,
     });
 
     // Only process videos that lack a duration and still have their Cloudinary file

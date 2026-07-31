@@ -3,7 +3,8 @@ import { v } from "convex/values";
 
 export default defineSchema({
   users: defineTable({
-    clerkId: v.string(),
+    supabaseId: v.optional(v.string()),
+    clerkId: v.optional(v.string()),   // kept for imported data — do not use in new queries
     email: v.string(),
     name: v.optional(v.string()),
     imageUrl: v.optional(v.string()),
@@ -12,7 +13,10 @@ export default defineSchema({
     youtubeAccessToken: v.optional(v.string()),
     youtubeRefreshToken: v.optional(v.string()),
     youtubeTokenExpiry: v.optional(v.number()),
-  }).index("by_clerk_id", ["clerkId"]),
+  })
+    .index("by_supabase_id", ["supabaseId"])
+    .index("by_clerk_id", ["clerkId"])   // kept so imported data can be queried during migration
+    .index("by_email", ["email"]),
 
   videos: defineTable({
     userId: v.id("users"),

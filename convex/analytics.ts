@@ -8,7 +8,7 @@ export const getDashboardStats = query({
 
     const user = await ctx.db
       .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
       .unique();
 
     if (!user) return null;

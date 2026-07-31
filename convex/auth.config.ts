@@ -1,10 +1,10 @@
 const authConfig = {
   providers: [
     {
-      domain: process.env.CLERK_ISSUER_URL || "https://genuine-dingo-34.clerk.accounts.dev",
-      applicationID: "convex",
+      domain: "https://jampoxqwvxuxvhvbjehq.supabase.co/auth/v1",
+      applicationID: "authenticated",
     },
-  ]
+  ],
 };
 
 export default authConfig;

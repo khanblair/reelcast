@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { Youtube, MessageCircle, CheckCircle, XCircle, Settings, Sparkles } from "lucide-react";
@@ -25,18 +24,18 @@ function DiscordIcon({ className }: { className?: string }) {
 }
 
 export default function SettingsPage() {
-  const searchParams = useSearchParams();
   const [youtubeBanner, setYoutubeBanner] = useState<{ success: boolean; message: string } | null>(null);
 
   useEffect(() => {
-    const yt = searchParams.get("youtube");
+    const params = new URLSearchParams(window.location.search);
+    const yt = params.get("youtube");
     if (yt === "connected") {
       setYoutubeBanner({ success: true, message: "YouTube connected successfully!" });
     } else if (yt === "error") {
-      const reason = searchParams.get("reason") ?? "unknown";
+      const reason = params.get("reason") ?? "unknown";
       setYoutubeBanner({ success: false, message: `YouTube connection failed (${reason}). Please try again.` });
     }
-  }, [searchParams]);
+  }, []);
 
   const settings = useQuery(api.settings.get);
   const updateSettings = useMutation(api.settings.update);

@@ -10,25 +10,35 @@ const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
 function useSupabaseAuth() {
   const [isAuthenticated, setAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setAuthenticated(!!data.session));
+    supabase.auth.getSession().then(({ data }) => {
+      setAuthenticated(!!data.session);
+      setIsLoading(false);
+    });
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
       setAuthenticated(!!session);
+      setIsLoading(false);
     });
     return () => subscription.unsubscribe();
   }, [supabase]);
 
   const fetchAccessToken = useCallback(async ({ forceRefreshToken }: { forceRefreshToken: boolean }) => {
     if (forceRefreshToken) await supabase.auth.refreshSession();
-    const { data } = await supabase.auth.getSession();
-    return data.session?.access_token ?? null;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return null;
+    // Exchange Supabase session for our own RS256-signed JWT that Convex can validate
+    const res = await fetch("/api/auth/token");
+    if (!res.ok) return null;
+    const { token } = await res.json();
+    return token as string;
   }, [supabase]);
 
   return useMemo(
-    () => ({ isLoading: false, isAuthenticated, fetchAccessToken }),
-    [isAuthenticated, fetchAccessToken]
+    () => ({ isLoading, isAuthenticated, fetchAccessToken }),
+    [isLoading, isAuthenticated, fetchAccessToken]
   );
 }
 

@@ -8,8 +8,8 @@ import { refreshYouTubeToken } from "../lib/youtube";
 export const testYoutube = action({
   args: {},
   handler: async (ctx): Promise<{ success: boolean; channelName?: string; error?: string }> => {
-    const identity = await getCurrentUserOrThrow(ctx);
-    const user = await ctx.runQuery(api.users.getByClerkId, { clerkId: identity.subject });
+    await getCurrentUserOrThrow(ctx);
+    const user = await ctx.runQuery(api.users.current, {});
 
     if (!user) return { success: false, error: "User not found." };
     if (!user.youtubeConnected || !user.youtubeAccessToken) {
@@ -58,8 +58,8 @@ export const testYoutube = action({
 export const testDiscord = action({
   args: {},
   handler: async (ctx): Promise<{ success: boolean; error?: string }> => {
-    const identity = await getCurrentUserOrThrow(ctx);
-    const user = await ctx.runQuery(api.users.getByClerkId, { clerkId: identity.subject });
+    await getCurrentUserOrThrow(ctx);
+    const user = await ctx.runQuery(api.users.current, {});
     if (!user) return { success: false, error: "User not found." };
 
     const settings = await ctx.runQuery(api.settings.getByUserId, { userId: user._id });
@@ -89,8 +89,8 @@ export const testDiscord = action({
 export const testTelegram = action({
   args: {},
   handler: async (ctx): Promise<{ success: boolean; error?: string }> => {
-    const identity = await getCurrentUserOrThrow(ctx);
-    const user = await ctx.runQuery(api.users.getByClerkId, { clerkId: identity.subject });
+    await getCurrentUserOrThrow(ctx);
+    const user = await ctx.runQuery(api.users.current, {});
     if (!user) return { success: false, error: "User not found." };
 
     const settings = await ctx.runQuery(api.settings.getByUserId, { userId: user._id });

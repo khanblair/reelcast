@@ -11,6 +11,7 @@ const PROTECTED_ROUTES = [
   "/upload",
   "/video",
   "/ai-config",
+  "/profile",
 ];
 
 function isProtected(pathname: string) {
@@ -50,7 +51,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    String.raw`/((?!_next|[^?]*\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)`,
     "/(api|trpc)(.*)",
   ],
 };

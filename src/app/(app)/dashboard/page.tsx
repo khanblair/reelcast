@@ -114,7 +114,7 @@ export default function DashboardPage() {
   const jobs            = useQuery(api.jobs.list);
   const userSettings    = useQuery(api.settings.get);
   const scheduledVideos = useQuery(api.videos.listScheduled);
-  const [period, setPeriod] = useState<Period>("week");
+  const [period, setPeriod] = useState<Period>("today");
 
   // Live countdown to next auto-publish run
   const [autoCountdownMs, setAutoCountdownMs] = useState(0);

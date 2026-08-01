@@ -18,7 +18,7 @@ function isProtected(pathname: string) {
   return PROTECTED_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"));
 }
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(

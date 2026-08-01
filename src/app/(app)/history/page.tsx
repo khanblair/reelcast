@@ -281,10 +281,10 @@ export default function HistoryPage() {
                               <div className="flex items-center gap-1 pt-0.5">
                                 <span>Video:</span>
                                 <Link
-                                  href={`/video/${video._id}`}
+                                  href={`/video/${(video as any)._id}`}
                                   className="text-primary hover:underline inline-flex items-center gap-1"
                                 >
-                                  {video.title}
+                                  {(video as any).title}
                                   <ExternalLink className="h-3 w-3" />
                                 </Link>
                               </div>

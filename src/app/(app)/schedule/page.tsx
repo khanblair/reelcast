@@ -672,7 +672,7 @@ export default function SchedulePage() {
                           <div key={id} className="flex items-center justify-between gap-3 text-xs">
                             <div className="flex items-center gap-2 min-w-0">
                               <span className="text-muted-foreground font-mono w-4 shrink-0 tabular-nums">{i + 1}.</span>
-                              <span className="truncate">{(v as any)?.aiTitle ?? v?.title}</span>
+                              <span className="truncate">{(v as any)?.aiTitle ?? (v as any)?.title}</span>
                             </div>
                             <span className="text-muted-foreground shrink-0">
                               {format(time, "MMM d, h:mm a")}

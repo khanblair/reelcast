@@ -82,7 +82,7 @@ export default function SettingsPage() {
     if (!value) return;
     setSavingTelegram(true);
     try {
-      await updateSettings({ telegramChatId: value });
+      await updateSettings({ telegramChatId: value, notificationsEnabled: true });
       setTelegramInput("");
     } finally {
       setSavingTelegram(false);
@@ -94,7 +94,7 @@ export default function SettingsPage() {
     if (!value) return;
     setSavingDiscord(true);
     try {
-      await updateSettings({ discordWebhookUrl: value });
+      await updateSettings({ discordWebhookUrl: value, notificationsEnabled: true });
       setDiscordInput("");
     } finally {
       setSavingDiscord(false);
@@ -379,6 +379,14 @@ export default function SettingsPage() {
                   >
                     Disconnect
                   </Button>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <Label>Enable Notifications</Label>
+                  <Switch
+                    checked={settings.notificationsEnabled}
+                    onCheckedChange={(c) => updateSettings({ notificationsEnabled: c })}
+                  />
                 </div>
 
                 <Button

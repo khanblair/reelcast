@@ -173,7 +173,8 @@ export const disconnectTelegram = mutation({
     if (settings) {
       await ctx.db.patch(settings._id, {
         telegramChatId: undefined,
-        notificationsEnabled: false,
+        // Only disable notifications if Discord is also not connected
+        notificationsEnabled: settings.discordWebhookUrl ? settings.notificationsEnabled : false,
       });
     }
   },

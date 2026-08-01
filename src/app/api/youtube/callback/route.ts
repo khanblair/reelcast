@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { mintConvexJwt } from "@/lib/convex-jwt";
 import { fetchMutation } from "convex/nextjs";
 import { api } from "../../../../../convex/_generated/api";
 
@@ -10,20 +11,25 @@ function getAppOrigin(request: Request) {
 }
 
 export async function GET(request: Request) {
+  const origin = getAppOrigin(request);
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
+  const error = url.searchParams.get("error");
+
+  if (error) {
+    return Response.redirect(`${origin}/settings?youtube=error&reason=${encodeURIComponent(error)}`, 302);
+  }
 
   if (!code) {
-    return new Response("Missing authorization code", { status: 400 });
+    return Response.redirect(`${origin}/settings?youtube=error&reason=missing_code`, 302);
   }
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
-    return new Response("Missing Google OAuth client credentials", { status: 500 });
+    return Response.redirect(`${origin}/settings?youtube=error&reason=server_config`, 302);
   }
 
-  const origin = getAppOrigin(request);
   const redirectUri = `${origin}/api/youtube/callback`;
 
   const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
@@ -40,12 +46,13 @@ export async function GET(request: Request) {
 
   if (!tokenResponse.ok) {
     const errorText = await tokenResponse.text();
-    return new Response(`Google token exchange failed: ${errorText}`, { status: 500 });
+    console.error("YouTube token exchange failed:", errorText);
+    return Response.redirect(`${origin}/settings?youtube=error&reason=token_exchange`, 302);
   }
 
   const tokens = await tokenResponse.json();
 
-  // Fetch the connected channel name so we can display it in settings
+  // Fetch connected channel name
   let channelName: string | undefined;
   try {
     const channelRes = await fetch(
@@ -57,26 +64,40 @@ export async function GET(request: Request) {
       channelName = channelData.items?.[0]?.snippet?.title as string | undefined;
     }
   } catch {
-    // Non-fatal — we still save the tokens even if the channel name fetch fails
+    // Non-fatal — still save the tokens
   }
 
   const supabase = await createClient();
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  if (!session) {
-    return new Response("Not authenticated — please sign in first", { status: 401 });
+  if (!user) {
+    return Response.redirect(`${origin}/sign-in?redirect_url=/settings`, 302);
   }
 
-  await fetchMutation(
-    api.users.saveYoutubeTokens,
-    {
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      expiresIn: tokens.expires_in,
-      channelName,
-    },
-    { token: session.access_token }
+  // Mint a proper Convex RS256 JWT (the Supabase access_token uses a different
+  // issuer and would be rejected by our Convex auth config)
+  const convexToken = mintConvexJwt(
+    user.id,
+    user.email,
+    user.user_metadata?.full_name ?? user.email,
+    user.user_metadata?.avatar_url,
   );
+
+  try {
+    await fetchMutation(
+      api.users.saveYoutubeTokens,
+      {
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        expiresIn: tokens.expires_in,
+        channelName,
+      },
+      { token: convexToken }
+    );
+  } catch (err) {
+    console.error("Failed to save YouTube tokens to Convex:", err);
+    return Response.redirect(`${origin}/settings?youtube=error&reason=save_failed`, 302);
+  }
 
   return Response.redirect(`${origin}/settings?youtube=connected`, 302);
 }

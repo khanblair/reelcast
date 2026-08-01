@@ -46,6 +46,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(signInUrl);
   }
 
+  // Prevent the browser from caching protected pages in bfcache.
+  // Without this, back/forward navigation restores stale React auth state.
+  if (isProtected(request.nextUrl.pathname)) {
+    supabaseResponse.headers.set("Cache-Control", "no-store");
+  }
+
   return supabaseResponse;
 }
 

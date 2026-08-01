@@ -22,7 +22,19 @@ function useSupabaseAuth() {
       setAuthenticated(!!session);
       setIsLoading(false);
     });
-    return () => subscription.unsubscribe();
+
+    // When the browser restores a page from bfcache (back/forward navigation),
+    // React state is frozen at the moment it was cached. Force a reload so
+    // auth state is fresh rather than stale from a previous sign-out.
+    function handlePageShow(e: PageTransitionEvent) {
+      if (e.persisted) window.location.reload();
+    }
+    window.addEventListener("pageshow", handlePageShow);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener("pageshow", handlePageShow);
+    };
   }, [supabase]);
 
   const fetchAccessToken = useCallback(async ({ forceRefreshToken }: { forceRefreshToken: boolean }) => {

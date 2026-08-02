@@ -140,9 +140,11 @@ export default function DashboardPage() {
     () => filteredVideos.filter(v => v.status === "published").length,
     [filteredVideos]
   );
+  // Library-level totals — not period-filtered (showing 0 for "Today" would be misleading)
+  const totalVideos = useMemo(() => (videos ?? []).length, [videos]);
   const storageBytes = useMemo(
-    () => filteredVideos.reduce((s, v) => s + (v.rawFileSize ?? 0), 0),
-    [filteredVideos]
+    () => (videos ?? []).reduce((s, v) => s + (v.rawFileSize ?? 0), 0),
+    [videos]
   );
   const timelineData = useMemo(
     () => buildTimeline(videos ?? [], period),
@@ -245,7 +247,8 @@ export default function DashboardPage() {
             <Film className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{filteredVideos.length}</div>
+            <div className="text-2xl font-bold">{totalVideos}</div>
+            <p className="text-xs text-muted-foreground mt-0.5">all time</p>
           </CardContent>
         </Card>
 
@@ -256,6 +259,9 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{publishedCount}</div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {period === "today" ? "today" : period === "week" ? "this week" : period === "month" ? "this month" : "all time"}
+            </p>
           </CardContent>
         </Card>
 
@@ -298,6 +304,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatBytes(storageBytes)}</div>
+            <p className="text-xs text-muted-foreground mt-0.5">all time</p>
           </CardContent>
         </Card>
       </div>

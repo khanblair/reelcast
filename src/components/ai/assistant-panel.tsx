@@ -12,10 +12,9 @@ import {
   AlertCircle,
   Square,
   ChevronDown,
-  MoreHorizontal,
+  Menu,
   Plus,
   Trash2,
-  ChevronLeft,
   MessageSquare,
 } from "lucide-react";
 import {
@@ -138,15 +137,14 @@ function MarkdownContent({ content }: { content: string }) {
   );
 }
 
-// ─── History / session list view ──────────────────────────────────────────────
+// ─── Sidebar session list ─────────────────────────────────────────────────────
 
-function SessionList({
+function SessionSidebar({
   sessions,
   currentSessionId,
   onSelect,
   onDelete,
   onNewChat,
-  onBack,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sessions: any[];
@@ -154,69 +152,57 @@ function SessionList({
   onSelect: (id: Id<"aiSessions">) => void;
   onDelete: (id: Id<"aiSessions">) => void;
   onNewChat: () => void;
-  onBack: () => void;
 }) {
   return (
-    <div className="flex flex-col flex-1 min-h-0">
-      {/* Sub-header */}
-      <div className="px-4 py-2.5 border-b flex items-center gap-2 shrink-0">
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onBack}>
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <span className="text-sm font-medium">Conversations</span>
-      </div>
-
+    <div className="flex flex-col w-44 shrink-0 border-r bg-muted/20 min-h-0">
       {/* New chat */}
-      <div className="px-3 py-2.5 border-b shrink-0">
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full gap-2 justify-start"
+      <div className="px-2 py-2 border-b shrink-0">
+        <button
           onClick={onNewChat}
+          className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-3.5 w-3.5 shrink-0" />
           New chat
-        </Button>
+        </button>
       </div>
 
       {/* Session list */}
       <div className="flex-1 overflow-y-auto py-1">
         {sessions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-2 text-center px-4 py-8">
-            <MessageSquare className="h-8 w-8 text-muted-foreground/40" />
-            <p className="text-xs text-muted-foreground">No conversations yet</p>
+          <div className="flex flex-col items-center justify-center gap-1.5 text-center px-2 py-6">
+            <MessageSquare className="h-6 w-6 text-muted-foreground/30" />
+            <p className="text-[10px] text-muted-foreground leading-snug">
+              No conversations yet
+            </p>
           </div>
         ) : (
           sessions.map((session) => {
             const isActive = session._id === currentSessionId;
             const title = session.title ?? "New conversation";
-            const date = new Date(session.lastMessageAt).toLocaleDateString(
-              "en-US",
-              { month: "short", day: "numeric" },
-            );
             return (
               <div
                 key={session._id}
                 className={cn(
-                  "group flex items-center gap-2 px-3 py-2.5 cursor-pointer transition-colors hover:bg-accent/50",
+                  "group relative flex items-start px-2 py-2 cursor-pointer transition-colors hover:bg-accent/50",
                   isActive && "bg-accent",
                 )}
                 onClick={() => onSelect(session._id)}
               >
-                <MessageSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm truncate">{title}</p>
-                  <p className="text-[10px] text-muted-foreground">{date}</p>
-                </div>
+                <p className={cn(
+                  "text-[11px] leading-snug truncate flex-1 pr-5",
+                  isActive ? "text-foreground font-medium" : "text-muted-foreground",
+                )}>
+                  {title}
+                </p>
                 <button
-                  className="h-6 w-6 rounded flex items-center justify-center text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-all shrink-0"
+                  className="absolute right-1.5 top-2 h-5 w-5 rounded flex items-center justify-center text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-all"
                   onClick={(e) => {
                     e.stopPropagation();
                     onDelete(session._id);
                   }}
-                  title="Delete conversation"
+                  title="Delete"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <Trash2 className="h-3 w-3" />
                 </button>
               </div>
             );
@@ -386,75 +372,77 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-md flex flex-col p-0">
+      <SheetContent side="right" className="w-full sm:max-w-md flex flex-col p-0 overflow-hidden">
 
-        {/* ── Header ── */}
-        <SheetHeader className="px-4 py-3 border-b shrink-0">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Bot className="h-5 w-5 text-primary" />
-              <SheetTitle className="text-base">AI Assistant</SheetTitle>
-            </div>
+        {/* ── Header (full width) ── */}
+        <SheetHeader className="px-3 py-3 border-b shrink-0">
+          <div className="flex items-center gap-2">
+            {/* Menu icon — top LEFT */}
             <button
               onClick={() => setShowHistory((v) => !v)}
               className={cn(
-                "h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+                "h-7 w-7 rounded-md flex items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground shrink-0",
                 showHistory && "bg-accent text-foreground",
               )}
-              title="Conversations"
+              title={showHistory ? "Close sidebar" : "Conversations"}
             >
-              <MoreHorizontal className="h-4 w-4" />
+              <Menu className="h-4 w-4" />
             </button>
+
+            <Bot className="h-5 w-5 text-primary shrink-0" />
+            <SheetTitle className="text-base truncate">AI Assistant</SheetTitle>
           </div>
-          {!showHistory && (
-            <SheetDescription className="text-xs">
-              Ask about your video library, publishing schedule, or content strategy.
-            </SheetDescription>
-          )}
+          <SheetDescription className="text-xs pl-9">
+            Ask about your library, schedule, or content strategy.
+          </SheetDescription>
         </SheetHeader>
 
-        {/* ── History view ── */}
-        {showHistory ? (
-          <SessionList
-            sessions={sessions ?? []}
-            currentSessionId={currentSessionId}
-            onSelect={handleSelectSession}
-            onDelete={handleDeleteSession}
-            onNewChat={handleNewChat}
-            onBack={() => setShowHistory(false)}
-          />
-        ) : (
-          <>
+        {/* ── Body: sidebar + chat side-by-side ── */}
+        <div className="flex flex-1 min-h-0 overflow-hidden">
+
+          {/* Left sidebar — only when showHistory */}
+          {showHistory && (
+            <SessionSidebar
+              sessions={sessions ?? []}
+              currentSessionId={currentSessionId}
+              onSelect={handleSelectSession}
+              onDelete={handleDeleteSession}
+              onNewChat={handleNewChat}
+            />
+          )}
+
+          {/* Chat area */}
+          <div className="flex flex-col flex-1 min-w-0 min-h-0">
             {/* Banners */}
             {noApiKey && (
-              <div className="mx-4 mt-3 flex items-start gap-2 rounded-lg border border-yellow-300 bg-yellow-50/60 dark:border-yellow-800 dark:bg-yellow-950/30 p-3 text-sm text-yellow-800 dark:text-yellow-300 shrink-0">
+              <div className="mx-3 mt-3 flex items-start gap-2 rounded-lg border border-yellow-300 bg-yellow-50/60 dark:border-yellow-800 dark:bg-yellow-950/30 p-3 text-sm text-yellow-800 dark:text-yellow-300 shrink-0">
                 <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                 <span>
-                  No DeepSeek API key configured.{" "}
+                  No DeepSeek API key.{" "}
                   <Link
                     href={"/settings/ai" as Route}
                     className="underline underline-offset-2 font-medium"
                     onClick={onClose}
                   >
-                    Add your key in Settings
+                    Add key in Settings
                   </Link>
                   .
                 </span>
               </div>
             )}
             {errorMsg && (
-              <div className="mx-4 mt-3 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive shrink-0">
+              <div className="mx-3 mt-3 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive shrink-0">
                 <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                {errorMsg}
+                <span className="break-words min-w-0">{errorMsg}</span>
               </div>
             )}
 
-            {/* Messages */}
+            {/* Messages scroll area */}
             <div className="flex-1 min-h-0 relative">
               <div
                 ref={scrollRef}
                 onScroll={handleScroll}
-                className="h-full overflow-y-auto px-4 py-4 space-y-3"
+                className="h-full overflow-y-auto px-3 py-4 space-y-3"
               >
                 {dbMessages === undefined && currentSessionId ? (
                   <div className="flex items-center justify-center h-full">
@@ -475,32 +463,30 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
                     <div
                       key={msg._id}
                       className={cn(
-                        "flex items-end gap-2",
+                        "flex items-end gap-1.5",
                         msg.role === "user" ? "flex-row-reverse" : "",
                       )}
                     >
                       {/* Avatar */}
                       <div
                         className={cn(
-                          "h-7 w-7 rounded-full flex items-center justify-center shrink-0 mb-0.5",
+                          "h-6 w-6 rounded-full flex items-center justify-center shrink-0 mb-0.5",
                           msg.role === "user"
                             ? "bg-primary text-primary-foreground"
                             : "bg-muted text-muted-foreground",
                         )}
                       >
                         {msg.role === "user" ? (
-                          <User className="h-3.5 w-3.5" />
+                          <User className="h-3 w-3" />
                         ) : (
-                          <Bot className="h-3.5 w-3.5" />
+                          <Bot className="h-3 w-3" />
                         )}
                       </div>
 
-                      {/* Bubble — max 75% width, auto-sized to content */}
+                      {/* Bubble — max 75% width, content-sized */}
                       <div
                         className={cn(
-                          "rounded-2xl px-3 py-2 text-sm break-words",
-                          // 75% max so it never spans the full width
-                          "max-w-[75%]",
+                          "rounded-2xl px-3 py-2 text-sm break-words max-w-[75%]",
                           msg.role === "user"
                             ? "bg-primary text-primary-foreground rounded-br-sm whitespace-pre-wrap leading-relaxed"
                             : "bg-muted text-foreground rounded-bl-sm",
@@ -518,9 +504,9 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
 
                 {/* Typing indicator */}
                 {loading && (
-                  <div className="flex items-end gap-2">
-                    <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center shrink-0 mb-0.5">
-                      <Bot className="h-3.5 w-3.5 text-muted-foreground" />
+                  <div className="flex items-end gap-1.5">
+                    <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center shrink-0 mb-0.5">
+                      <Bot className="h-3 w-3 text-muted-foreground" />
                     </div>
                     <div className="rounded-2xl rounded-bl-sm bg-muted px-3 py-2.5 flex items-center gap-1">
                       <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:0ms]" />
@@ -535,7 +521,7 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
               {showScrollBtn && (
                 <button
                   onClick={() => scrollToBottom(true)}
-                  className="absolute bottom-3 right-3 z-10 h-8 w-8 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 transition-colors"
+                  className="absolute bottom-3 right-3 z-10 h-7 w-7 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 transition-colors"
                   aria-label="Scroll to bottom"
                 >
                   <ChevronDown className="h-4 w-4" />
@@ -544,16 +530,16 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
             </div>
 
             {/* Input bar */}
-            <div className="px-4 py-3 border-t shrink-0">
+            <div className="px-3 py-3 border-t shrink-0">
               <div className="flex gap-2">
                 <Input
                   ref={inputRef}
-                  placeholder="Ask anything about your library..."
+                  placeholder="Ask anything..."
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   disabled={loading}
-                  className="flex-1"
+                  className="flex-1 text-sm"
                 />
                 {loading ? (
                   <Button
@@ -571,8 +557,8 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
                 )}
               </div>
             </div>
-          </>
-        )}
+          </div>
+        </div>
       </SheetContent>
     </Sheet>
   );

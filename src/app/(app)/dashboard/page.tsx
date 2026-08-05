@@ -481,7 +481,14 @@ export default function DashboardPage() {
       </div>
 
       {/* Recent videos */}
-      <h2 className="text-xl font-semibold tracking-tight">Recent Videos</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold tracking-tight">Recent Videos</h2>
+        <Link href="/drafts">
+          <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground hover:text-foreground">
+            View all <ArrowRight className="h-3.5 w-3.5" />
+          </Button>
+        </Link>
+      </div>
 
       {(videos ?? []).length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">

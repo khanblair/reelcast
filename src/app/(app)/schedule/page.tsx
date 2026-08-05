@@ -7,6 +7,7 @@ import {
   CalendarClock, CalendarCheck, Clock, X, ExternalLink,
   ChevronDown, ChevronUp, Zap,
   Calendar, CheckSquare, Square, Wand2, RefreshCw, CheckCircle, XCircle,
+  CalendarDays,
 } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
@@ -16,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
 import { format, formatDistanceToNow, isFuture, isPast } from "date-fns";
+import { WeekStrip } from "@/components/calendar/week-strip";
 
 type PageMode = "auto" | "single" | "metadata";
 type ScheduleFilter = "all" | "upcoming" | "past";
@@ -195,6 +197,13 @@ export default function SchedulePage() {
     [allVideos]
   );
 
+  const scheduledTimestamps = useMemo(() => {
+    if (!scheduledVideos) return [];
+    return scheduledVideos
+      .filter((v) => v.scheduledPublishAt && v.status === "scheduled")
+      .map((v) => v.scheduledPublishAt as number);
+  }, [scheduledVideos]);
+
   const filtered = useMemo(() => {
     if (!scheduledVideos) return [];
     return scheduledVideos.filter((v) => {
@@ -344,6 +353,21 @@ export default function SchedulePage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
+      {/* Week at a glance */}
+      <div className="mb-6 space-y-2">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">This Week</h2>
+          <Link
+            href="/content-calendar"
+            className="flex items-center gap-1 text-sm text-primary hover:underline"
+          >
+            <CalendarDays className="h-3.5 w-3.5" />
+            View Full Calendar
+          </Link>
+        </div>
+        <WeekStrip scheduledTimestamps={scheduledTimestamps} />
+      </div>
+
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>

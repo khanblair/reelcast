@@ -31,6 +31,7 @@ import type * as admin_usageLedger from "../admin/usageLedger.js";
 import type * as admin_users from "../admin/users.js";
 import type * as admin_videos from "../admin/videos.js";
 import type * as aiMessages from "../aiMessages.js";
+import type * as aiSessions from "../aiSessions.js";
 import type * as analytics from "../analytics.js";
 import type * as crons from "../crons.js";
 import type * as generations from "../generations.js";
@@ -82,6 +83,7 @@ declare const fullApi: ApiFromModules<{
   "admin/users": typeof admin_users;
   "admin/videos": typeof admin_videos;
   aiMessages: typeof aiMessages;
+  aiSessions: typeof aiSessions;
   analytics: typeof analytics;
   crons: typeof crons;
   generations: typeof generations;

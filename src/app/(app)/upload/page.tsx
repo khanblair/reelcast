@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery, useAction } from "convex/react";
 import {
   UploadCloud, FileVideo, CheckCircle, AlertCircle, X, Plus, FolderOpen,
 } from "lucide-react";
@@ -42,10 +42,16 @@ function getVideoDuration(file: File): Promise<number | undefined> {
 }
 
 export default function UploadPage() {
-  const createVideo = useMutation(api.videos.create);
+  const createVideo      = useMutation(api.videos.create);
+  const settings         = useQuery(api.settings.get);
+  const generateMetadata = useAction(api.actions.metadata.generateForUpload);
   const [items, setItems] = useState<UploadItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef   = useRef<HTMLInputElement>(null);
+  // Use a ref so the uploadOne closure always reads the latest settings value
+  // without needing to be recreated every time settings loads.
+  const settingsRef = useRef(settings);
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
 
   const updateItem = useCallback((id: string, patch: Partial<UploadItem>) => {
     setItems((prev) => prev.map((x) => x.id === id ? { ...x, ...patch } : x));
@@ -103,11 +109,21 @@ export default function UploadPage() {
         progress: 100,
         videoId: videoId as Id<"videos">,
       });
+
+      // Auto-generate metadata if the user has it enabled
+      if (settingsRef.current?.aiAutoGenerate) {
+        try {
+          await generateMetadata({ videoId: videoId as Id<"videos"> });
+        } catch (e) {
+          // Non-critical: log but don't fail the upload
+          console.warn("Auto-generate metadata failed:", e);
+        }
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Upload failed";
       updateItem(item.id, { status: "error", error: message });
     }
-  }, [createVideo, updateItem]);
+  }, [createVideo, updateItem, generateMetadata]);
 
   const addFilesAndUpload = useCallback(async (files: FileList | File[]) => {
     const videoFiles = Array.from(files).filter((f) => f.type.startsWith("video/"));

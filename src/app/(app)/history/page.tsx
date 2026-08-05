@@ -14,18 +14,20 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { formatDistanceToNow } from "date-fns";
 import { formatDateTimeEAT, formatFullDateEAT } from "@/lib/eat";
 
-type JobFilter = "all" | "generation" | "publish" | "metadata" | "scheduled";
+type JobFilter = "all" | "generation" | "publish" | "metadata" | "scheduled" | "generations";
 
 const FILTER_TABS: { key: JobFilter; label: string }[] = [
-  { key: "all",       label: "All Jobs" },
-  { key: "generation", label: "AI Generation" },
-  { key: "publish",   label: "YouTube Publish" },
-  { key: "metadata",  label: "Metadata Queue" },
-  { key: "scheduled", label: "Scheduled Publish" },
+  { key: "all",         label: "All Jobs" },
+  { key: "generation",  label: "AI Generation" },
+  { key: "publish",     label: "YouTube Publish" },
+  { key: "metadata",    label: "Metadata Queue" },
+  { key: "scheduled",   label: "Scheduled Publish" },
+  { key: "generations", label: "Generations" },
 ];
 
 const STATUS_STYLES: Record<string, string> = {
   pending:    "bg-warning/20 text-warning border-warning/30",
+  submitted:  "bg-muted/40 text-muted-foreground border-muted/30",
   processing: "bg-primary/20 text-primary border-primary/30",
   completed:  "bg-success/20 text-success border-success/30",
   failed:     "bg-destructive/20 text-destructive border-destructive/30",
@@ -33,6 +35,7 @@ const STATUS_STYLES: Record<string, string> = {
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
   pending:    <Clock className="h-4 w-4 text-warning" />,
+  submitted:  <Clock className="h-4 w-4 text-muted-foreground" />,
   processing: <Loader2 className="h-4 w-4 animate-spin text-primary" />,
   completed:  <CheckCircle className="h-4 w-4 text-success" />,
   failed:     <XCircle className="h-4 w-4 text-destructive" />,
@@ -42,11 +45,12 @@ export default function HistoryPage() {
   const jobs            = useQuery(api.jobs.list);
   const videos          = useQuery(api.videos.list);
   const scheduledVideos = useQuery(api.videos.listScheduled);
+  const generations     = useQuery(api.generations.listByUser);
   const retryJob        = useMutation(api.jobs.retryJob);
   const [filter, setFilter]       = useState<JobFilter>("all");
   const [retryingId, setRetryingId] = useState<string | null>(null);
 
-  const loading = jobs === undefined || videos === undefined || scheduledVideos === undefined;
+  const loading = jobs === undefined || videos === undefined || scheduledVideos === undefined || generations === undefined;
 
   const videoMap = useMemo(
     () => new Map((videos ?? []).map((v) => [v._id, v])),
@@ -98,9 +102,10 @@ export default function HistoryPage() {
     return <div className="flex h-[80vh] items-center justify-center"><LoadingSpinner /></div>;
   }
 
-  const isMetadataTab  = filter === "metadata";
-  const isScheduledTab = filter === "scheduled";
-  const isJobsTab      = !isMetadataTab && !isScheduledTab;
+  const isMetadataTab    = filter === "metadata";
+  const isScheduledTab   = filter === "scheduled";
+  const isGenerationsTab = filter === "generations";
+  const isJobsTab        = !isMetadataTab && !isScheduledTab && !isGenerationsTab;
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -227,6 +232,86 @@ export default function HistoryPage() {
             icon={CalendarClock}
             title="No scheduled publishes"
             description="Go to Schedule → Single Video to pin a publish time for a ready video."
+          />
+        )
+      )}
+
+      {/* ── Generations tab ── */}
+      {isGenerationsTab && (
+        (generations ?? []).length > 0 ? (
+          <Card>
+            <CardContent className="p-0">
+              <div className="divide-y">
+                {(generations ?? []).map((gen) => {
+                  const video = videoMap.get(gen.videoId);
+                  return (
+                    <div key={gen._id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-3">
+                      <div className="flex items-start gap-3 min-w-0">
+                        {STATUS_ICONS[gen.status] || STATUS_ICONS.submitted}
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium text-sm">{gen.model}</span>
+                            <Badge variant="outline" className={`capitalize text-xs border ${STATUS_STYLES[gen.status] || STATUS_STYLES.submitted}`}>
+                              {gen.status}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground line-clamp-2">{gen.prompt}</p>
+                          <div className="text-xs text-muted-foreground space-y-0.5">
+                            <span>
+                              Created{" "}
+                              <span className="font-medium text-foreground">
+                                {formatDateTimeEAT(gen._creationTime)}
+                              </span>
+                            </span>
+                            {gen.status === "completed" && gen.generationTimeMs && (
+                              <div>
+                                Duration:{" "}
+                                <span className="font-medium text-foreground">
+                                  {(gen.generationTimeMs / 1000).toFixed(1)}s
+                                </span>
+                              </div>
+                            )}
+                            {gen.status === "failed" && gen.error && (
+                              <div className="text-destructive break-words">Error: {gen.error}</div>
+                            )}
+                            {video && (
+                              <div className="flex items-center gap-1 pt-0.5">
+                                <span>Video:</span>
+                                <Link
+                                  href={`/video/${(video as any)._id}`}
+                                  className="text-primary hover:underline inline-flex items-center gap-1"
+                                >
+                                  {(video as any).aiTitle ?? (video as any).title}
+                                  <ExternalLink className="h-3 w-3" />
+                                </Link>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      {gen.status === "completed" && (gen as any).outputVideoUrl && (
+                        <a
+                          href={(gen as any).outputVideoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="shrink-0"
+                        >
+                          <Button variant="ghost" size="sm">
+                            <ExternalLink className="h-3.5 w-3.5 mr-1" /> View Result
+                          </Button>
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <EmptyState
+            icon={Wand2}
+            title="No generations yet"
+            description="Use the AI Generate page to create your first video generation."
           />
         )
       )}

@@ -16,6 +16,11 @@ import {
   Wand2,
   Zap,
   AlertTriangle,
+  RefreshCw,
+  Eye,
+  ThumbsUp,
+  MessageSquare,
+  Clock,
 } from "lucide-react";
 import { api } from "../../../../../convex/_generated/api";
 import { Id } from "../../../../../convex/_generated/dataModel";
@@ -46,8 +51,16 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
   const updatePublishAs = useMutation(api.videos.updatePublishAs);
   const triggerPublish = useMutation(api.jobs.create);
   const triggerGeneration = useMutation(api.jobs.create);
+  const schedulePublishMutation = useMutation(api.videos.schedulePublish);
   const deleteVideoAction = useAction(api.actions.deleteVideo.deleteVideo);
   const generateMetadata = useAction(api.actions.metadata.generateForUpload);
+  const fetchVideoAnalytics = useAction(api.actions.youtubeAnalytics.fetchForVideo);
+
+  // YouTube analytics — only fetched when video is published
+  const videoAnalytics = useQuery(
+    api.videoAnalytics.getForVideo,
+    video?.publishedVideoId ? { videoId } : "skip"
+  );
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -55,6 +68,11 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
   const [regenerating, setRegenerating] = useState(false);
   const [regenError, setRegenError] = useState<string | null>(null);
   const [countdownMs, setCountdownMs] = useState(0);
+  const [showScheduleDialog, setShowScheduleDialog] = useState(false);
+  const [scheduleTime, setScheduleTime] = useState("");
+  const [scheduling, setScheduling] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [refreshingAnalytics, setRefreshingAnalytics] = useState(false);
 
   // Position-based estimated auto-publish time for this video
   const estimatedPublishAt = useMemo(() => {
@@ -138,6 +156,36 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
       setRegenError(err instanceof Error ? err.message : "Regeneration failed");
     } finally {
       setRegenerating(false);
+    }
+  };
+
+  const handleSchedule = async () => {
+    if (!scheduleTime) return;
+    setScheduling(true);
+    setScheduleError(null);
+    try {
+      await schedulePublishMutation({
+        id: video._id,
+        scheduledAt: new Date(scheduleTime).getTime(),
+        privacyStatus: (video.privacyStatus ?? "public") as "private" | "public" | "unlisted",
+      });
+      setShowScheduleDialog(false);
+      setScheduleTime("");
+    } catch (err) {
+      setScheduleError(err instanceof Error ? err.message : "Scheduling failed");
+    } finally {
+      setScheduling(false);
+    }
+  };
+
+  const handleRefreshAnalytics = async () => {
+    setRefreshingAnalytics(true);
+    try {
+      await fetchVideoAnalytics({ videoId });
+    } catch (e) {
+      console.error("Analytics refresh failed:", e);
+    } finally {
+      setRefreshingAnalytics(false);
     }
   };
 
@@ -259,7 +307,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                     </option>
                   ))}
                 </Select>
-                <Button variant="outline">
+                <Button variant="outline" onClick={() => setShowScheduleDialog(true)}>
                   <CalendarIcon className="mr-2 h-4 w-4" /> Schedule
                 </Button>
                 <Button onClick={handlePublish} className="bg-primary hover:bg-primary/90 text-white">
@@ -332,6 +380,55 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete Permanently
                 </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Schedule publish dialog */}
+      <Dialog open={showScheduleDialog} onOpenChange={(open) => { setShowScheduleDialog(open); if (!open) { setScheduleTime(""); setScheduleError(null); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CalendarIcon className="h-5 w-5" />
+              Schedule Publish
+            </DialogTitle>
+            <DialogDescription>
+              Choose when to publish{" "}
+              <span className="font-medium text-foreground">
+                &ldquo;{video.aiTitle ?? video.title}&rdquo;
+              </span>{" "}
+              to YouTube. Time is in your local timezone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <input
+              type="datetime-local"
+              value={scheduleTime}
+              min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)}
+              onChange={(e) => setScheduleTime(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            />
+          </div>
+          {scheduleError && (
+            <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
+              {scheduleError}
+            </p>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => { setShowScheduleDialog(false); setScheduleTime(""); setScheduleError(null); }}
+              disabled={scheduling}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSchedule} disabled={!scheduleTime || scheduling}>
+              {scheduling ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Scheduling…</>
+              ) : (
+                <><CalendarIcon className="mr-2 h-4 w-4" />Schedule</>
               )}
             </Button>
           </DialogFooter>
@@ -539,6 +636,78 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
             </p>
           )}
           <MetadataEditor video={video as VideoType} />
+
+          {/* YouTube Metrics — shown for published videos */}
+          {video.status === "published" && video.publishedVideoId && (
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Youtube className="h-4 w-4 text-red-500" />
+                    YouTube Metrics
+                  </CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRefreshAnalytics}
+                    disabled={refreshingAnalytics}
+                    className="h-7 text-xs"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${refreshingAnalytics ? "animate-spin" : ""}`} />
+                    <span className="ml-1">Refresh</span>
+                  </Button>
+                </div>
+                {videoAnalytics && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Last updated: {formatDateTimeEAT((videoAnalytics as any).fetchedAt)}
+                  </p>
+                )}
+              </CardHeader>
+              <CardContent>
+                {videoAnalytics ? (
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Eye className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <div>
+                        <div className="font-semibold">{((videoAnalytics as any).views ?? 0).toLocaleString()}</div>
+                        <div className="text-xs text-muted-foreground">Views</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <div>
+                        <div className="font-semibold">
+                          {(() => {
+                            const mins = (videoAnalytics as any).watchTimeMinutes ?? 0;
+                            return mins >= 60 ? `${(mins / 60).toFixed(1)}h` : `${mins}m`;
+                          })()}
+                        </div>
+                        <div className="text-xs text-muted-foreground">Watch Time</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <ThumbsUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <div>
+                        <div className="font-semibold">{((videoAnalytics as any).likes ?? 0).toLocaleString()}</div>
+                        <div className="text-xs text-muted-foreground">Likes</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <div>
+                        <div className="font-semibold">{((videoAnalytics as any).comments ?? 0).toLocaleString()}</div>
+                        <div className="text-xs text-muted-foreground">Comments</div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    No analytics data yet. Click Refresh to fetch from YouTube.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

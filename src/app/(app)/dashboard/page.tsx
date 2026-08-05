@@ -136,10 +136,13 @@ export default function DashboardPage() {
     () => (jobs ?? []).filter(j => j._creationTime >= rangeStart),
     [jobs, rangeStart]
   );
-  const publishedCount = useMemo(
-    () => filteredVideos.filter(v => v.status === "published").length,
-    [filteredVideos]
-  );
+  // Published count: filter by publishedAt, not _creationTime — videos are often
+  // created days before they go live, so creationTime-based filtering gives 0.
+  const publishedCount = useMemo(() => {
+    const all = videos ?? [];
+    if (period === "all") return all.filter(v => v.status === "published").length;
+    return all.filter(v => v.status === "published" && (v.publishedAt ?? 0) >= rangeStart).length;
+  }, [videos, period, rangeStart]);
   // Library-level totals — not period-filtered (showing 0 for "Today" would be misleading)
   const totalVideos = useMemo(() => (videos ?? []).length, [videos]);
   const storageBytes = useMemo(
@@ -150,14 +153,16 @@ export default function DashboardPage() {
     () => buildTimeline(videos ?? [], period),
     [videos, period]
   );
+  // Status breakdown shows current state of ALL videos — status is a present-tense
+  // property, not a historical event, so period-filtering it would hide most of the library.
   const statusData = useMemo(() => {
     const counts: Record<string, number> = {};
-    filteredVideos.forEach(v => { counts[v.status] = (counts[v.status] ?? 0) + 1; });
+    (videos ?? []).forEach(v => { counts[v.status] = (counts[v.status] ?? 0) + 1; });
     return Object.entries(counts).map(([status, count]) => ({
       name:  status.charAt(0).toUpperCase() + status.slice(1),
       count,
     }));
-  }, [filteredVideos]);
+  }, [videos]);
 
   // Pipeline counts
   const metadataQueueCount = useMemo(
@@ -421,7 +426,7 @@ export default function DashboardPage() {
         <Card className="md:col-span-3">
           <CardHeader>
             <CardTitle>Status breakdown</CardTitle>
-            <CardDescription>Distribution across current states</CardDescription>
+            <CardDescription>All videos by current status</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex flex-col sm:flex-row items-center gap-3">

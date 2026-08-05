@@ -4,30 +4,42 @@ import Link from "next/link";
 import Image from "next/image";
 import type { Route } from "next";
 import { usePathname } from "next/navigation";
+import { useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   Upload,
   Files,
   Calendar,
+  CalendarDays,
   History,
   BarChart,
   Settings,
   Sparkles,
+  ListOrdered,
+  TrendingUp,
+  Lightbulb,
+  ShieldCheck,
 } from "lucide-react";
 
 const NAV_ITEMS = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Generate", href: "/generate", icon: Sparkles },
-  { name: "Upload", href: "/upload", icon: Upload },
-  { name: "Library", href: "/drafts", icon: Files },
-  { name: "Schedule", href: "/schedule", icon: Calendar },
-  { name: "History", href: "/history", icon: History },
-  { name: "Analytics", href: "/analytics", icon: BarChart },
+  { name: "Dashboard",    href: "/dashboard",       icon: LayoutDashboard },
+  { name: "Generate",     href: "/generate",         icon: Sparkles },
+  { name: "Upload",       href: "/upload",           icon: Upload },
+  { name: "Library",      href: "/drafts",           icon: Files },
+  { name: "Queue",        href: "/queue",            icon: ListOrdered },
+  { name: "Schedule",     href: "/schedule",         icon: Calendar },
+  { name: "Calendar",     href: "/content-calendar", icon: CalendarDays },
+  { name: "Intelligence", href: "/intelligence",     icon: TrendingUp },
+  { name: "Ideas",        href: "/ideas",            icon: Lightbulb },
+  { name: "History",      href: "/history",          icon: History },
+  { name: "Analytics",    href: "/analytics",        icon: BarChart },
 ];
 
 export function SidebarNav({ onClick }: { onClick?: () => void }) {
   const pathname = usePathname();
+  const user = useQuery(api.users.current);
   return (
     <div className="flex h-full flex-col bg-sidebar">
       {/* Logo */}
@@ -76,6 +88,21 @@ export function SidebarNav({ onClick }: { onClick?: () => void }) {
           <Settings className="h-4 w-4" />
           Settings
         </Link>
+        {user?.isAdmin && (
+          <Link
+            href="/admin"
+            onClick={onClick}
+            className={cn(
+              "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+              pathname.startsWith("/admin")
+                ? "bg-secondary text-primary"
+                : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+            )}
+          >
+            <ShieldCheck className="h-4 w-4" />
+            Admin
+          </Link>
+        )}
       </div>
     </div>
   );

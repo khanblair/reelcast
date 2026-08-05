@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "../../../../../convex/_generated/api";
+import { AdminNav } from "@/components/admin/admin-nav";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import {
   Card,
@@ -15,36 +15,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-
-const ADMIN_NAV = [
-  { label: "Overview", href: "/admin" },
-  { label: "Users", href: "/admin/users" },
-  { label: "Quota", href: "/admin/quota" },
-  { label: "Storage", href: "/admin/storage" },
-  { label: "Settings", href: "/admin/settings" },
-];
-
-function AdminNav() {
-  const pathname = usePathname();
-  return (
-    <nav className="flex gap-1 border-b mb-8 overflow-x-auto">
-      {ADMIN_NAV.map((item) => (
-        <Link
-          key={item.href}
-          href={item.href}
-          className={cn(
-            "px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px",
-            pathname === item.href
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {item.label}
-        </Link>
-      ))}
-    </nav>
-  );
-}
 
 export default function AdminUsersPage() {
   const users = useQuery(api.admin.users.listAll, {});

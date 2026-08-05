@@ -38,7 +38,7 @@ export const getContext = query({
       .query("aiMessages")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .order("desc")
-      .take(20);
+      .take(50);
     return messages.reverse();
   },
 });

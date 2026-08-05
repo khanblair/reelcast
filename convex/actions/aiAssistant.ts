@@ -69,7 +69,12 @@ export const chat = action({
       `You are an AI assistant for Reelcast, a YouTube publishing platform. ` +
       `You help the user manage their video library, publishing schedule, and content strategy. ` +
       `You have access to the user's data: ${contextData}. ` +
-      `Current time: ${currentTime} EAT.`;
+      `Current time: ${currentTime} EAT (UTC+3, Kampala). ` +
+      `IMPORTANT FORMATTING RULES: ` +
+      `Never use emojis. Do not include any emoji characters anywhere in your responses. ` +
+      `Use markdown for formatting: **bold**, *italic*, bullet lists with -, numbered lists, ` +
+      `tables with | syntax, code blocks with \`\`\`, and headings with ## when appropriate. ` +
+      `Keep responses concise and actionable.`;
 
     // Build the history slice to send — exclude the message we just saved
     // (it is sent explicitly as the final "user" turn below) to avoid duplication.

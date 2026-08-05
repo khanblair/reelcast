@@ -55,9 +55,10 @@ function getRangeStart(period: Period): number {
   return 0;
 }
 
-function buildTimeline(videos: VideoType[], period: Period) {
+function buildPublishTimeline(videos: VideoType[], period: Period) {
   const now = Date.now();
   const msDay = 86_400_000;
+  const published = videos.filter(v => v.publishedAt);
 
   if (period === "today") {
     return Array.from({ length: 6 }, (_, i) => {
@@ -67,7 +68,7 @@ function buildTimeline(videos: VideoType[], period: Period) {
       const end   = start + 4 * 3_600_000;
       return {
         date:  `${i * 4}:00`,
-        count: videos.filter(v => v._creationTime >= start && v._creationTime < end).length,
+        count: published.filter(v => (v.publishedAt ?? 0) >= start && (v.publishedAt ?? 0) < end).length,
       };
     });
   }
@@ -79,7 +80,7 @@ function buildTimeline(videos: VideoType[], period: Period) {
       const start = d.getTime();
       return {
         date:  `${d.getMonth() + 1}/${d.getDate()}`,
-        count: videos.filter(v => v._creationTime >= start && v._creationTime < start + msDay).length,
+        count: published.filter(v => (v.publishedAt ?? 0) >= start && (v.publishedAt ?? 0) < start + msDay).length,
       };
     });
   }
@@ -91,7 +92,7 @@ function buildTimeline(videos: VideoType[], period: Period) {
       const d = new Date(start);
       return {
         date:  `${d.getMonth() + 1}/${d.getDate()}`,
-        count: videos.filter(v => v._creationTime >= start && v._creationTime < end).length,
+        count: published.filter(v => (v.publishedAt ?? 0) >= start && (v.publishedAt ?? 0) < end).length,
       };
     });
   }
@@ -104,7 +105,7 @@ function buildTimeline(videos: VideoType[], period: Period) {
     const end   = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime();
     return {
       date:  d.toLocaleString("default", { month: "short" }),
-      count: videos.filter(v => v._creationTime >= start && v._creationTime < end).length,
+      count: published.filter(v => (v.publishedAt ?? 0) >= start && (v.publishedAt ?? 0) < end).length,
     };
   });
 }
@@ -150,7 +151,7 @@ export default function DashboardPage() {
     [videos]
   );
   const timelineData = useMemo(
-    () => buildTimeline(videos ?? [], period),
+    () => buildPublishTimeline(videos ?? [], period),
     [videos, period]
   );
   // Status breakdown shows current state of ALL videos — status is a present-tense
@@ -383,12 +384,12 @@ export default function DashboardPage() {
       <div className="grid gap-4 grid-cols-1 md:grid-cols-7">
         <Card className="md:col-span-4">
           <CardHeader>
-            <CardTitle>Uploads over time</CardTitle>
+            <CardTitle>Publishes over time</CardTitle>
             <CardDescription>
-              {period === "today"  && "Hourly breakdown for today"}
-              {period === "week"   && "Daily breakdown for the last 7 days"}
-              {period === "month"  && "Weekly breakdown for the last 30 days"}
-              {period === "all"    && "Monthly breakdown across all time"}
+              {period === "today"  && "Hourly publishes for today"}
+              {period === "week"   && "Daily publishes for the last 7 days"}
+              {period === "month"  && "Weekly publishes for the last 30 days"}
+              {period === "all"    && "Monthly publishes across all time"}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -411,7 +412,7 @@ export default function DashboardPage() {
                   <Area
                     type="monotone"
                     dataKey="count"
-                    name="Videos"
+                    name="Published"
                     stroke="hsl(var(--primary))"
                     strokeWidth={2}
                     fill="url(#uploadGradient)"

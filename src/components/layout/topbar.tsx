@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import { Menu, User, LogOut } from "lucide-react";
+import { Menu, User, LogOut, BotMessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from 
 import { SidebarNav } from "./sidebar";
 import { NotificationsPopover } from "./notifications-popover";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { AssistantPanel } from "@/components/ai/assistant-panel";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import Image from "next/image";
@@ -47,6 +48,7 @@ export function Topbar() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
@@ -99,6 +101,14 @@ export function Topbar() {
 
         <div className="flex items-center gap-2 sm:gap-4">
           <ThemeToggle />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setAssistantOpen(true)}
+            aria-label="AI Assistant"
+          >
+            <BotMessageSquare className="h-5 w-5" />
+          </Button>
           <NotificationsPopover />
 
           {/* Profile dropdown */}
@@ -151,6 +161,8 @@ export function Topbar() {
           </div>
         </div>
       </header>
+
+      <AssistantPanel open={assistantOpen} onClose={() => setAssistantOpen(false)} />
 
       {/* Sign-out confirmation dialog */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>

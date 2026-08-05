@@ -1,4 +1,4 @@
-import { internalQuery } from "../_generated/server";
+import { internalQuery, query } from "../_generated/server";
 
 export const getSystemStats = internalQuery({
   args: {},
@@ -90,6 +90,65 @@ export const getSystemStats = internalQuery({
       publishSuccessRateLast7d,
       failedJobsLast24h,
       totalStorageBytes,
+    };
+  },
+});
+
+// ── Public query used by admin UI ─────────────────────────────────────────────
+export const getStats = query({
+  args: {},
+  handler: async (ctx) => {
+    const allUsers = await ctx.db.query("users").collect();
+    const totalUsers = allUsers.length;
+    const youtubeConnected = allUsers.filter((u) => u.youtubeConnected).length;
+    const adminCount = allUsers.filter((u) => u.isAdmin).length;
+
+    const allVideos = await ctx.db.query("videos").collect();
+    const totalVideos = allVideos.length;
+    const totalStorageBytes = allVideos.reduce(
+      (s, v) => s + (v.rawFileSize ?? 0),
+      0,
+    );
+    const publishedVideos = allVideos.filter(
+      (v) => v.status === "published",
+    ).length;
+
+    const now = Date.now();
+    const last24h = now - 86_400_000;
+
+    const startOfTodayUTC = new Date();
+    startOfTodayUTC.setUTCHours(0, 0, 0, 0);
+    const startOfTodayMs = startOfTodayUTC.getTime();
+
+    const allJobs = await ctx.db.query("jobs").collect();
+    const jobsToday = allJobs.filter(
+      (j) => (j.startedAt ?? 0) >= startOfTodayMs,
+    ).length;
+
+    const recentPublishJobs = allJobs.filter(
+      (j) => j.type === "publish" && (j.completedAt ?? 0) >= last24h,
+    );
+    const successRate24h =
+      recentPublishJobs.length > 0
+        ? recentPublishJobs.filter((j) => j.status === "completed").length /
+          recentPublishJobs.length
+        : null;
+
+    const allSettings = await ctx.db.query("settings").collect();
+    const autoPublishActive = allSettings.filter(
+      (s) => s.autoPublishEnabled,
+    ).length;
+
+    return {
+      totalUsers,
+      youtubeConnected,
+      adminCount,
+      totalVideos,
+      publishedVideos,
+      totalStorageBytes,
+      jobsToday,
+      successRate24h,
+      autoPublishActive,
     };
   },
 });

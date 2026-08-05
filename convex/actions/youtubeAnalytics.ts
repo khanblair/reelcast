@@ -15,6 +15,9 @@ function toYYYYMMDD(ts: number): string {
 /**
  * Returns a valid access token, refreshing it first if it's close to expiry.
  * Stores the new token in the database on refresh.
+ *
+ * On any refresh failure (expired or revoked refresh token), throws with
+ * `.code = 401` so callers can record `youtubeOAuthStatus` before re-throwing.
  */
 async function ensureValidToken(
   ctx: ActionCtx,
@@ -29,15 +32,26 @@ async function ensureValidToken(
     return user.youtubeAccessToken;
   }
   if (!user.youtubeRefreshToken) {
-    throw new Error("No YouTube refresh token available — reconnect your YouTube account");
+    const err = new Error("No YouTube refresh token available — reconnect your YouTube account");
+    (err as any).code = 401;
+    throw err;
   }
-  const { accessToken, expiresIn } = await refreshYouTubeToken(user.youtubeRefreshToken);
-  await ctx.runMutation(internal.users.internalUpdateYoutubeTokens, {
-    userId: user._id,
-    accessToken,
-    expiresIn,
-  });
-  return accessToken;
+  try {
+    const { accessToken, expiresIn } = await refreshYouTubeToken(user.youtubeRefreshToken);
+    await ctx.runMutation(internal.users.internalUpdateYoutubeTokens, {
+      userId: user._id,
+      accessToken,
+      expiresIn,
+    });
+    return accessToken;
+  } catch (refreshErr: any) {
+    // refreshYouTubeToken throws a plain Error on any HTTP failure (revoked or
+    // expired refresh token). Wrap it with code 401 so callers can record the
+    // OAuth status before propagating the error.
+    const wrapped = new Error(`YouTube token refresh failed: ${refreshErr.message}`);
+    (wrapped as any).code = 401;
+    throw wrapped;
+  }
 }
 
 /**

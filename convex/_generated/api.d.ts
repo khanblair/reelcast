@@ -8,14 +8,20 @@
  * @module
  */
 
+import type * as actions_aiAssistant from "../actions/aiAssistant.js";
 import type * as actions_autoPublish from "../actions/autoPublish.js";
 import type * as actions_backfillDurations from "../actions/backfillDurations.js";
+import type * as actions_contentIntelligence from "../actions/contentIntelligence.js";
 import type * as actions_deleteVideo from "../actions/deleteVideo.js";
+import type * as actions_email from "../actions/email.js";
 import type * as actions_generation from "../actions/generation.js";
 import type * as actions_metadata from "../actions/metadata.js";
+import type * as actions_oauthHealthCheck from "../actions/oauthHealthCheck.js";
+import type * as actions_publishNow from "../actions/publishNow.js";
 import type * as actions_storage from "../actions/storage.js";
 import type * as actions_telegram from "../actions/telegram.js";
 import type * as actions_testConnections from "../actions/testConnections.js";
+import type * as actions_youtubeAnalytics from "../actions/youtubeAnalytics.js";
 import type * as admin_quota from "../admin/quota.js";
 import type * as admin_stats from "../admin/stats.js";
 import type * as admin_users from "../admin/users.js";
@@ -38,6 +44,7 @@ import type * as settings from "../settings.js";
 import type * as testSupport from "../testSupport.js";
 import type * as usageLedger from "../usageLedger.js";
 import type * as users from "../users.js";
+import type * as videoAnalytics from "../videoAnalytics.js";
 import type * as videos from "../videos.js";
 
 import type {
@@ -47,14 +54,20 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "actions/aiAssistant": typeof actions_aiAssistant;
   "actions/autoPublish": typeof actions_autoPublish;
   "actions/backfillDurations": typeof actions_backfillDurations;
+  "actions/contentIntelligence": typeof actions_contentIntelligence;
   "actions/deleteVideo": typeof actions_deleteVideo;
+  "actions/email": typeof actions_email;
   "actions/generation": typeof actions_generation;
   "actions/metadata": typeof actions_metadata;
+  "actions/oauthHealthCheck": typeof actions_oauthHealthCheck;
+  "actions/publishNow": typeof actions_publishNow;
   "actions/storage": typeof actions_storage;
   "actions/telegram": typeof actions_telegram;
   "actions/testConnections": typeof actions_testConnections;
+  "actions/youtubeAnalytics": typeof actions_youtubeAnalytics;
   "admin/quota": typeof admin_quota;
   "admin/stats": typeof admin_stats;
   "admin/users": typeof admin_users;
@@ -77,6 +90,7 @@ declare const fullApi: ApiFromModules<{
   testSupport: typeof testSupport;
   usageLedger: typeof usageLedger;
   users: typeof users;
+  videoAnalytics: typeof videoAnalytics;
   videos: typeof videos;
 }>;
 

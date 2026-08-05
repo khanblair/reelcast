@@ -11,7 +11,7 @@ import { api } from "../_generated/api";
  * (BYOK model). Returns { error: "no_api_key" } if not configured.
  */
 export const chat = action({
-  args: { message: v.string() },
+  args: { message: v.string(), sessionId: v.id("aiSessions") },
   handler: async (ctx, args) => {
     // 1. Get current user
     const user = await ctx.runQuery(api.users.current);
@@ -26,12 +26,15 @@ export const chat = action({
 
     // 3. Persist the incoming user message
     await ctx.runMutation(api.aiMessages.append, {
+      sessionId: args.sessionId,
       role: "user",
       content: args.message,
     });
 
-    // 4. Fetch conversation history (last 20 messages, chronological)
-    const conversationHistory = await ctx.runQuery(api.aiMessages.getContext);
+    // 4. Fetch conversation history for this session
+    const conversationHistory = await ctx.runQuery(api.aiMessages.getContext, {
+      sessionId: args.sessionId,
+    });
 
     // 5. Build a rich context snapshot from the user's library and settings
     const videos = await ctx.runQuery(api.videos.list);
@@ -117,9 +120,13 @@ export const chat = action({
 
     // 8. Persist the assistant reply
     await ctx.runMutation(api.aiMessages.append, {
+      sessionId: args.sessionId,
       role: "assistant",
       content: responseText,
     });
+
+    // 9. Update session lastMessageAt
+    await ctx.runMutation(api.aiSessions.touch, { sessionId: args.sessionId });
 
     // 9. Return to caller
     return { response: responseText };

@@ -226,13 +226,21 @@ export default defineSchema({
     linkedVideoId: v.optional(v.id("videos")),
   }).index("by_user", ["userId"]).index("by_status", ["status"]),
 
+  // AI Assistant chat sessions
+  aiSessions: defineTable({
+    userId: v.id("users"),
+    title: v.optional(v.string()),
+    lastMessageAt: v.number(),
+  }).index("by_user", ["userId"]),
+
   // AI Assistant message history (DeepSeek chat)
   aiMessages: defineTable({
     userId: v.id("users"),
+    sessionId: v.optional(v.id("aiSessions")),
     role: v.union(v.literal("user"), v.literal("assistant")),
     content: v.string(),
     toolCalls: v.optional(v.any()),
-  }).index("by_user", ["userId"]),
+  }).index("by_user", ["userId"]).index("by_session", ["sessionId"]),
 
   // Daily YouTube API quota usage tracking
   youtubeQuotaUsage: defineTable({

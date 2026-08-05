@@ -482,9 +482,9 @@ export default function DashboardPage() {
       {/* Recent videos */}
       <h2 className="text-xl font-semibold tracking-tight">Recent Videos</h2>
 
-      {filteredVideos.length > 0 ? (
+      {(videos ?? []).length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {filteredVideos.slice(0, 8).map((video) => (
+          {(videos ?? []).slice(0, 8).map((video) => (
             <VideoCard
               key={video._id}
               video={video as VideoType}
@@ -495,8 +495,8 @@ export default function DashboardPage() {
       ) : (
         <EmptyState
           icon={Film}
-          title="No videos in this period"
-          description="Try a wider time range or upload new footage."
+          title="No videos yet"
+          description="Upload footage or generate a video to get started."
         />
       )}
     </div>

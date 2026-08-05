@@ -13,9 +13,17 @@ export default defineSchema({
     youtubeAccessToken: v.optional(v.string()),
     youtubeRefreshToken: v.optional(v.string()),
     youtubeTokenExpiry: v.optional(v.number()),
+    youtubeOAuthStatus: v.optional(v.union(
+      v.literal("connected"),
+      v.literal("token_expired"),
+      v.literal("revoked"),
+      v.literal("unknown"),
+    )),
+    isAdmin: v.optional(v.boolean()),
+    plan: v.optional(v.union(v.literal("free"), v.literal("pro"))),
   })
     .index("by_supabase_id", ["supabaseId"])
-    .index("by_clerk_id", ["clerkId"])   // kept so imported data can be queried during migration
+    .index("by_clerk_id", ["clerkId"])
     .index("by_email", ["email"]),
 
   videos: defineTable({
@@ -73,7 +81,8 @@ export default defineSchema({
     cloudinaryDeletedAt: v.optional(v.number()),
     privacyStatus: v.optional(v.union(v.literal("private"), v.literal("public"), v.literal("unlisted"))),
     publishAs: v.optional(v.union(v.literal("short"), v.literal("video"))),
-  }).index("by_user", ["userId"]).index("by_status", ["status"]),
+    publishOrder: v.optional(v.number()),
+  }).index("by_user", ["userId"]).index("by_status", ["status"]).index("by_user_status", ["userId", "status"]),
 
   jobs: defineTable({
     userId: v.id("users"),
@@ -88,7 +97,7 @@ export default defineSchema({
     error: v.optional(v.string()),
     startedAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),
-    metadata: v.optional(v.any()), // flexible for job specific metadata
+    metadata: v.optional(v.any()),
   }).index("by_user", ["userId"]).index("by_video", ["videoId"]).index("by_status", ["status"]),
 
   settings: defineTable({
@@ -101,6 +110,21 @@ export default defineSchema({
     notificationsEnabled: v.boolean(),
     telegramChatId: v.optional(v.string()),
     discordWebhookUrl: v.optional(v.string()),
+    // per-event notification toggles
+    notifyOnPublishSuccess: v.optional(v.boolean()),
+    notifyOnPublishFailure: v.optional(v.boolean()),
+    notifyOnMetadataReady: v.optional(v.boolean()),
+    notifyOnWeeklyDigest: v.optional(v.boolean()),
+    notifyOnStorageWarning: v.optional(v.boolean()),
+    discordMessageTemplate: v.optional(v.string()),
+    telegramMessageTemplate: v.optional(v.string()),
+    // BYOK: email (Resend)
+    resendApiKey: v.optional(v.string()),
+    emailFromAddress: v.optional(v.string()),
+    emailNotificationsEnabled: v.optional(v.boolean()),
+    // BYOK: DeepSeek (AI Assistant)
+    deepseekApiKey: v.optional(v.string()),
+    // AI metadata
     aiAutoGenerate: v.optional(v.boolean()),
     aiGenerateTitle: v.optional(v.boolean()),
     aiGenerateDescription: v.optional(v.boolean()),
@@ -109,6 +133,15 @@ export default defineSchema({
     aiLanguage: v.optional(v.string()),
     aiDescriptionLength: v.optional(v.string()),
     aiGuidelines: v.optional(v.string()),
+    // AI brand memory (structured)
+    aiNiche: v.optional(v.string()),
+    aiTargetAudience: v.optional(v.string()),
+    aiBrandVoice: v.optional(v.string()),
+    aiForbiddenWords: v.optional(v.string()),
+    aiCtaPreferences: v.optional(v.string()),
+    // Content intelligence
+    competitorChannelIds: v.optional(v.array(v.string())),
+    // Auto-publish
     autoPublishEnabled: v.optional(v.boolean()),
     autoPublishIntervalMs: v.optional(v.number()),
     autoPublishCount: v.optional(v.number()),
@@ -117,6 +150,7 @@ export default defineSchema({
     autoPublishNextAt: v.optional(v.number()),
     autoPublishTimeSlots: v.optional(v.array(v.number())),
     autoPublishTimezoneOffset: v.optional(v.number()),
+    // Veo defaults
     veoModel: v.optional(v.string()),
     veoResolution: v.optional(v.string()),
     veoAspectRatio: v.optional(v.string()),
@@ -156,6 +190,63 @@ export default defineSchema({
     message: v.string(),
     type: v.union(v.literal("info"), v.literal("success"), v.literal("warning"), v.literal("error")),
     isRead: v.boolean(),
-    link: v.optional(v.string()), // optional link to a video or page
+    link: v.optional(v.string()),
   }).index("by_user", ["userId"]).index("by_user_read", ["userId", "isRead"]),
+
+  // YouTube Analytics data cached from the YouTube Analytics API
+  videoAnalytics: defineTable({
+    userId: v.id("users"),
+    videoId: v.id("videos"),
+    youtubeVideoId: v.string(),
+    fetchedAt: v.number(),
+    views: v.optional(v.number()),
+    watchTimeMinutes: v.optional(v.number()),
+    avgViewDurationSec: v.optional(v.number()),
+    impressions: v.optional(v.number()),
+    ctr: v.optional(v.number()),
+    likes: v.optional(v.number()),
+    comments: v.optional(v.number()),
+    subscribersGained: v.optional(v.number()),
+    estimatedRevenue: v.optional(v.number()),
+    rpm: v.optional(v.number()),
+    cpm: v.optional(v.number()),
+    trafficSourceSearch: v.optional(v.number()),
+    trafficSourceSuggested: v.optional(v.number()),
+    trafficSourceExternal: v.optional(v.number()),
+  }).index("by_user", ["userId"]).index("by_video", ["videoId"]).index("by_user_fetched", ["userId", "fetchedAt"]),
+
+  // Idea Vault — user-saved content ideas
+  ideas: defineTable({
+    userId: v.id("users"),
+    title: v.string(),
+    notes: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
+    status: v.union(v.literal("concept"), v.literal("in_production"), v.literal("published")),
+    scheduledGenerateAt: v.optional(v.number()),
+    linkedVideoId: v.optional(v.id("videos")),
+  }).index("by_user", ["userId"]).index("by_status", ["status"]),
+
+  // AI Assistant message history (DeepSeek chat)
+  aiMessages: defineTable({
+    userId: v.id("users"),
+    role: v.union(v.literal("user"), v.literal("assistant")),
+    content: v.string(),
+    toolCalls: v.optional(v.any()),
+  }).index("by_user", ["userId"]),
+
+  // Daily YouTube API quota usage tracking
+  youtubeQuotaUsage: defineTable({
+    userId: v.id("users"),
+    date: v.string(), // YYYY-MM-DD
+    unitsUsed: v.number(),
+  }).index("by_user", ["userId"]).index("by_user_date", ["userId", "date"]),
+
+  // Monthly usage metering for Free/Pro plan limits
+  usageLedger: defineTable({
+    userId: v.id("users"),
+    month: v.string(), // YYYY-MM
+    videosUploaded: v.optional(v.number()),
+    metadataGenerated: v.optional(v.number()),
+    veoGenerated: v.optional(v.number()),
+  }).index("by_user", ["userId"]).index("by_user_month", ["userId", "month"]),
 });

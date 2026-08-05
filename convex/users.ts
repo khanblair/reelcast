@@ -147,3 +147,62 @@ export const deleteFromClerk = internalMutation({
     if (user) await ctx.db.delete(user._id);
   },
 });
+
+// ---------------------------------------------------------------------------
+// OAuth health status
+// ---------------------------------------------------------------------------
+
+const oauthStatusValidator = v.union(
+  v.literal("connected"),
+  v.literal("token_expired"),
+  v.literal("revoked"),
+  v.literal("unknown"),
+);
+
+/** Public mutation — lets the current user update their own OAuth status. */
+export const updateOAuthStatus = mutation({
+  args: { status: oauthStatusValidator },
+  handler: async (ctx, args) => {
+    const identity = await getCurrentUserOrThrow(ctx);
+    const user = await getUserBySupabaseId(ctx, identity.subject);
+    if (!user) throw new Error("User not found");
+    await ctx.db.patch(user._id, { youtubeOAuthStatus: args.status });
+  },
+});
+
+/** Internal mutation — used by the OAuth health-check cron/action. */
+export const internalUpdateOAuthStatus = internalMutation({
+  args: { userId: v.id("users"), status: oauthStatusValidator },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.userId, { youtubeOAuthStatus: args.status });
+  },
+});
+
+/** Public query — returns the current user's OAuth status fields. */
+export const getOAuthStatus = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+    const user = await getUserBySupabaseId(ctx, identity.subject);
+    if (!user) return null;
+    return {
+      youtubeOAuthStatus: user.youtubeOAuthStatus,
+      youtubeConnected: user.youtubeConnected,
+      youtubeChannelName: user.youtubeChannelName,
+    };
+  },
+});
+
+/** Internal query — returns all users who have YouTube connected.
+ *  Used by the OAuth health-check cron to iterate all connected accounts.
+ *  Full table scan is acceptable for the current user count; add an index
+ *  on youtubeConnected if this becomes a bottleneck.
+ */
+export const listConnectedUsers = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const allUsers = await ctx.db.query("users").collect();
+    return allUsers.filter((u) => u.youtubeConnected === true);
+  },
+});

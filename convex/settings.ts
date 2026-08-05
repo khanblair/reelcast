@@ -55,6 +55,23 @@ export const get = query({
         veoEnhancePrompt: undefined,
         veoPersonGeneration: undefined,
         veoNumberOfVideos: undefined,
+        resendApiKey: undefined,
+        emailFromAddress: undefined,
+        emailNotificationsEnabled: undefined,
+        deepseekApiKey: undefined,
+        notifyOnPublishSuccess: undefined,
+        notifyOnPublishFailure: undefined,
+        notifyOnMetadataReady: undefined,
+        notifyOnWeeklyDigest: undefined,
+        notifyOnStorageWarning: undefined,
+        discordMessageTemplate: undefined,
+        telegramMessageTemplate: undefined,
+        competitorChannelIds: undefined,
+        aiNiche: undefined,
+        aiTargetAudience: undefined,
+        aiBrandVoice: undefined,
+        aiForbiddenWords: undefined,
+        aiCtaPreferences: undefined,
       };
     }
 
@@ -92,6 +109,23 @@ export const update = mutation({
     veoEnhancePrompt: v.optional(v.boolean()),
     veoPersonGeneration: v.optional(v.string()),
     veoNumberOfVideos: v.optional(v.number()),
+    resendApiKey: v.optional(v.string()),
+    emailFromAddress: v.optional(v.string()),
+    emailNotificationsEnabled: v.optional(v.boolean()),
+    deepseekApiKey: v.optional(v.string()),
+    notifyOnPublishSuccess: v.optional(v.boolean()),
+    notifyOnPublishFailure: v.optional(v.boolean()),
+    notifyOnMetadataReady: v.optional(v.boolean()),
+    notifyOnWeeklyDigest: v.optional(v.boolean()),
+    notifyOnStorageWarning: v.optional(v.boolean()),
+    discordMessageTemplate: v.optional(v.string()),
+    telegramMessageTemplate: v.optional(v.string()),
+    competitorChannelIds: v.optional(v.array(v.string())),
+    aiNiche: v.optional(v.string()),
+    aiTargetAudience: v.optional(v.string()),
+    aiBrandVoice: v.optional(v.string()),
+    aiForbiddenWords: v.optional(v.string()),
+    aiCtaPreferences: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await getCurrentUserOrThrow(ctx);
@@ -134,6 +168,23 @@ export const update = mutation({
     if (args.veoEnhancePrompt !== undefined) updateData.veoEnhancePrompt = args.veoEnhancePrompt;
     if (args.veoPersonGeneration !== undefined) updateData.veoPersonGeneration = args.veoPersonGeneration;
     if (args.veoNumberOfVideos !== undefined) updateData.veoNumberOfVideos = args.veoNumberOfVideos;
+    if (args.resendApiKey !== undefined) updateData.resendApiKey = args.resendApiKey;
+    if (args.emailFromAddress !== undefined) updateData.emailFromAddress = args.emailFromAddress;
+    if (args.emailNotificationsEnabled !== undefined) updateData.emailNotificationsEnabled = args.emailNotificationsEnabled;
+    if (args.deepseekApiKey !== undefined) updateData.deepseekApiKey = args.deepseekApiKey;
+    if (args.notifyOnPublishSuccess !== undefined) updateData.notifyOnPublishSuccess = args.notifyOnPublishSuccess;
+    if (args.notifyOnPublishFailure !== undefined) updateData.notifyOnPublishFailure = args.notifyOnPublishFailure;
+    if (args.notifyOnMetadataReady !== undefined) updateData.notifyOnMetadataReady = args.notifyOnMetadataReady;
+    if (args.notifyOnWeeklyDigest !== undefined) updateData.notifyOnWeeklyDigest = args.notifyOnWeeklyDigest;
+    if (args.notifyOnStorageWarning !== undefined) updateData.notifyOnStorageWarning = args.notifyOnStorageWarning;
+    if (args.discordMessageTemplate !== undefined) updateData.discordMessageTemplate = args.discordMessageTemplate;
+    if (args.telegramMessageTemplate !== undefined) updateData.telegramMessageTemplate = args.telegramMessageTemplate;
+    if (args.competitorChannelIds !== undefined) updateData.competitorChannelIds = args.competitorChannelIds;
+    if (args.aiNiche !== undefined) updateData.aiNiche = args.aiNiche;
+    if (args.aiTargetAudience !== undefined) updateData.aiTargetAudience = args.aiTargetAudience;
+    if (args.aiBrandVoice !== undefined) updateData.aiBrandVoice = args.aiBrandVoice;
+    if (args.aiForbiddenWords !== undefined) updateData.aiForbiddenWords = args.aiForbiddenWords;
+    if (args.aiCtaPreferences !== undefined) updateData.aiCtaPreferences = args.aiCtaPreferences;
 
     if (settings) {
       await ctx.db.patch(settings._id, updateData);

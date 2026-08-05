@@ -272,9 +272,15 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
     scrollToBottom();
   }, [dbMessages, scrollToBottom]);
 
+  // Clear optimistic message the moment the real DB version arrives —
+  // don't wait for loading to finish, otherwise both show simultaneously.
   useEffect(() => {
-    if (dbMessages && optimisticMsg && !loading) setOptimisticMsg(null);
-  }, [dbMessages, loading, optimisticMsg]);
+    if (!optimisticMsg || !dbMessages) return;
+    const synced = dbMessages.some(
+      (m) => m.role === "user" && m.content === optimisticMsg.content,
+    );
+    if (synced) setOptimisticMsg(null);
+  }, [dbMessages, optimisticMsg]);
 
   const handleScroll = () => {
     const el = scrollRef.current;

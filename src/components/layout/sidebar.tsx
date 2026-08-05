@@ -90,7 +90,7 @@ export function SidebarNav({ onClick }: { onClick?: () => void }) {
         </Link>
         {user?.isAdmin && (
           <Link
-            href="/admin"
+            href={"/admin" as Route}
             onClick={onClick}
             className={cn(
               "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",

@@ -148,15 +148,9 @@ export default function AdminVideosPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              asChild
+                              onClick={() => window.open(`https://youtube.com/watch?v=${video.publishedVideoId}`, "_blank")}
                             >
-                              <a
-                                href={`https://youtube.com/watch?v=${video.publishedVideoId}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                <ExternalLink className="h-4 w-4" />
-                              </a>
+                              <ExternalLink className="h-4 w-4" />
                             </Button>
                           )}
                           <Button

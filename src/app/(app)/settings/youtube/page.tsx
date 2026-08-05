@@ -156,12 +156,10 @@ export default function YouTubeSettingsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  asChild
+                  onClick={() => { window.location.href = "/api/youtube/connect"; }}
                 >
-                  <a href="/api/youtube/connect">
-                    <RefreshCw className="h-4 w-4 mr-1" />
-                    Reconnect
-                  </a>
+                  <RefreshCw className="h-4 w-4 mr-1" />
+                  Reconnect
                 </Button>
 
                 {confirmDisconnect ? (
@@ -202,11 +200,9 @@ export default function YouTubeSettingsPage() {
                 <div className="h-3 w-3 rounded-full bg-muted-foreground/40 shrink-0" />
                 <p className="text-sm text-muted-foreground">No YouTube account connected</p>
               </div>
-              <Button asChild>
-                <a href="/api/youtube/connect">
-                  <Youtube className="h-4 w-4 mr-2" />
-                  Connect YouTube
-                </a>
+              <Button onClick={() => { window.location.href = "/api/youtube/connect"; }}>
+                <Youtube className="h-4 w-4 mr-2" />
+                Connect YouTube
               </Button>
             </div>
           )}

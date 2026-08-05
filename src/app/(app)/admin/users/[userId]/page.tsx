@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { Route } from "next";
 import { useParams } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../../../convex/_generated/api";
@@ -60,12 +61,12 @@ export default function AdminUserDetailPage() {
       <AdminNav />
 
       <div className="flex items-center gap-3">
-        <Button asChild variant="ghost" size="sm">
-          <Link href="/admin/users">
+        <Link href={"/admin/users" as Route}>
+          <Button variant="ghost" size="sm">
             <ArrowLeft className="h-4 w-4 mr-1" />
             Users
-          </Link>
-        </Button>
+          </Button>
+        </Link>
         <h1 className="text-2xl font-bold">{user.name ?? user.email}</h1>
         {user.isAdmin && (
           <Badge variant="outline">Admin</Badge>

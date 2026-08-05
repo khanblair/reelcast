@@ -1,8 +1,8 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import { getCurrentUserOrThrow } from "./lib/auth";
 
-async function resolveUser(ctx: Parameters<typeof getCurrentUserOrThrow>[0]) {
+async function resolveUser(ctx: MutationCtx) {
   const identity = await getCurrentUserOrThrow(ctx);
   const user = await ctx.db
     .query("users")

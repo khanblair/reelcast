@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { Route } from "next";
 import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import {
@@ -178,7 +179,7 @@ export default function AdminOverviewPage() {
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {ACTION_CARDS.map((card) => (
-          <Link key={card.href} href={card.href}>
+          <Link key={card.href} href={card.href as Route}>
             <Card className="h-full hover:bg-muted/50 transition-colors cursor-pointer">
               <CardHeader>
                 <CardTitle className="text-base flex items-center justify-between">

@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import Link from "next/link";
+import type { Route } from "next";
 import { useQuery, useMutation, useAction } from "convex/react";
 import {
   CalendarClock, CalendarCheck, Clock, X, ExternalLink,
@@ -358,7 +359,7 @@ export default function SchedulePage() {
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">This Week</h2>
           <Link
-            href="/content-calendar"
+            href={"/content-calendar" as Route}
             className="flex items-center gap-1 text-sm text-primary hover:underline"
           >
             <CalendarDays className="h-3.5 w-3.5" />

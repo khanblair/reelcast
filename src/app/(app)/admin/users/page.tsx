@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { Route } from "next";
 import { useQuery } from "convex/react";
 import { api } from "../../../../../convex/_generated/api";
 import { AdminNav } from "@/components/admin/admin-nav";
@@ -125,9 +126,9 @@ export default function AdminUsersPage() {
                       {user.hasResendApiKey ? "Set" : "—"}
                     </td>
                     <td className="px-4 py-3">
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={`/admin/users/${user._id}`}>View</Link>
-                      </Button>
+                      <Link href={`/admin/users/${user._id}` as Route}>
+                        <Button size="sm" variant="outline">View</Button>
+                      </Link>
                     </td>
                   </tr>
                 ))}

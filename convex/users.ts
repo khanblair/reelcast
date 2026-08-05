@@ -102,6 +102,21 @@ export const internalGetById = internalQuery({
   handler: async (ctx, args) => ctx.db.get(args.userId),
 });
 
+export const internalSetYoutubeOAuthStatus = internalMutation({
+  args: {
+    userId: v.id("users"),
+    status: v.union(
+      v.literal("connected"),
+      v.literal("token_expired"),
+      v.literal("revoked"),
+      v.literal("unknown"),
+    ),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.userId, { youtubeOAuthStatus: args.status });
+  },
+});
+
 export const internalUpdateYoutubeTokens = internalMutation({
   args: {
     userId: v.id("users"),

@@ -66,13 +66,27 @@ export const saveYoutubeTokens = mutation({
     refreshToken: v.optional(v.string()),
     expiresIn: v.number(),
     channelName: v.optional(v.string()),
+    channelId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await getCurrentUserOrThrow(ctx);
     const user = await getUserBySupabaseId(ctx, identity.subject);
     if (!user) throw new Error("User not found");
+
+    // Enforce one channel per account: reject if another user already owns this channel
+    if (args.channelId) {
+      const existing = await ctx.db
+        .query("users")
+        .withIndex("by_youtube_channel_id", (q) => q.eq("youtubeChannelId", args.channelId))
+        .unique();
+      if (existing && existing._id !== user._id) {
+        throw new Error("CHANNEL_ALREADY_CLAIMED");
+      }
+    }
+
     await ctx.db.patch(user._id, {
       youtubeConnected: true,
+      youtubeChannelId: args.channelId,
       youtubeChannelName: args.channelName,
       youtubeAccessToken: args.accessToken,
       youtubeRefreshToken: args.refreshToken,
@@ -89,6 +103,7 @@ export const disconnectYoutube = mutation({
     if (!user) throw new Error("User not found");
     await ctx.db.patch(user._id, {
       youtubeConnected: false,
+      youtubeChannelId: undefined,
       youtubeChannelName: undefined,
       youtubeAccessToken: undefined,
       youtubeRefreshToken: undefined,

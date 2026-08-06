@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../../convex/_generated/api";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { formatDateTimeEAT } from "@/lib/eat";
-import { Trash2, ExternalLink } from "lucide-react";
+import { Trash2, ExternalLink, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { Id } from "../../../../../convex/_generated/dataModel";
@@ -16,6 +17,8 @@ import type { Id } from "../../../../../convex/_generated/dataModel";
 type StatusFilter = "all" | "draft" | "ready" | "scheduled" | "published" | "failed";
 
 const STATUS_TABS: StatusFilter[] = ["all", "draft", "ready", "scheduled", "published", "failed"];
+
+const PAGE_SIZE = 20;
 
 function statusBadgeClass(status: string) {
   switch (status) {
@@ -51,15 +54,31 @@ type Video = {
 
 export default function AdminVideosPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+
   const videos = useQuery(api.admin.videos.listAll, { limit: 100 });
   const adminDelete = useMutation(api.admin.videos.adminDelete);
 
-  const filtered =
-    videos === undefined
-      ? undefined
-      : statusFilter === "all"
-      ? videos
-      : (videos as Video[]).filter((v) => v.status === statusFilter);
+  const filtered = useMemo(() => {
+    if (!videos) return [];
+    const q = search.toLowerCase().trim();
+    return (videos as Video[]).filter((v) => {
+      if (statusFilter !== "all" && v.status !== statusFilter) return false;
+      if (q) {
+        const titleMatch = v.title?.toLowerCase().includes(q);
+        const userMatch = v.userName?.toLowerCase().includes(q) || v.userEmail?.toLowerCase().includes(q);
+        if (!titleMatch && !userMatch) return false;
+      }
+      return true;
+    });
+  }, [videos, statusFilter, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const updateSearch = (v: string) => { setSearch(v); setPage(1); };
+  const updateStatus = (s: StatusFilter) => { setStatusFilter(s); setPage(1); };
 
   async function handleDelete(videoId: string) {
     if (!window.confirm("Delete this video?")) return;
@@ -67,43 +86,55 @@ export default function AdminVideosPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
+    <div className="max-w-6xl mx-auto space-y-6">
       <AdminNav />
 
       <div>
         <h1 className="text-2xl font-bold">Videos</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          All videos across all users.
+          {videos !== undefined ? `${filtered.length} of ${videos.length} videos` : "All videos across all users."}
         </p>
       </div>
 
-      {/* Status filter tabs */}
-      <div className="flex gap-2 border-b overflow-x-auto">
-        {STATUS_TABS.map((s) => (
-          <button
-            key={s}
-            onClick={() => setStatusFilter(s)}
-            className={cn(
-              "px-4 py-2 text-sm font-medium capitalize transition-colors border-b-2 -mb-px whitespace-nowrap",
-              statusFilter === s
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {s}
-          </button>
-        ))}
+      {/* Search + status tabs row */}
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="Search title or user..."
+            value={search}
+            onChange={(e) => updateSearch(e.target.value)}
+            className="pl-9 h-9"
+          />
+        </div>
+
+        <div className="flex items-center gap-1 border rounded-lg p-1">
+          {STATUS_TABS.map((s) => (
+            <button
+              key={s}
+              onClick={() => updateStatus(s)}
+              className={cn(
+                "px-3 py-1 text-xs font-medium rounded-md capitalize transition-colors",
+                statusFilter === s
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
       </div>
 
       <Card>
         <CardContent className="p-0">
-          {filtered === undefined ? (
+          {videos === undefined ? (
             <div className="flex justify-center py-12">
               <LoadingSpinner />
             </div>
-          ) : filtered.length === 0 ? (
+          ) : paginated.length === 0 ? (
             <p className="px-4 py-8 text-sm text-muted-foreground text-center">
-              No videos found.
+              No videos match the current filters.
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -119,7 +150,7 @@ export default function AdminVideosPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(filtered as Video[]).map((video) => (
+                  {paginated.map((video) => (
                     <tr key={video._id} className="border-b last:border-0 hover:bg-muted/30">
                       <td className="px-4 py-3 truncate max-w-[200px]">
                         {video.title ?? "Untitled"}
@@ -167,6 +198,24 @@ export default function AdminVideosPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* Pagination */}
+          {totalPages > 1 && videos !== undefined && (
+            <div className="flex items-center justify-between px-4 py-3 border-t">
+              <p className="text-xs text-muted-foreground">
+                Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
+              </p>
+              <div className="flex items-center gap-1">
+                <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setPage((p) => p - 1)} disabled={page === 1}>
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </Button>
+                <span className="text-xs px-2">{page} / {totalPages}</span>
+                <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setPage((p) => p + 1)} disabled={page === totalPages}>
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>

@@ -52,8 +52,9 @@ export async function GET(request: Request) {
 
   const tokens = await tokenResponse.json();
 
-  // Fetch connected channel name
+  // Fetch connected channel name + ID
   let channelName: string | undefined;
+  let channelId: string | undefined;
   try {
     const channelRes = await fetch(
       "https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true",
@@ -62,6 +63,7 @@ export async function GET(request: Request) {
     if (channelRes.ok) {
       const channelData = await channelRes.json();
       channelName = channelData.items?.[0]?.snippet?.title as string | undefined;
+      channelId = channelData.items?.[0]?.id as string | undefined;
     }
   } catch {
     // Non-fatal, still save the tokens
@@ -91,10 +93,15 @@ export async function GET(request: Request) {
         refreshToken: tokens.refresh_token,
         expiresIn: tokens.expires_in,
         channelName,
+        channelId,
       },
       { token: convexToken }
     );
   } catch (err) {
+    const message = err instanceof Error ? err.message : "";
+    if (message.includes("CHANNEL_ALREADY_CLAIMED")) {
+      return Response.redirect(`${origin}/settings?youtube=error&reason=channel_already_claimed`, 302);
+    }
     console.error("Failed to save YouTube tokens to Convex:", err);
     return Response.redirect(`${origin}/settings?youtube=error&reason=save_failed`, 302);
   }

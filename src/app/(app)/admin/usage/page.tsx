@@ -1,12 +1,16 @@
 "use client";
 
+import { useState, useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../../../convex/_generated/api";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+
+type PlanFilter = "all" | "free" | "pro";
+type LimitFilter = "all" | "at_limit";
 
 function formatLimit(limit: number) {
   return limit >= 999999 ? "∞" : String(limit);
@@ -15,7 +19,25 @@ function formatLimit(limit: number) {
 export default function AdminUsagePage() {
   const overview = useQuery(api.admin.usageLedger.getOverview);
 
+  const [planFilter, setPlanFilter] = useState<PlanFilter>("all");
+  const [limitFilter, setLimitFilter] = useState<LimitFilter>("all");
+
   const currentMonth = new Date().toISOString().slice(0, 7);
+
+  const filtered = useMemo(() => {
+    if (!overview) return [];
+    return overview.filter((r) => {
+      if (planFilter !== "all" && (r.plan ?? "free") !== planFilter) return false;
+      if (limitFilter === "at_limit") {
+        const atLimit =
+          (r.limits.videosUploaded < 999999 && r.videosUploaded >= r.limits.videosUploaded) ||
+          (r.limits.metadataGenerated < 999999 && r.metadataGenerated >= r.limits.metadataGenerated) ||
+          (r.limits.veoGenerated < 999999 && r.veoGenerated >= r.limits.veoGenerated);
+        if (!atLimit) return false;
+      }
+      return true;
+    });
+  }, [overview, planFilter, limitFilter]);
 
   if (overview === undefined) {
     return (
@@ -28,22 +50,26 @@ export default function AdminUsagePage() {
     );
   }
 
-  const freeCount = overview.filter((r) => r.plan === "free").length;
+  const freeCount = overview.filter((r) => (r.plan ?? "free") === "free").length;
   const proCount = overview.filter((r) => r.plan === "pro").length;
   const atLimitCount = overview.filter(
     (r) =>
-      r.limits.videosUploaded < 999999 &&
-      r.videosUploaded >= r.limits.videosUploaded
+      (r.limits.videosUploaded < 999999 && r.videosUploaded >= r.limits.videosUploaded) ||
+      (r.limits.metadataGenerated < 999999 && r.metadataGenerated >= r.limits.metadataGenerated) ||
+      (r.limits.veoGenerated < 999999 && r.veoGenerated >= r.limits.veoGenerated)
   ).length;
 
+  const updatePlan = (v: PlanFilter) => { setPlanFilter(v); };
+  const updateLimit = (v: LimitFilter) => { setLimitFilter(v); };
+
   return (
-    <div className="max-w-6xl mx-auto space-y-8">
+    <div className="max-w-6xl mx-auto space-y-6">
       <AdminNav />
 
       <div>
         <h1 className="text-2xl font-bold">Usage: {currentMonth}</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Monthly usage ledger for all users.
+          {filtered.length} of {overview.length} users shown
         </p>
       </div>
 
@@ -69,12 +95,51 @@ export default function AdminUsagePage() {
         </Card>
       </div>
 
+      {/* Filters */}
+      <div className="flex flex-wrap items-center gap-3">
+        {/* Plan filter */}
+        <div className="flex items-center gap-1 border rounded-lg p-1">
+          {(["all", "free", "pro"] as PlanFilter[]).map((p) => (
+            <button
+              key={p}
+              onClick={() => updatePlan(p)}
+              className={cn(
+                "px-3 py-1 text-xs font-medium rounded-md capitalize transition-colors",
+                planFilter === p
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {p}
+            </button>
+          ))}
+        </div>
+
+        {/* At-limit filter */}
+        <div className="flex items-center gap-1 border rounded-lg p-1">
+          {([["all", "All"], ["at_limit", "At Limit"]] as [LimitFilter, string][]).map(([val, label]) => (
+            <button
+              key={val}
+              onClick={() => updateLimit(val)}
+              className={cn(
+                "px-3 py-1 text-xs font-medium rounded-md transition-colors",
+                limitFilter === val
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Usage table */}
       <Card>
         <CardContent className="p-0">
-          {overview.length === 0 ? (
+          {filtered.length === 0 ? (
             <p className="px-4 py-8 text-sm text-muted-foreground text-center">
-              No usage data for this period.
+              No usage data matches the current filters.
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -89,7 +154,7 @@ export default function AdminUsagePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {overview.map((row) => {
+                  {filtered.map((row) => {
                     const atLimit =
                       (row.limits.videosUploaded < 999999 && row.videosUploaded >= row.limits.videosUploaded) ||
                       (row.limits.metadataGenerated < 999999 && row.metadataGenerated >= row.limits.metadataGenerated) ||

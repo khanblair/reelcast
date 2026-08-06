@@ -33,7 +33,10 @@ export default function SettingsPage() {
       setYoutubeBanner({ success: true, message: "YouTube connected successfully!" });
     } else if (yt === "error") {
       const reason = params.get("reason") ?? "unknown";
-      setYoutubeBanner({ success: false, message: `YouTube connection failed (${reason}). Please try again.` });
+      const message = reason === "channel_already_claimed"
+        ? "This YouTube channel is already connected to another account. Each channel can only be linked to one account."
+        : `YouTube connection failed (${reason}). Please try again.`;
+      setYoutubeBanner({ success: false, message });
     }
   }, []);
 

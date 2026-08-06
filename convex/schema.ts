@@ -9,6 +9,7 @@ export default defineSchema({
     name: v.optional(v.string()),
     imageUrl: v.optional(v.string()),
     youtubeConnected: v.boolean(),
+    youtubeChannelId: v.optional(v.string()),
     youtubeChannelName: v.optional(v.string()),
     youtubeAccessToken: v.optional(v.string()),
     youtubeRefreshToken: v.optional(v.string()),
@@ -24,7 +25,8 @@ export default defineSchema({
   })
     .index("by_supabase_id", ["supabaseId"])
     .index("by_clerk_id", ["clerkId"])
-    .index("by_email", ["email"]),
+    .index("by_email", ["email"])
+    .index("by_youtube_channel_id", ["youtubeChannelId"]),
 
   videos: defineTable({
     userId: v.id("users"),

@@ -344,7 +344,7 @@ export default function IntelligencePage() {
             {gapsData.gaps.length > 0 ? (
               <div className="space-y-3">
                 <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Opportunity Topics — trending but not yet in your library
+                  Opportunity Topics: trending but not yet in your library
                 </h3>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {gapsData.gaps.map((topic, i) => (
@@ -363,7 +363,7 @@ export default function IntelligencePage() {
               <Card>
                 <CardContent className="flex items-center justify-center py-10">
                   <p className="text-sm text-muted-foreground">
-                    No gaps found — your content is well-aligned with trending
+                    No gaps found. Your content is well-aligned with trending topics.
                     topics.
                   </p>
                 </CardContent>

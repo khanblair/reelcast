@@ -269,7 +269,7 @@ export default function AISettingsPage() {
           <div className="space-y-2">
             <Label className="text-sm font-medium">Channel Guidelines</Label>
             <p className="text-[11px] text-muted-foreground">
-              Tell the AI about your channel — niche, audience, recurring themes, things to always or never include. This is injected into every metadata generation prompt.
+              Tell the AI about your channel, niche, audience, recurring themes, things to always or never include. This is injected into every metadata generation prompt.
             </p>
             <textarea
               value={aiGuidelines}
@@ -304,7 +304,7 @@ export default function AISettingsPage() {
       {/* DeepSeek API Key (BYOK) */}
       <Card>
         <CardHeader>
-          <CardTitle>AI Assistant — DeepSeek API Key</CardTitle>
+          <CardTitle>AI Assistant: DeepSeek API Key</CardTitle>
           <CardDescription>
             The AI Assistant uses DeepSeek to answer questions about your video library. Enter your own API key to enable it.
           </CardDescription>

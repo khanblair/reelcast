@@ -229,7 +229,7 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">Channel Guidelines</Label>
                 <p className="text-xs text-muted-foreground">
-                  Tell the AI about your channel — niche, audience, recurring themes, things to always or never include. Injected into every metadata prompt.
+                  Tell the AI about your channel, niche, audience, recurring themes, things to always or never include. Injected into every metadata prompt.
                 </p>
                 <textarea
                   value={aiGuidelines}

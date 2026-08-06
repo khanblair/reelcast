@@ -70,7 +70,7 @@ export default function DraftsPage() {
     [videos]
   );
 
-  // Videos >60s that are not explicitly set to publish as Video — at risk of Content ID block
+  // Videos >60s that are not explicitly set to publish as Video, at risk of Content ID block
   const atRiskCount = useMemo(
     () =>
       (videos ?? []).filter(
@@ -236,7 +236,7 @@ export default function DraftsPage() {
             <CheckCircle2 className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
             <p className="text-sm text-amber-700 dark:text-amber-300">
               <span className="font-semibold">{draftCount} draft video{draftCount !== 1 ? "s" : ""}</span>
-              {" "}with existing metadata — mark them all as Ready to join the auto-publish queue.
+              {" "}with existing metadata, mark them all as Ready to join the auto-publish queue.
             </p>
           </div>
           <button
@@ -257,7 +257,7 @@ export default function DraftsPage() {
         </div>
       )}
 
-      {/* Scan durations banner — shown when videos have no duration data yet */}
+      {/* Scan durations banner, shown when videos have no duration data yet */}
       {!scanning && !scanResult && (videos ?? []).some((v) => !(v as any).duration && !(v as any).cloudinaryDeletedAt) && (
         <div className="flex items-center justify-between gap-4 rounded-lg border border-muted bg-muted/40 px-4 py-3">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -287,23 +287,23 @@ export default function DraftsPage() {
         <div className="flex items-center gap-2.5 rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-700 dark:text-green-400">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
           <span>
-            Scan complete — {scanResult.updated} video{scanResult.updated !== 1 ? "s" : ""} updated
+            Scan complete, {scanResult.updated} video{scanResult.updated !== 1 ? "s" : ""} updated
             {scanResult.switched > 0 && (
               <>, <strong>{scanResult.switched} automatically switched to Video mode</strong> (over 60s)</>
             )}
-            {scanResult.total === 0 && " — all videos already had duration data"}.
+            {scanResult.total === 0 && ", all videos already had duration data"}.
           </span>
         </div>
       )}
 
-      {/* Copyright risk banner — videos >60s that will be uploaded as Shorts */}
+      {/* Copyright risk banner, videos >60s that will be uploaded as Shorts */}
       {atRiskCount > 0 && switchResult === null && (
         <div className="flex items-center justify-between gap-4 rounded-lg border border-orange-500/30 bg-orange-500/10 px-4 py-3">
           <div className="flex items-center gap-2.5 min-w-0">
             <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400 shrink-0" />
             <p className="text-sm text-orange-700 dark:text-orange-300">
               <span className="font-semibold">{atRiskCount} video{atRiskCount !== 1 ? "s" : ""}</span>
-              {" "}over 60s — risk YouTube Content ID block as Shorts.
+              {" "}over 60s, risk YouTube Content ID block as Shorts.
             </p>
           </div>
           <button
@@ -320,7 +320,7 @@ export default function DraftsPage() {
       {switchResult !== null && (
         <div className="flex items-center gap-2.5 rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-700 dark:text-green-400">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
-          {switchResult} video{switchResult !== 1 ? "s" : ""} switched to Video mode — they&apos;ll no longer upload as Shorts.
+          {switchResult} video{switchResult !== 1 ? "s" : ""} switched to Video mode. They will no longer upload as Shorts.
         </div>
       )}
 

@@ -66,59 +66,57 @@ export default function SignInPage() {
   return (
     <div className="min-h-screen flex">
       {/* ── Left: brand panel ── */}
-      <div className="hidden lg:flex lg:w-[44%] xl:w-[40%] flex-col relative overflow-hidden bg-[#0a0a0a]">
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[420px] h-[420px] bg-primary/25 blur-[110px] rounded-full pointer-events-none" />
+      <div className="hidden lg:flex lg:w-1/2 items-center justify-center relative overflow-hidden bg-[#0a0a0a]">
+        <Image src="/images/fire2.gif" alt="" fill className="object-cover opacity-25 pointer-events-none" unoptimized />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[420px] h-[420px] bg-primary/25 blur-[120px] rounded-full pointer-events-none" />
         <div className="absolute bottom-0 right-0 w-64 h-64 bg-primary/10 blur-[80px] rounded-full pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col h-full p-10 xl:p-12">
-          {/* Logo */}
-          <div className="flex items-center gap-2.5">
-            <Image src="/icons/logo.png" alt="ReelCast" width={28} height={28} />
-            <span className="font-bold text-white text-lg tracking-tight">ReelCast</span>
+        {/* Single centered block, logo + copy + features all as one unit */}
+        <div className="relative z-10 flex flex-col items-center text-center w-full max-w-[440px] px-8 xl:px-10">
+          <div className="flex items-center gap-2.5 mb-10">
+            <Image src="/icons/logo.png" alt="ReelCast" width={30} height={30} />
+            <span className="font-bold text-white text-xl tracking-tight">ReelCast</span>
           </div>
 
-          {/* Copy */}
-          <div className="flex-1 flex flex-col justify-center">
-            <span className="text-primary text-xs font-bold tracking-[0.15em] uppercase mb-5">
-              AI Publishing Platform
-            </span>
-            <h2 className="text-3xl xl:text-4xl font-extrabold text-white leading-[1.15] mb-5">
-              Your YouTube channel<br />on autopilot.
-            </h2>
-            <p className="text-white/55 text-sm leading-relaxed mb-10 max-w-xs">
-              Upload footage, let AI write your metadata, schedule to peak hours, and ship content daily — without the grind.
-            </p>
-
-            <ul className="space-y-4">
-              {[
-                { icon: Sparkles, text: "AI titles, descriptions & tags in seconds" },
-                { icon: Zap, text: "Auto-publish queue — set it and forget it" },
-                { icon: CalendarDays, text: "Full content calendar with hourly day view" },
-                { icon: BarChart2, text: "Live YouTube analytics in one place" },
-              ].map(({ icon: Icon, text }) => (
-                <li key={text} className="flex items-center gap-3">
-                  <div className="h-7 w-7 rounded-lg bg-primary/20 border border-primary/20 flex items-center justify-center shrink-0">
-                    <Icon className="h-3.5 w-3.5 text-primary" />
-                  </div>
-                  <span className="text-white/65 text-sm">{text}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <p className="text-white/25 text-xs">
-            &copy; {new Date().getFullYear()} ReelCast Inc.
+          <span className="text-primary text-xs font-bold tracking-[0.15em] uppercase mb-4">
+            AI Publishing Platform
+          </span>
+          <h2 className="text-3xl xl:text-[2.15rem] font-extrabold text-white leading-[1.18] mb-4">
+            Your YouTube channel on autopilot.
+          </h2>
+          <p className="text-white/50 text-sm leading-relaxed mb-10">
+            Upload footage, let AI write your metadata, schedule to peak hours, and ship content daily, without the grind.
           </p>
+
+          <ul className="space-y-3.5 w-full text-left">
+            {[
+              { icon: Sparkles, text: "AI titles, descriptions & tags in seconds" },
+              { icon: Zap, text: "Auto-publish queue: set it and forget it" },
+              { icon: CalendarDays, text: "Full content calendar with hourly day view" },
+              { icon: BarChart2, text: "Live YouTube analytics in one place" },
+            ].map(({ icon: Icon, text }) => (
+              <li key={text} className="flex items-center gap-3">
+                <div className="h-7 w-7 rounded-lg bg-primary/20 border border-primary/15 flex items-center justify-center shrink-0">
+                  <Icon className="h-3.5 w-3.5 text-primary" />
+                </div>
+                <span className="text-white/60 text-sm">{text}</span>
+              </li>
+            ))}
+          </ul>
         </div>
+
+        <p className="absolute bottom-6 text-white/20 text-xs">
+          &copy; {new Date().getFullYear()} ReelCast Inc.
+        </p>
       </div>
 
       {/* ── Right: form panel ── */}
-      <div className="flex-1 flex flex-col bg-background relative overflow-hidden">
+      <div className="lg:w-1/2 flex-1 flex items-center justify-center bg-background relative overflow-hidden">
         {/* Mobile glow */}
         <div className="absolute -top-32 -left-32 w-96 h-96 bg-primary/8 blur-[120px] rounded-full pointer-events-none lg:hidden" />
 
-        {/* Back link */}
-        <div className="relative z-10 p-5">
+        {/* Back link, absolute so it doesn't shift the centered form */}
+        <div className="absolute top-5 left-5 z-10">
           <Link href="/">
             <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground">
               <ArrowLeft className="w-4 h-4" />
@@ -127,9 +125,8 @@ export default function SignInPage() {
           </Link>
         </div>
 
-        {/* Form */}
-        <div className="relative z-10 flex-1 flex items-center justify-center px-6 py-8">
-          <div className="w-full max-w-[400px]">
+        {/* Form, perfectly centered */}
+        <div className="relative z-10 w-full max-w-[400px] px-6">
             {/* Mobile logo */}
             <div className="flex flex-col items-center mb-8 lg:hidden">
               <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center mb-4 border border-primary/20">
@@ -231,7 +228,6 @@ export default function SignInPage() {
                 Sign Up
               </Link>
             </p>
-          </div>
         </div>
       </div>
     </div>

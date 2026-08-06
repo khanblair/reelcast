@@ -41,7 +41,7 @@ export default function AdminUsagePage() {
       <AdminNav />
 
       <div>
-        <h1 className="text-2xl font-bold">Usage &mdash; {currentMonth}</h1>
+        <h1 className="text-2xl font-bold">Usage: {currentMonth}</h1>
         <p className="text-muted-foreground text-sm mt-1">
           Monthly usage ledger for all users.
         </p>

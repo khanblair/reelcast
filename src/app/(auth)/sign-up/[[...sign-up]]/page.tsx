@@ -77,77 +77,70 @@ export default function SignUpPage() {
   return (
     <div className="min-h-screen flex">
       {/* ── Left: brand panel ── */}
-      <div className="hidden lg:flex lg:w-[44%] xl:w-[40%] flex-col relative overflow-hidden bg-[#0a0a0a]">
-        <div className="absolute top-1/4 right-0 w-[380px] h-[380px] bg-primary/25 blur-[110px] rounded-full pointer-events-none" />
-        <div className="absolute bottom-1/3 left-0 w-64 h-64 bg-primary/10 blur-[80px] rounded-full pointer-events-none" />
+      <div className="hidden lg:flex lg:w-1/2 items-center justify-center relative overflow-hidden bg-[#0a0a0a]">
+        <Image src="/images/fire2.gif" alt="" fill className="object-cover opacity-25 pointer-events-none" unoptimized />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[420px] h-[420px] bg-primary/20 blur-[120px] rounded-full pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-64 h-64 bg-primary/10 blur-[80px] rounded-full pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col h-full p-10 xl:p-12">
-          {/* Logo */}
-          <div className="flex items-center gap-2.5">
-            <Image src="/icons/logo.png" alt="ReelCast" width={28} height={28} />
-            <span className="font-bold text-white text-lg tracking-tight">ReelCast</span>
+        {/* Single centered block */}
+        <div className="relative z-10 flex flex-col items-center text-center w-full max-w-[440px] px-8 xl:px-10">
+          <div className="flex items-center gap-2.5 mb-10">
+            <Image src="/icons/logo.png" alt="ReelCast" width={30} height={30} />
+            <span className="font-bold text-white text-xl tracking-tight">ReelCast</span>
           </div>
 
-          {/* Copy */}
-          <div className="flex-1 flex flex-col justify-center">
-            <span className="text-primary text-xs font-bold tracking-[0.15em] uppercase mb-5">
-              Free to start
-            </span>
-            <h2 className="text-3xl xl:text-4xl font-extrabold text-white leading-[1.15] mb-5">
-              Stop spending hours<br />on video admin.
-            </h2>
-            <p className="text-white/55 text-sm leading-relaxed mb-10 max-w-xs">
-              ReelCast takes care of titles, descriptions, tags, scheduling, and publishing — so you can focus on creating.
-            </p>
+          <span className="text-primary text-xs font-bold tracking-[0.15em] uppercase mb-4">
+            Free to start
+          </span>
+          <h2 className="text-3xl xl:text-[2.15rem] font-extrabold text-white leading-[1.18] mb-4">
+            Stop spending hours on video admin.
+          </h2>
+          <p className="text-white/50 text-sm leading-relaxed mb-10">
+            ReelCast handles titles, descriptions, tags, scheduling, and publishing, so you can focus on creating.
+          </p>
 
-            <ul className="space-y-4">
-              {[
-                { icon: Sparkles, text: "AI metadata ready in under 5 seconds" },
-                { icon: Film, text: "Generate AI videos with Google Veo" },
-                { icon: Bot, text: "DeepSeek AI assistant knows your channel" },
-                { icon: Lightbulb, text: "Idea Vault to capture content ideas" },
-              ].map(({ icon: Icon, text }) => (
-                <li key={text} className="flex items-center gap-3">
-                  <div className="h-7 w-7 rounded-lg bg-primary/20 border border-primary/20 flex items-center justify-center shrink-0">
-                    <Icon className="h-3.5 w-3.5 text-primary" />
-                  </div>
-                  <span className="text-white/65 text-sm">{text}</span>
-                </li>
+          <ul className="space-y-3.5 w-full text-left">
+            {[
+              { icon: Sparkles, text: "AI metadata ready in under 5 seconds" },
+              { icon: Film, text: "Generate AI videos with Google Veo" },
+              { icon: Bot, text: "DeepSeek AI assistant knows your channel" },
+              { icon: Lightbulb, text: "Idea Vault to capture content ideas" },
+            ].map(({ icon: Icon, text }) => (
+              <li key={text} className="flex items-center gap-3">
+                <div className="h-7 w-7 rounded-lg bg-primary/20 border border-primary/15 flex items-center justify-center shrink-0">
+                  <Icon className="h-3.5 w-3.5 text-primary" />
+                </div>
+                <span className="text-white/60 text-sm">{text}</span>
+              </li>
+            ))}
+          </ul>
+
+          {/* Free plan mini checklist */}
+          <div className="mt-10 pt-8 border-t border-white/10 w-full">
+            <p className="text-white/35 text-xs mb-3 font-medium uppercase tracking-wide text-left">Free plan includes</p>
+            <div className="grid grid-cols-2 gap-2 text-left">
+              {["5 uploads / month", "AI metadata", "YouTube publishing", "Content calendar"].map((f) => (
+                <div key={f} className="flex items-center gap-1.5">
+                  <CheckCircle className="h-3 w-3 text-primary shrink-0" />
+                  <span className="text-white/50 text-xs">{f}</span>
+                </div>
               ))}
-            </ul>
-
-            {/* What's included */}
-            <div className="mt-10 pt-8 border-t border-white/10">
-              <p className="text-white/40 text-xs mb-3 font-medium uppercase tracking-wide">Free plan includes</p>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  "5 uploads / month",
-                  "AI metadata",
-                  "YouTube publishing",
-                  "Content calendar",
-                ].map((f) => (
-                  <div key={f} className="flex items-center gap-1.5">
-                    <CheckCircle className="h-3 w-3 text-primary shrink-0" />
-                    <span className="text-white/50 text-xs">{f}</span>
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
-
-          <p className="text-white/25 text-xs">
-            &copy; {new Date().getFullYear()} ReelCast Inc.
-          </p>
         </div>
+
+        <p className="absolute bottom-6 text-white/20 text-xs">
+          &copy; {new Date().getFullYear()} ReelCast Inc.
+        </p>
       </div>
 
       {/* ── Right: form panel ── */}
-      <div className="flex-1 flex flex-col bg-background relative overflow-hidden">
+      <div className="lg:w-1/2 flex-1 flex items-center justify-center bg-background relative overflow-hidden">
         {/* Mobile glow */}
         <div className="absolute -top-32 -right-32 w-96 h-96 bg-primary/8 blur-[120px] rounded-full pointer-events-none lg:hidden" />
 
-        {/* Back link */}
-        <div className="relative z-10 p-5">
+        {/* Back link, absolute so it doesn't shift the centered form */}
+        <div className="absolute top-5 left-5 z-10">
           <Link href="/">
             <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground">
               <ArrowLeft className="w-4 h-4" />
@@ -156,9 +149,8 @@ export default function SignUpPage() {
           </Link>
         </div>
 
-        {/* Form */}
-        <div className="relative z-10 flex-1 flex items-center justify-center px-6 py-8">
-          <div className="w-full max-w-[400px]">
+        {/* Form, perfectly centered */}
+        <div className="relative z-10 w-full max-w-[400px] px-6">
             {/* Mobile logo */}
             <div className="flex flex-col items-center mb-8 lg:hidden">
               <div className="w-14 h-14 bg-primary/10 rounded-2xl flex items-center justify-center mb-4 border border-primary/20">
@@ -296,7 +288,6 @@ export default function SignUpPage() {
                 Sign In
               </Link>
             </p>
-          </div>
         </div>
       </div>
     </div>

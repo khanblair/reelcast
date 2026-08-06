@@ -137,14 +137,14 @@ export default function DashboardPage() {
     () => (jobs ?? []).filter(j => j._creationTime >= rangeStart),
     [jobs, rangeStart]
   );
-  // Published count: filter by publishedAt, not _creationTime — videos are often
+  // Published count: filter by publishedAt, not _creationTime, videos are often
   // created days before they go live, so creationTime-based filtering gives 0.
   const publishedCount = useMemo(() => {
     const all = videos ?? [];
     if (period === "all") return all.filter(v => v.status === "published").length;
     return all.filter(v => v.status === "published" && (v.publishedAt ?? 0) >= rangeStart).length;
   }, [videos, period, rangeStart]);
-  // Library-level totals — not period-filtered (showing 0 for "Today" would be misleading)
+  // Library-level totals, not period-filtered (showing 0 for "Today" would be misleading)
   const totalVideos = useMemo(() => (videos ?? []).length, [videos]);
   const storageBytes = useMemo(
     () => (videos ?? []).reduce((s, v) => s + (v.rawFileSize ?? 0), 0),
@@ -154,7 +154,7 @@ export default function DashboardPage() {
     () => buildPublishTimeline(videos ?? [], period),
     [videos, period]
   );
-  // Status breakdown shows current state of ALL videos — status is a present-tense
+  // Status breakdown shows current state of ALL videos, status is a present-tense
   // property, not a historical event, so period-filtering it would hide most of the library.
   const statusData = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -271,7 +271,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Auto-Publish card — replaces old "Active Jobs" */}
+        {/* Auto-Publish card, replaces old "Active Jobs" */}
         <Card className={isAutoActive ? "border-primary/30" : ""}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Auto-Publish</CardTitle>

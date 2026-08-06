@@ -979,7 +979,7 @@ export default function ContentCalendarPage() {
         </div>
       </div>
 
-      {/* Stat cards — above calendar, dynamic by view */}
+      {/* Stat cards, above calendar, dynamic by view */}
       <div className="grid grid-cols-3 gap-3">
         <Card>
           <CardContent className="p-4">
@@ -1078,7 +1078,7 @@ export default function ContentCalendarPage() {
         </Sheet>
       )}
 
-      {/* Detail modal — shared across all views */}
+      {/* Detail modal, shared across all views */}
       <DetailModal
         detailEvent={detailEvent}
         detailVideo={detailVideo}

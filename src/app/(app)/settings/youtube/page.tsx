@@ -84,9 +84,9 @@ export default function YouTubeSettingsPage() {
     if (!healthResult) return null;
     switch (healthResult.status) {
       case "connected": return { text: "Token is valid and working.", icon: CheckCircle, color: "text-green-600 dark:text-green-400" };
-      case "token_expired": return { text: "Token expired — please reconnect.", icon: AlertCircle, color: "text-yellow-600 dark:text-yellow-400" };
-      case "revoked": return { text: "Access was revoked — please reconnect.", icon: XCircle, color: "text-red-600 dark:text-red-400" };
-      default: return { text: "Status unknown — check your connection.", icon: AlertCircle, color: "text-muted-foreground" };
+      case "token_expired": return { text: "Token expired. Please reconnect.", icon: AlertCircle, color: "text-yellow-600 dark:text-yellow-400" };
+      case "revoked": return { text: "Access was revoked. Please reconnect.", icon: XCircle, color: "text-red-600 dark:text-red-400" };
+      default: return { text: "Status unknown. Check your connection.", icon: AlertCircle, color: "text-muted-foreground" };
     }
   };
 

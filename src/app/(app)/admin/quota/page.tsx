@@ -43,7 +43,7 @@ export default function AdminQuotaPage() {
       <AdminNav />
 
       <div>
-        <h1 className="text-2xl font-bold">YouTube API Quota Usage — Today</h1>
+        <h1 className="text-2xl font-bold">YouTube API Quota Usage: Today</h1>
         <p className="text-muted-foreground text-sm mt-1">
           Daily limit: {DAILY_LIMIT.toLocaleString()} units
         </p>

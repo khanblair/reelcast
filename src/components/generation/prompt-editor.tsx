@@ -55,7 +55,7 @@ export function PromptEditor({
           className="resize-none"
         />
         <p className="text-xs text-muted-foreground">
-          Be descriptive — include scenes, actions, style, lighting, and camera movement.
+          Be descriptive, include scenes, actions, style, lighting, and camera movement.
         </p>
       </div>
 

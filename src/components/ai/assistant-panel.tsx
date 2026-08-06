@@ -383,7 +383,7 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
         {/* ── Header (full width) ── */}
         <SheetHeader className="px-3 py-3 border-b shrink-0">
           <div className="flex items-center gap-2">
-            {/* Menu icon — top LEFT */}
+            {/* Menu icon, top LEFT */}
             <button
               onClick={() => setShowHistory((v) => !v)}
               className={cn(
@@ -406,7 +406,7 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
         {/* ── Body: sidebar + chat side-by-side ── */}
         <div className="flex flex-1 min-h-0 overflow-hidden">
 
-          {/* Left sidebar — only when showHistory */}
+          {/* Left sidebar, only when showHistory */}
           {showHistory && (
             <SessionSidebar
               sessions={sessions ?? []}
@@ -489,7 +489,7 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
                         )}
                       </div>
 
-                      {/* Bubble — max 75% width, content-sized */}
+                      {/* Bubble, max 75% width, content-sized */}
                       <div
                         className={cn(
                           "rounded-2xl px-3 py-2 text-sm break-words max-w-[75%]",

@@ -131,7 +131,7 @@ export function ConfigPanel({
           <Switch checked={enhancePrompt} onCheckedChange={onEnhancePromptChange} />
         </div>
 
-        {/* Generate Audio — only for Veo 3 models via Vertex AI */}
+        {/* Generate Audio, only for Veo 3 models via Vertex AI */}
         {modelSupportsAudio && onGenerateAudioChange && (
           <div className="flex items-center justify-between rounded-lg border p-3 flex-1 min-w-[180px]">
             <div>

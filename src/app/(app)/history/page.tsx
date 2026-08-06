@@ -57,7 +57,7 @@ export default function HistoryPage() {
     [videos]
   );
 
-  // Metadata queue — draft videos with a future metadataScheduledAt
+  // Metadata queue, draft videos with a future metadataScheduledAt
   const metadataQueue = useMemo(
     () => (videos ?? [])
       .filter(v => v.status === "draft" && v.metadataScheduledAt && v.metadataScheduledAt > Date.now())
@@ -65,7 +65,7 @@ export default function HistoryPage() {
     [videos]
   );
 
-  // Scheduled publish — videos waiting for their pinned publish time
+  // Scheduled publish, videos waiting for their pinned publish time
   const scheduledQueue = useMemo(
     () => (scheduledVideos ?? [])
       .filter(v => v.status === "scheduled" && v.scheduledPublishAt)

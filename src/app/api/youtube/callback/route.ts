@@ -64,7 +64,7 @@ export async function GET(request: Request) {
       channelName = channelData.items?.[0]?.snippet?.title as string | undefined;
     }
   } catch {
-    // Non-fatal — still save the tokens
+    // Non-fatal, still save the tokens
   }
 
   const supabase = await createClient();

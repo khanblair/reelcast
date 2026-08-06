@@ -56,7 +56,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
   const generateMetadata = useAction(api.actions.metadata.generateForUpload);
   const fetchVideoAnalytics = useAction(api.actions.youtubeAnalytics.fetchForVideo);
 
-  // YouTube analytics — only fetched when video is published
+  // YouTube analytics, only fetched when video is published
   const videoAnalytics = useQuery(
     api.videoAnalytics.getForVideo,
     video?.publishedVideoId ? { videoId } : "skip"
@@ -89,7 +89,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
     return nextAt + Math.floor(idx / count) * intervalMs;
   }, [allVideos, userSettings, video]);
 
-  // Live countdown — ticks every second toward the nearest upcoming event
+  // Live countdown, ticks every second toward the nearest upcoming event
   useEffect(() => {
     const target =
       video?.status === "draft" && video?.metadataScheduledAt && video.metadataScheduledAt > Date.now()
@@ -435,7 +435,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
         </DialogContent>
       </Dialog>
 
-      {/* Metadata schedule banner — shown for draft videos with a pending AI metadata job */}
+      {/* Metadata schedule banner, shown for draft videos with a pending AI metadata job */}
       {video.status === "draft" && video.metadataScheduledAt && video.metadataScheduledAt > Date.now() && (
         <div className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
           <Wand2 className="h-4 w-4 shrink-0" />
@@ -451,7 +451,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
         </div>
       )}
 
-      {/* Auto-publish banner — shown for ready videos when auto-publish is active */}
+      {/* Auto-publish banner, shown for ready videos when auto-publish is active */}
       {video.status === "ready" && estimatedPublishAt && (
         <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
           <Zap className="h-4 w-4 shrink-0" />
@@ -465,14 +465,14 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
         </div>
       )}
 
-      {/* Content ID copyright warning — duration >60s published as Short risks copyright block */}
+      {/* Content ID copyright warning, duration >60s published as Short risks copyright block */}
       {(video as any).duration > 60 && (video as any).publishAs !== "video" && (
         <div className="flex items-start gap-3 rounded-lg border border-orange-500/40 bg-orange-500/10 px-4 py-3 text-sm text-orange-700 dark:text-orange-400">
           <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
           <div className="flex-1 space-y-1">
             <p className="font-medium">Possible Content ID block</p>
             <p className="text-xs opacity-90">
-              This video is {(video as any).duration}s — over 60s. Publishing as a Short
+              This video is {(video as any).duration}s, over 60s. Publishing as a Short
               may be blocked if the audio is claimed by a rights holder.{" "}
               <strong>Publish as Video</strong> to avoid this (removes #Shorts from the description,
               which usually grants more lenient copyright rules).
@@ -637,7 +637,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
           )}
           <MetadataEditor video={video as VideoType} />
 
-          {/* YouTube Metrics — shown for published videos */}
+          {/* YouTube Metrics, shown for published videos */}
           {video.status === "published" && video.publishedVideoId && (
             <Card>
               <CardHeader className="pb-3">

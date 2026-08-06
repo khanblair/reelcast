@@ -3,7 +3,7 @@ import { Video, ArrowLeft, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const metadata = {
-  title: "Privacy Policy — ReelCast",
+  title: "Privacy Policy | ReelCast",
   description: "Learn how ReelCast collects, uses, and protects your personal information.",
 };
 
@@ -86,10 +86,10 @@ export default function PrivacyPage() {
                 We use third-party services to operate ReelCast, including:
               </p>
               <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-4">
-                <li><strong>Clerk</strong> — Authentication and user management</li>
-                <li><strong>Google / YouTube</strong> — Video publishing and channel data</li>
-                <li><strong>Convex</strong> — Database and backend infrastructure</li>
-                <li><strong>Cloudinary</strong> — Video and image storage</li>
+                <li><strong>Clerk</strong>: Authentication and user management</li>
+                <li><strong>Google / YouTube</strong>: Video publishing and channel data</li>
+                <li><strong>Convex</strong>: Database and backend infrastructure</li>
+                <li><strong>Cloudinary</strong>: Video and image storage</li>
               </ul>
             </section>
 

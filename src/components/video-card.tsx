@@ -12,7 +12,7 @@ import { formatDateTimeEAT } from "@/lib/eat";
 
 interface VideoCardProps {
   video: VideoType;
-  /** Estimated auto-publish time in ms — only passed for ready videos when auto-publish is active */
+  /** Estimated auto-publish time in ms, only passed for ready videos when auto-publish is active */
   estimatedPublishAt?: number;
 }
 
@@ -67,7 +67,7 @@ export function VideoCard({ video, estimatedPublishAt }: VideoCardProps) {
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
     >
-      {/* Stretch link — sits above content so clicks navigate, interactive children use pointer-events-auto */}
+      {/* Stretch link, sits above content so clicks navigate, interactive children use pointer-events-auto */}
       <Link
         href={`/video/${video._id}`}
         className="absolute inset-0 z-10"

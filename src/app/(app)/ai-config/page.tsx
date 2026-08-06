@@ -37,7 +37,7 @@ const DEFAULTS: AIConfig = {
 export default function AIConfigPage() {
   const settings = useQuery(api.settings.get);
   const updateSettings = useMutation(api.settings.update);
-  // Track only local overrides — effective config merges local > saved settings > defaults
+  // Track only local overrides, effective config merges local > saved settings > defaults
   const [localConfig, setLocalConfig] = useState<Partial<AIConfig>>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -191,7 +191,7 @@ export default function AIConfigPage() {
             Custom Guidelines
           </CardTitle>
           <CardDescription>
-            Write specific instructions the AI should follow for every video — brand voice, keywords, disclaimers, or anything else.
+            Write specific instructions the AI should follow for every video, brand voice, keywords, disclaimers, or anything else.
           </CardDescription>
         </CardHeader>
         <CardContent>

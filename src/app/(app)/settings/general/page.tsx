@@ -70,7 +70,7 @@ export default function GeneralSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* App Preferences — coming soon */}
+      {/* App Preferences, coming soon */}
       <Card>
         <CardHeader>
           <CardTitle>App Preferences</CardTitle>

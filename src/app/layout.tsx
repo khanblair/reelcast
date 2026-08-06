@@ -9,7 +9,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "ReelCast — AI-Powered YouTube Publishing",
+  title: "ReelCast | AI-Powered YouTube Publishing",
   description:
     "Upload raw footage, let AI enhance and generate metadata, then publish directly to YouTube on your schedule.",
   manifest: "/manifest.json",

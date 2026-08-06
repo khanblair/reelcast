@@ -18,7 +18,7 @@ const ENV_VARS = [
   },
   {
     name: "CONVEX_DEPLOYMENT",
-    purpose: "Convex deployment name — set automatically by `npx convex dev`.",
+    purpose: "Convex deployment name, set automatically by `npx convex dev`.",
   },
   {
     name: "NEXT_PUBLIC_CONVEX_URL",

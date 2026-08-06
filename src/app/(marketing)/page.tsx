@@ -89,7 +89,7 @@ export default async function LandingPage() {
             </h1>
 
             <p className="text-xl text-muted-foreground max-w-2xl mb-10 leading-relaxed">
-              ReelCast handles everything after you hit record — AI metadata, smart scheduling,
+              ReelCast handles everything after you hit record: AI metadata, smart scheduling,
               auto-publishing, analytics, and a full content calendar. Built for creators who
               ship daily.
             </p>
@@ -118,7 +118,7 @@ export default async function LandingPage() {
             </div>
 
             <p className="mt-4 text-sm text-muted-foreground">
-              Free plan available &mdash; no credit card required
+              Free plan available. No credit card required
             </p>
           </div>
 
@@ -255,19 +255,19 @@ export default async function LandingPage() {
                 icon: Sparkles,
                 color: "text-primary bg-primary/10",
                 title: "AI Metadata Generation",
-                desc: "Click-worthy titles, SEO-optimized descriptions, and trending tags — generated automatically from your video content.",
+                desc: "Click-worthy titles, SEO-optimized descriptions, and trending tags, generated automatically from your video content.",
               },
               {
                 icon: Youtube,
                 color: "text-red-500 bg-red-500/10",
                 title: "Direct YouTube Publishing",
-                desc: "Connect your channel once. Publish directly from ReelCast with one click — no re-uploading, no switching tabs.",
+                desc: "Connect your channel once. Publish directly from ReelCast with one click, no re-uploading, no switching tabs.",
               },
               {
                 icon: Zap,
                 color: "text-yellow-500 bg-yellow-500/10",
                 title: "Auto-Publish Queue",
-                desc: "Set your publishing cadence, fill the queue, and let ReelCast publish on schedule — even while you sleep.",
+                desc: "Set your publishing cadence, fill the queue, and let ReelCast publish on schedule, even while you sleep.",
               },
               {
                 icon: CalendarDays,
@@ -285,7 +285,7 @@ export default async function LandingPage() {
                 icon: BarChart2,
                 color: "text-green-500 bg-green-500/10",
                 title: "Analytics Dashboard",
-                desc: "Track views, watch time, CTR, revenue, and subscriber growth — all sourced live from the YouTube Analytics API.",
+                desc: "Track views, watch time, CTR, revenue, and subscriber growth, all sourced live from the YouTube Analytics API.",
               },
               {
                 icon: Bot,
@@ -507,7 +507,7 @@ export default async function LandingPage() {
                 A full publishing calendar, built for creators.
               </h2>
               <p className="text-muted-foreground mb-8 leading-relaxed">
-                See everything at a glance — year, month, week, or day. Plan your publishing cadence,
+                See everything at a glance, year, month, week, or day. Plan your publishing cadence,
                 spot gaps in your schedule, and never miss a posting day again.
               </p>
               <ul className="space-y-4">
@@ -539,7 +539,7 @@ export default async function LandingPage() {
               </h2>
               <p className="text-muted-foreground mb-8 leading-relaxed">
                 Pull live data directly from the YouTube Analytics API. Understand your audience,
-                track your growth, and make content decisions backed by real numbers — not guesswork.
+                track your growth, and make content decisions backed by real numbers, not guesswork.
               </p>
               <ul className="space-y-4">
                 {[
@@ -682,6 +682,7 @@ export default async function LandingPage() {
 
         {/* ── Final CTA ── */}
         <section className="w-full py-32 px-4 flex flex-col items-center text-center relative overflow-hidden">
+          <Image src="/images/fire1.gif" alt="" fill className="object-cover opacity-[0.12] pointer-events-none" unoptimized />
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-primary/8 blur-[100px] rounded-full" />
           </div>

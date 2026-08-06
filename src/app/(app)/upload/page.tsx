@@ -199,7 +199,7 @@ export default function UploadPage() {
             {items.length > 0 ? "Drop more videos to add" : "Drag and drop your videos"}
           </h3>
           <p className="text-muted-foreground text-sm mb-4">
-            MP4, MOV, AVI up to 500MB each — select multiple files at once
+            MP4, MOV, AVI up to 500MB each, select multiple files at once
           </p>
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground px-4 py-2 rounded-md font-medium text-sm hover:bg-primary/90 transition-colors">

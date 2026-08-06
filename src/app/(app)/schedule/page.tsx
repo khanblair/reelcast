@@ -161,7 +161,7 @@ export default function SchedulePage() {
     [allVideos]
   );
 
-  // Drafts without a pending metadata job — safe to schedule
+  // Drafts without a pending metadata job, safe to schedule
   const draftVideos = useMemo(
     () => {
       const now = Date.now();
@@ -460,7 +460,7 @@ export default function SchedulePage() {
                   /* ── Regenerate Now panel ── */
                   <div className="space-y-4">
                     <p className="text-sm text-muted-foreground">
-                      Immediately regenerate AI metadata for selected videos using the improved VidIQ-style prompt — works on both <strong>draft</strong> and <strong>ready</strong> videos. Existing titles and tags are replaced.
+                      Immediately regenerate AI metadata for selected videos using the improved VidIQ-style prompt, works on both <strong>draft</strong> and <strong>ready</strong> videos. Existing titles and tags are replaced.
                     </p>
 
                     <div className="space-y-2">
@@ -552,7 +552,7 @@ export default function SchedulePage() {
                 /* ── Schedule panel (existing) ── */
                 <div className="space-y-5">
                 <p className="text-sm text-muted-foreground">
-                  Schedule AI metadata generation for draft videos. Each video is analyzed, titled, and automatically marked <strong>Ready</strong> — you get a Discord notification for each one.
+                  Schedule AI metadata generation for draft videos. Each video is analyzed, titled, and automatically marked <strong>Ready</strong>, you get a Discord notification for each one.
                 </p>
                 <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-700 dark:text-amber-400">
                   <span className="shrink-0 mt-0.5">⚠</span>
@@ -593,7 +593,7 @@ export default function SchedulePage() {
 
                   {draftVideos.length === 0 && pendingMetadataVideos.length === 0 ? (
                     <div className="border rounded-md flex items-center justify-center h-32 text-sm text-muted-foreground">
-                      No draft videos — upload some first
+                      No draft videos. Upload some first
                     </div>
                   ) : draftVideos.length === 0 ? (
                     <div className="border rounded-md flex items-center justify-center h-16 text-sm text-muted-foreground">
@@ -841,7 +841,7 @@ export default function SchedulePage() {
 
                     {schedulableVideos.length === 0 ? (
                       <p className="text-sm text-center text-muted-foreground py-3">
-                        No ready videos yet — the metadata cron will fill this pool as it processes your drafts.
+                        No ready videos yet. The metadata cron will fill this pool as it processes your drafts.
                       </p>
                     ) : (
                       <div className="border rounded-md divide-y max-h-52 overflow-y-auto">
@@ -861,7 +861,7 @@ export default function SchedulePage() {
                   /* Setup form */
                   <>
                     <p className="text-sm text-muted-foreground">
-                      Set a recurring schedule and ReelCast automatically picks your oldest <strong>ready</strong> videos and publishes them. No manual selection needed — the metadata cron fills the pool, this cron drains it.
+                      Set a recurring schedule and ReelCast automatically picks your oldest <strong>ready</strong> videos and publishes them. No manual selection needed. The metadata cron fills the pool, this cron drains it.
                     </p>
 
                     <div className="grid sm:grid-cols-2 gap-4">
@@ -877,7 +877,7 @@ export default function SchedulePage() {
                         >
                           {TIMEZONE_OPTIONS.map((tz) => (
                             <option key={tz.value} value={tz.value}>
-                              {tz.label} — {tz.desc}
+                              {tz.label}: {tz.desc}
                             </option>
                           ))}
                         </select>

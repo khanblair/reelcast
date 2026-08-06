@@ -3,7 +3,7 @@ import { Video, ArrowLeft, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const metadata = {
-  title: "Terms of Service — ReelCast",
+  title: "Terms of Service | ReelCast",
   description: "Read the Terms of Service for using ReelCast.",
 };
 

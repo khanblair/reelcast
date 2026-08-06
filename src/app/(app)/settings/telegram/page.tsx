@@ -112,7 +112,7 @@ export default function TelegramSettingsPage() {
             <li>Open Telegram and start a chat with <span className="font-mono text-foreground">@BotFather</span></li>
             <li>Send <span className="font-mono text-foreground">/newbot</span> and follow the prompts to create a bot</li>
             <li>Start your new bot by opening its chat and sending <span className="font-mono text-foreground">/start</span></li>
-            <li>Find your Chat ID using <span className="font-mono text-foreground">@userinfobot</span> — start it and it will reply with your ID</li>
+            <li>Find your Chat ID using <span className="font-mono text-foreground">@userinfobot</span>, start it and it will reply with your ID</li>
             <li>Enter your Chat ID below and click Connect</li>
           </ol>
         </CardContent>

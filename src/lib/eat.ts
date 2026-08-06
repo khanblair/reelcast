@@ -1,4 +1,4 @@
-// East Africa Time utilities — Uganda/Kampala is UTC+3 (Africa/Nairobi)
+// East Africa Time utilities, Uganda/Kampala is UTC+3 (Africa/Nairobi)
 const TZ = "Africa/Nairobi";
 
 export function formatDateTimeEAT(ms: number): string {

@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ContactForm } from "./contact-form";
 
 export const metadata = {
-  title: "Contact — ReelCast",
+  title: "Contact | ReelCast",
   description: "Get in touch with the ReelCast team. We'd love to hear from you.",
 };
 

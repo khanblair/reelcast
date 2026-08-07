@@ -259,4 +259,10 @@ export default defineSchema({
     metadataGenerated: v.optional(v.number()),
     veoGenerated: v.optional(v.number()),
   }).index("by_user", ["userId"]).index("by_user_month", ["userId", "month"]),
+
+  // Singleton table — one row stores all platform-level API keys set by admin
+  platformSettings: defineTable({
+    deepseekApiKey: v.optional(v.string()),
+    geminiApiKey: v.optional(v.string()),
+  }),
 });

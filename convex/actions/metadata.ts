@@ -4,7 +4,7 @@ import { v } from "convex/values";
 import { action } from "../_generated/server";
 import { api, internal } from "../_generated/api";
 import { createAiClient } from "../lib/ai";
-import type { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 
 // ---------------------------------------------------------------------------
 // Build content parts for video analysis.
@@ -79,13 +79,13 @@ export const generateFromPrompt = action({
   handler: async (ctx, args) => {
     console.log(`[generateFromPrompt] Starting — videoId=${args.videoId} prompt="${args.prompt.slice(0, 80)}"`);
 
-    let ai;
-    try {
-      ({ ai } = createAiClient());
-    } catch (err) {
-      console.error("[generateFromPrompt] No AI credentials available — skipping metadata generation:", err);
+    const platformSettings = await ctx.runQuery(internal.admin.platformSettings.getInternal);
+    const geminiKey = platformSettings?.geminiApiKey ?? process.env.GEMINI_API_KEY;
+    if (!geminiKey) {
+      console.error("[generateFromPrompt] No Gemini API key — set it in Admin > Settings or GEMINI_API_KEY env var.");
       return;
     }
+    const ai = new GoogleGenAI({ apiKey: geminiKey });
 
     try {
       console.log("[generateFromPrompt] Calling gemini-2.5-flash for metadata...");
@@ -169,19 +169,19 @@ export const generateForUpload = action({
 
     const hint = (video as any).aiTitle ?? video.title;
 
-    let ai;
-    try {
-      ({ ai } = createAiClient());
-    } catch {
+    const platformSettings = await ctx.runQuery(internal.admin.platformSettings.getInternal);
+    const geminiKey = platformSettings?.geminiApiKey ?? process.env.GEMINI_API_KEY;
+    if (!geminiKey) {
       if (args.autoMarkReady) {
         await ctx.runMutation(internal.videos.internalClearMetadataSchedule, { id: args.videoId });
         await ctx.runAction(api.actions.telegram.sendNotification, {
           userId: video.userId,
-          message: `❌ Metadata failed: "${hint}" — AI credentials not configured. Video remains as draft.`,
+          message: `❌ Metadata failed: "${hint}" — Gemini API key not configured. Set it in Admin > Settings.`,
         });
       }
-      throw new Error("AI credentials not configured on server.");
+      throw new Error("Gemini API key not configured. Set it in Admin > Settings or GEMINI_API_KEY env var.");
     }
+    const ai = new GoogleGenAI({ apiKey: geminiKey });
 
     try {
       // Build vision parts — frames (Cloudinary) or Files API (R2/other)

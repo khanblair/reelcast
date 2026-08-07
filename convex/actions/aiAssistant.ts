@@ -2,7 +2,7 @@
 
 import { v } from "convex/values";
 import { action } from "../_generated/server";
-import { api } from "../_generated/api";
+import { api, internal } from "../_generated/api";
 
 /**
  * AI Assistant chat action — powered by DeepSeek.
@@ -17,9 +17,12 @@ export const chat = action({
     const user = await ctx.runQuery(api.users.current);
     if (!user) throw new Error("Unauthenticated");
 
-    // 2. Load settings — bail early if no DeepSeek key
-    const settings = await ctx.runQuery(api.settings.get);
-    const deepseekApiKey = settings?.deepseekApiKey as string | undefined;
+    // 2. Load platform settings for DeepSeek key, and user settings for context
+    const [platformSettings, settings] = await Promise.all([
+      ctx.runQuery(internal.admin.platformSettings.getInternal),
+      ctx.runQuery(api.settings.get),
+    ]);
+    const deepseekApiKey = platformSettings?.deepseekApiKey as string | undefined;
     if (!deepseekApiKey) {
       return { error: "no_api_key" } as const;
     }
@@ -82,7 +85,7 @@ export const chat = action({
     // Build the history slice to send — exclude the message we just saved
     // (it is sent explicitly as the final "user" turn below) to avoid duplication.
     const historyMessages = conversationHistory
-      .slice(0, conversationHistory.length - 1)
+      .slice(0, -1)
       .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 
     // 6. Call DeepSeek API

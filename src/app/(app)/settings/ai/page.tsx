@@ -3,13 +3,12 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../../convex/_generated/api";
-import { Sparkles, Save, Loader2, Eye, EyeOff } from "lucide-react";
+import { Sparkles, Save, Loader2 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import { ModelSelector } from "@/components/generation/model-selector";
 import {
   VEO_RESOLUTIONS,
@@ -43,12 +42,6 @@ export default function AISettingsPage() {
   const [aiDescriptionLength, setAiDescriptionLength] = useState(settings?.aiDescriptionLength ?? "medium");
   const [aiGuidelines, setAiGuidelines] = useState(settings?.aiGuidelines ?? "");
 
-  // DeepSeek API key state
-  const [deepseekKeyInput, setDeepseekKeyInput] = useState("");
-  const [deepseekKeyVisible, setDeepseekKeyVisible] = useState(false);
-  const [savingDeepseek, setSavingDeepseek] = useState(false);
-  const [savedDeepseek, setSavedDeepseek] = useState(false);
-
   // Brand memory state
   const [aiNiche, setAiNiche] = useState(settings?.aiNiche ?? "");
   const [aiTargetAudience, setAiTargetAudience] = useState(settings?.aiTargetAudience ?? "");
@@ -57,20 +50,6 @@ export default function AISettingsPage() {
   const [aiCtaPreferences, setAiCtaPreferences] = useState(settings?.aiCtaPreferences ?? "");
   const [savingBrand, setSavingBrand] = useState(false);
   const [savedBrand, setSavedBrand] = useState(false);
-
-  const handleSaveDeepseekKey = async () => {
-    if (!deepseekKeyInput.trim()) return;
-    setSavingDeepseek(true);
-    setSavedDeepseek(false);
-    try {
-      await updateSettings({ deepseekApiKey: deepseekKeyInput.trim() });
-      setDeepseekKeyInput("");
-      setSavedDeepseek(true);
-      setTimeout(() => setSavedDeepseek(false), 2000);
-    } finally {
-      setSavingDeepseek(false);
-    }
-  };
 
   const handleSaveBrandMemory = async () => {
     setSavingBrand(true);
@@ -300,63 +279,6 @@ export default function AISettingsPage() {
           </>
         )}
       </Button>
-
-      {/* DeepSeek API Key (BYOK) */}
-      <Card>
-        <CardHeader>
-          <CardTitle>AI Assistant: DeepSeek API Key</CardTitle>
-          <CardDescription>
-            The AI Assistant uses DeepSeek to answer questions about your video library. Enter your own API key to enable it.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="space-y-2">
-            <Label className="text-sm font-medium">API Key</Label>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Input
-                  type={deepseekKeyVisible ? "text" : "password"}
-                  placeholder={settings?.deepseekApiKey ? "••••••••••••••••" : "sk-..."}
-                  value={deepseekKeyInput}
-                  onChange={(e) => setDeepseekKeyInput(e.target.value)}
-                  className="pr-10"
-                />
-                <button
-                  type="button"
-                  onClick={() => setDeepseekKeyVisible((v) => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  {deepseekKeyVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              <Button
-                variant="outline"
-                onClick={handleSaveDeepseekKey}
-                disabled={savingDeepseek || !deepseekKeyInput.trim()}
-              >
-                {savingDeepseek ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : savedDeepseek ? (
-                  "Saved!"
-                ) : (
-                  <>
-                    <Save className="h-4 w-4 mr-1" />
-                    Save
-                  </>
-                )}
-              </Button>
-            </div>
-            {settings?.deepseekApiKey && (
-              <p className="text-[11px] text-muted-foreground">
-                API key is set. Enter a new value above to replace it.
-              </p>
-            )}
-            <p className="text-[11px] text-muted-foreground">
-              Get a key at platform.deepseek.com
-            </p>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Brand Memory */}
       <Card>

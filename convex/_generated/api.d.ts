@@ -28,6 +28,7 @@ import type * as admin_platformSettings from "../admin/platformSettings.js";
 import type * as admin_quota from "../admin/quota.js";
 import type * as admin_stats from "../admin/stats.js";
 import type * as admin_storage from "../admin/storage.js";
+import type * as admin_testApiKeys from "../admin/testApiKeys.js";
 import type * as admin_usageLedger from "../admin/usageLedger.js";
 import type * as admin_users from "../admin/users.js";
 import type * as admin_videos from "../admin/videos.js";
@@ -81,6 +82,7 @@ declare const fullApi: ApiFromModules<{
   "admin/quota": typeof admin_quota;
   "admin/stats": typeof admin_stats;
   "admin/storage": typeof admin_storage;
+  "admin/testApiKeys": typeof admin_testApiKeys;
   "admin/usageLedger": typeof admin_usageLedger;
   "admin/users": typeof admin_users;
   "admin/videos": typeof admin_videos;

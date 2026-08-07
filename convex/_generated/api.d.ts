@@ -24,6 +24,7 @@ import type * as actions_testConnections from "../actions/testConnections.js";
 import type * as actions_youtubeAnalytics from "../actions/youtubeAnalytics.js";
 import type * as admin_jobs from "../admin/jobs.js";
 import type * as admin_notifications from "../admin/notifications.js";
+import type * as admin_platformSettings from "../admin/platformSettings.js";
 import type * as admin_quota from "../admin/quota.js";
 import type * as admin_stats from "../admin/stats.js";
 import type * as admin_storage from "../admin/storage.js";
@@ -76,6 +77,7 @@ declare const fullApi: ApiFromModules<{
   "actions/youtubeAnalytics": typeof actions_youtubeAnalytics;
   "admin/jobs": typeof admin_jobs;
   "admin/notifications": typeof admin_notifications;
+  "admin/platformSettings": typeof admin_platformSettings;
   "admin/quota": typeof admin_quota;
   "admin/stats": typeof admin_stats;
   "admin/storage": typeof admin_storage;

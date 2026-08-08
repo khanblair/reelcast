@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
+import { useRouter } from "next/navigation";
 import { api } from "../../../../../convex/_generated/api";
-import { Bell, Eye, EyeOff, Save, Loader2 } from "lucide-react";
+import { Bell, Eye, EyeOff, Save, Loader2, ArrowLeft } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -11,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 
 export default function NotificationsSettingsPage() {
+  const router = useRouter();
   const settings = useQuery(api.settings.get);
   const update = useMutation(api.settings.update);
 
@@ -66,6 +68,16 @@ export default function NotificationsSettingsPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => router.push("/settings")}
+        className="-ml-1 text-muted-foreground"
+      >
+        <ArrowLeft className="h-4 w-4 mr-1" />
+        Back to Settings
+      </Button>
+
       <div>
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
           <Bell className="h-6 w-6 text-primary" />

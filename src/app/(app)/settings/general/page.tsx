@@ -1,13 +1,16 @@
 "use client";
 
 import { useQuery } from "convex/react";
+import { useRouter } from "next/navigation";
 import { api } from "../../../../../convex/_generated/api";
-import { Settings, User } from "lucide-react";
+import { Settings, User, ArrowLeft } from "lucide-react";
 import { Loader2 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import Image from "next/image";
 
 export default function GeneralSettingsPage() {
+  const router = useRouter();
   const user = useQuery(api.users.current);
 
   if (user === undefined) {
@@ -22,6 +25,16 @@ export default function GeneralSettingsPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => router.push("/settings")}
+        className="-ml-1 text-muted-foreground"
+      >
+        <ArrowLeft className="h-4 w-4 mr-1" />
+        Back to Settings
+      </Button>
+
       <div>
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
           <Settings className="h-6 w-6 text-primary" />

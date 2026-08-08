@@ -2,14 +2,16 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
+import { useRouter } from "next/navigation";
 import { api } from "../../../../../convex/_generated/api";
-import { MessageCircle, Save, Loader2, CheckCircle, XCircle } from "lucide-react";
+import { MessageCircle, Save, Loader2, CheckCircle, XCircle, ArrowLeft } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 
 export default function TelegramSettingsPage() {
+  const router = useRouter();
   const settings = useQuery(api.settings.get);
   const update = useMutation(api.settings.update);
   const testTelegram = useAction(api.actions.testConnections.testTelegram);
@@ -91,6 +93,16 @@ export default function TelegramSettingsPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => router.push("/settings")}
+        className="-ml-1 text-muted-foreground"
+      >
+        <ArrowLeft className="h-4 w-4 mr-1" />
+        Back to Settings
+      </Button>
+
       <div>
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
           <MessageCircle className="h-6 w-6 text-primary" />

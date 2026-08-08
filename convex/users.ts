@@ -94,6 +94,19 @@ export const saveYoutubeTokens = mutation({
         throw new Error("CHANNEL_ALREADY_CLAIMED");
       }
 
+      // Free plan: enforce single-channel limit
+      const plan = user.plan ?? "free";
+      if (plan === "free") {
+        const currentChannels = await ctx.db
+          .query("youtubeChannels")
+          .withIndex("by_user", (q) => q.eq("userId", user._id))
+          .collect();
+        const isReconnect = currentChannels.some((c) => c.channelId === args.channelId);
+        if (!isReconnect && currentChannels.length >= 1) {
+          throw new Error("CHANNEL_LIMIT_FREE_PLAN");
+        }
+      }
+
       // Upsert into youtubeChannels table
       if (existingChannel) {
         await ctx.db.patch(existingChannel._id, {
@@ -148,6 +161,16 @@ export const disconnectYoutube = mutation({
     const identity = await getCurrentUserOrThrow(ctx);
     const user = await getUserBySupabaseId(ctx, identity.subject);
     if (!user) throw new Error("User not found");
+
+    // Also clear the youtubeChannels table so both systems stay consistent
+    const channels = await ctx.db
+      .query("youtubeChannels")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    for (const ch of channels) {
+      await ctx.db.delete(ch._id);
+    }
+
     await ctx.db.patch(user._id, {
       youtubeConnected: false,
       youtubeChannelId: undefined,

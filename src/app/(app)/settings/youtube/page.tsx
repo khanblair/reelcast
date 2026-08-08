@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
+import { useRouter } from "next/navigation";
 import { api } from "../../../../../convex/_generated/api";
 import {
-  Youtube, CheckCircle, AlertCircle, XCircle, Loader2, RefreshCw, Unplug, Plus, Star
+  Youtube, CheckCircle, AlertCircle, XCircle, Loader2, RefreshCw, Unplug, Plus, Star, ArrowLeft
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,9 +31,12 @@ function StatusBadge({ status }: { status: OAuthStatus }) {
 }
 
 export default function YouTubeSettingsPage() {
+  const router = useRouter();
   const channels = useQuery(api.youtubeChannels.list);
+  const currentUser = useQuery(api.users.current);
   const removeChannel = useMutation(api.youtubeChannels.remove);
   const setPrimary = useMutation(api.youtubeChannels.setPrimary);
+  const migrateFromLegacy = useMutation(api.youtubeChannels.migrateFromLegacy);
   const checkHealth = useAction(api.actions.oauthHealthCheck.checkMyOAuthHealth);
 
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -40,6 +44,15 @@ export default function YouTubeSettingsPage() {
   const [settingPrimaryId, setSettingPrimaryId] = useState<string | null>(null);
   const [healthStatus, setHealthStatus] = useState<"idle" | "loading" | "done">("idle");
   const [healthResult, setHealthResult] = useState<{ status: OAuthStatus } | null>(null);
+
+  // Auto-migrate legacy single-channel users into the youtubeChannels table.
+  // Runs once when channels resolves to an empty array (meaning no records yet).
+  useEffect(() => {
+    if (channels !== undefined && channels.length === 0) {
+      migrateFromLegacy().catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channels === undefined]);
 
   if (channels === undefined) {
     return (
@@ -99,8 +112,21 @@ export default function YouTubeSettingsPage() {
 
   const healthMsg = healthMessage();
 
+  const plan = currentUser?.plan ?? "free";
+  const atChannelLimit = plan === "free" && (channels?.length ?? 0) >= 1;
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => router.push("/settings")}
+        className="-ml-1 text-muted-foreground"
+      >
+        <ArrowLeft className="h-4 w-4 mr-1" />
+        Back to Settings
+      </Button>
+
       <div>
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
           <Youtube className="h-6 w-6 text-primary" />
@@ -232,13 +258,24 @@ export default function YouTubeSettingsPage() {
             </div>
           </div>
 
-          <Button
-            variant="outline"
-            onClick={() => { window.location.href = "/api/youtube/connect"; }}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Connect another channel
-          </Button>
+          {atChannelLimit ? (
+            <div className="rounded-lg border border-dashed p-4 text-center space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Free plan is limited to one YouTube channel.
+              </p>
+              <Button variant="outline" size="sm" onClick={() => router.push("/settings")}>
+                Upgrade to Pro for multiple channels
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              onClick={() => { window.location.href = "/api/youtube/connect"; }}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Connect another channel
+            </Button>
+          )}
         </div>
       )}
 

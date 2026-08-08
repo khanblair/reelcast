@@ -35,6 +35,8 @@ export default function SettingsPage() {
       const reason = params.get("reason") ?? "unknown";
       const message = reason === "channel_already_claimed"
         ? "This YouTube channel is already connected to another account. Each channel can only be linked to one account."
+        : reason === "channel_limit"
+        ? "Free plan is limited to one YouTube channel. Upgrade to Pro to connect additional channels."
         : `YouTube connection failed (${reason}). Please try again.`;
       setYoutubeBanner({ success: false, message });
     }

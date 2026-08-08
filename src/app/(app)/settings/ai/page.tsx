@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "convex/react";
+import { useRouter } from "next/navigation";
 import { api } from "../../../../../convex/_generated/api";
-import { Sparkles, Save, Loader2 } from "lucide-react";
+import { Sparkles, Save, Loader2, ArrowLeft } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -21,6 +22,7 @@ import {
 } from "@/lib/constants";
 
 export default function AISettingsPage() {
+  const router = useRouter();
   const settings = useQuery(api.settings.get);
   const updateSettings = useMutation(api.settings.update);
 
@@ -136,6 +138,16 @@ export default function AISettingsPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => router.push("/settings")}
+        className="-ml-1 text-muted-foreground"
+      >
+        <ArrowLeft className="h-4 w-4 mr-1" />
+        Back to Settings
+      </Button>
+
       <div>
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
           <Sparkles className="h-6 w-6 text-primary" />

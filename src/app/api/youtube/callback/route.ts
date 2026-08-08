@@ -112,6 +112,9 @@ export async function GET(request: Request) {
     if (message.includes("CHANNEL_ALREADY_CLAIMED")) {
       return NextResponse.redirect(`${origin}/settings?youtube=error&reason=channel_already_claimed`, 302);
     }
+    if (message.includes("CHANNEL_LIMIT_FREE_PLAN")) {
+      return NextResponse.redirect(`${origin}/settings?youtube=error&reason=channel_limit`, 302);
+    }
     console.error("Failed to save YouTube tokens to Convex:", err);
     return NextResponse.redirect(`${origin}/settings?youtube=error&reason=save_failed`, 302);
   }

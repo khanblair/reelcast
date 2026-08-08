@@ -188,6 +188,43 @@ export const setPrimary = mutation({
   },
 });
 
+// Migrate the current user's legacy single-channel data into youtubeChannels.
+// Safe to call repeatedly — no-op if already migrated or no legacy data.
+export const migrateFromLegacy = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await getCurrentUserOrThrow(ctx);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
+      .unique();
+    if (!user) return { migrated: false };
+
+    const existing = await ctx.db
+      .query("youtubeChannels")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .first();
+    if (existing) return { migrated: false };
+
+    if (!user.youtubeConnected || !user.youtubeChannelId || !user.youtubeAccessToken) {
+      return { migrated: false };
+    }
+
+    await ctx.db.insert("youtubeChannels", {
+      userId: user._id,
+      channelId: user.youtubeChannelId,
+      channelName: user.youtubeChannelName,
+      accessToken: user.youtubeAccessToken,
+      refreshToken: user.youtubeRefreshToken,
+      tokenExpiry: user.youtubeTokenExpiry ?? Date.now(),
+      oauthStatus: user.youtubeOAuthStatus ?? "connected",
+      isPrimary: true,
+    });
+
+    return { migrated: true };
+  },
+});
+
 // Internal: backfill youtubeChannels from existing users.youtubeChannelId data
 export const backfill = internalMutation({
   args: {},

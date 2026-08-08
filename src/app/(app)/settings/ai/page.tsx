@@ -41,6 +41,7 @@ export default function AISettingsPage() {
   const [aiLanguage, setAiLanguage] = useState(settings?.aiLanguage ?? "en");
   const [aiDescriptionLength, setAiDescriptionLength] = useState(settings?.aiDescriptionLength ?? "medium");
   const [aiGuidelines, setAiGuidelines] = useState(settings?.aiGuidelines ?? "");
+  const [humanizeWriting, setHumanizeWriting] = useState(settings?.humanizeWriting ?? false);
 
   // Brand memory state
   const [aiNiche, setAiNiche] = useState(settings?.aiNiche ?? "");
@@ -87,6 +88,7 @@ export default function AISettingsPage() {
         aiLanguage,
         aiDescriptionLength,
         aiGuidelines: aiGuidelines.trim() || undefined,
+        humanizeWriting,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -243,6 +245,16 @@ export default function AISettingsPage() {
                 ))}
               </Select>
             </div>
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div>
+              <Label className="text-sm font-medium">Humanize Writing (default)</Label>
+              <p className="text-[11px] text-muted-foreground">
+                Strip AI clichés from generated titles and descriptions — no buzzwords, colon reveals, or filler phrases. Can be toggled per-generation.
+              </p>
+            </div>
+            <Switch checked={humanizeWriting} onCheckedChange={setHumanizeWriting} />
           </div>
 
           <div className="space-y-2">

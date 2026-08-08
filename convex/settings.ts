@@ -126,6 +126,7 @@ export const update = mutation({
     aiBrandVoice: v.optional(v.string()),
     aiForbiddenWords: v.optional(v.string()),
     aiCtaPreferences: v.optional(v.string()),
+    humanizeWriting: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const identity = await getCurrentUserOrThrow(ctx);
@@ -151,7 +152,21 @@ export const update = mutation({
     if (args.defaultBackgroundMusic !== undefined) updateData.defaultBackgroundMusic = args.defaultBackgroundMusic;
     if (args.notificationsEnabled !== undefined) updateData.notificationsEnabled = args.notificationsEnabled;
     if (args.telegramChatId !== undefined) updateData.telegramChatId = args.telegramChatId;
-    if (args.discordWebhookUrl !== undefined) updateData.discordWebhookUrl = args.discordWebhookUrl;
+    if (args.discordWebhookUrl !== undefined) {
+      if (args.discordWebhookUrl !== "") {
+        try {
+          const parsed = new URL(args.discordWebhookUrl);
+          const validHost = parsed.hostname === "discord.com" || parsed.hostname === "discordapp.com";
+          if (parsed.protocol !== "https:" || !validHost || !parsed.pathname.startsWith("/api/webhooks/")) {
+            throw new Error("Discord webhook URL must be a valid https://discord.com/api/webhooks/... URL");
+          }
+        } catch (e: unknown) {
+          if (e instanceof Error && e.message.startsWith("Discord webhook")) throw e;
+          throw new Error("Discord webhook URL is invalid");
+        }
+      }
+      updateData.discordWebhookUrl = args.discordWebhookUrl || undefined;
+    }
     if (args.aiAutoGenerate !== undefined) updateData.aiAutoGenerate = args.aiAutoGenerate;
     if (args.aiGenerateTitle !== undefined) updateData.aiGenerateTitle = args.aiGenerateTitle;
     if (args.aiGenerateDescription !== undefined) updateData.aiGenerateDescription = args.aiGenerateDescription;
@@ -185,6 +200,7 @@ export const update = mutation({
     if (args.aiBrandVoice !== undefined) updateData.aiBrandVoice = args.aiBrandVoice;
     if (args.aiForbiddenWords !== undefined) updateData.aiForbiddenWords = args.aiForbiddenWords;
     if (args.aiCtaPreferences !== undefined) updateData.aiCtaPreferences = args.aiCtaPreferences;
+    if (args.humanizeWriting !== undefined) updateData.humanizeWriting = args.humanizeWriting;
 
     if (settings) {
       await ctx.db.patch(settings._id, updateData);

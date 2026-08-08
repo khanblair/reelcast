@@ -73,25 +73,72 @@ export const saveYoutubeTokens = mutation({
     const user = await getUserBySupabaseId(ctx, identity.subject);
     if (!user) throw new Error("User not found");
 
-    // Enforce one channel per account: reject if another user already owns this channel
+    const tokenExpiry = Date.now() + args.expiresIn * 1000;
+
     if (args.channelId) {
-      const existing = await ctx.db
+      // Check uniqueness in the youtubeChannels table (primary source of truth for multi-channel)
+      const existingChannel = await ctx.db
+        .query("youtubeChannels")
+        .withIndex("by_channel_id", (q) => q.eq("channelId", args.channelId!))
+        .unique();
+      if (existingChannel && existingChannel.userId !== user._id) {
+        throw new Error("CHANNEL_ALREADY_CLAIMED");
+      }
+
+      // Also check the legacy users.youtubeChannelId index for any existing single-channel users
+      const legacyUser = await ctx.db
         .query("users")
         .withIndex("by_youtube_channel_id", (q) => q.eq("youtubeChannelId", args.channelId))
         .unique();
-      if (existing && existing._id !== user._id) {
+      if (legacyUser && legacyUser._id !== user._id) {
         throw new Error("CHANNEL_ALREADY_CLAIMED");
+      }
+
+      // Upsert into youtubeChannels table
+      if (existingChannel) {
+        await ctx.db.patch(existingChannel._id, {
+          channelName: args.channelName,
+          accessToken: args.accessToken,
+          refreshToken: args.refreshToken ?? existingChannel.refreshToken,
+          tokenExpiry,
+          oauthStatus: "connected",
+        });
+      } else {
+        const userChannels = await ctx.db
+          .query("youtubeChannels")
+          .withIndex("by_user", (q) => q.eq("userId", user._id))
+          .collect();
+        await ctx.db.insert("youtubeChannels", {
+          userId: user._id,
+          channelId: args.channelId,
+          channelName: args.channelName,
+          accessToken: args.accessToken,
+          refreshToken: args.refreshToken,
+          tokenExpiry,
+          oauthStatus: "connected",
+          isPrimary: userChannels.length === 0,
+        });
       }
     }
 
-    await ctx.db.patch(user._id, {
-      youtubeConnected: true,
-      youtubeChannelId: args.channelId,
-      youtubeChannelName: args.channelName,
-      youtubeAccessToken: args.accessToken,
-      youtubeRefreshToken: args.refreshToken,
-      youtubeTokenExpiry: Date.now() + args.expiresIn * 1000,
-    });
+    // Keep users table in sync (primary channel) for backward compat with existing publish/analytics paths
+    const isPrimary = !args.channelId || !(await ctx.db
+      .query("youtubeChannels")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect()
+      .then((chs) => chs.some((c) => c.isPrimary && c.channelId !== args.channelId)));
+
+    if (isPrimary) {
+      await ctx.db.patch(user._id, {
+        youtubeConnected: true,
+        youtubeChannelId: args.channelId,
+        youtubeChannelName: args.channelName,
+        youtubeAccessToken: args.accessToken,
+        youtubeRefreshToken: args.refreshToken,
+        youtubeTokenExpiry: tokenExpiry,
+        youtubeOAuthStatus: "connected",
+      });
+    }
   },
 });
 

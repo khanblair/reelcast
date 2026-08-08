@@ -21,6 +21,11 @@ import {
   ThumbsUp,
   MessageSquare,
   Clock,
+  Image as ImageIcon,
+  Captions,
+  History,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { api } from "../../../../../convex/_generated/api";
 import { Id } from "../../../../../convex/_generated/dataModel";
@@ -55,6 +60,8 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
   const deleteVideoAction = useAction(api.actions.deleteVideo.deleteVideo);
   const generateMetadata = useAction(api.actions.metadata.generateForUpload);
   const fetchVideoAnalytics = useAction(api.actions.youtubeAnalytics.fetchForVideo);
+  const generateThumbnail = useAction(api.actions.generateThumbnail.generate);
+  const generateCaptions = useAction(api.actions.generateCaptions.generate);
 
   // YouTube analytics, only fetched when video is published
   const videoAnalytics = useQuery(
@@ -73,6 +80,14 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
   const [scheduling, setScheduling] = useState(false);
   const [scheduleError, setScheduleError] = useState<string | null>(null);
   const [refreshingAnalytics, setRefreshingAnalytics] = useState(false);
+  const [generatingThumbnail, setGeneratingThumbnail] = useState(false);
+  const [thumbnailError, setThumbnailError] = useState<string | null>(null);
+  const [generatingCaptions, setGeneratingCaptions] = useState(false);
+  const [captionsError, setCaptionsError] = useState<string | null>(null);
+  const [showMetadataHistory, setShowMetadataHistory] = useState(false);
+  const [humanizeMetadata, setHumanizeMetadata] = useState(
+    userSettings?.humanizeWriting ?? false
+  );
 
   // Position-based estimated auto-publish time for this video
   const estimatedPublishAt = useMemo(() => {
@@ -151,7 +166,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
     setRegenerating(true);
     setRegenError(null);
     try {
-      await generateMetadata({ videoId: video._id });
+      await generateMetadata({ videoId: video._id, humanize: humanizeMetadata });
     } catch (err) {
       setRegenError(err instanceof Error ? err.message : "Regeneration failed");
     } finally {
@@ -186,6 +201,30 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
       console.error("Analytics refresh failed:", e);
     } finally {
       setRefreshingAnalytics(false);
+    }
+  };
+
+  const handleGenerateThumbnail = async () => {
+    setGeneratingThumbnail(true);
+    setThumbnailError(null);
+    try {
+      await generateThumbnail({ videoId });
+    } catch (e) {
+      setThumbnailError(e instanceof Error ? e.message : "Thumbnail generation failed");
+    } finally {
+      setGeneratingThumbnail(false);
+    }
+  };
+
+  const handleGenerateCaptions = async () => {
+    setGeneratingCaptions(true);
+    setCaptionsError(null);
+    try {
+      await generateCaptions({ videoId });
+    } catch (e) {
+      setCaptionsError(e instanceof Error ? e.message : "Captions generation failed");
+    } finally {
+      setGeneratingCaptions(false);
     }
   };
 
@@ -616,7 +655,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
         </div>
 
         <div className="lg:col-span-3 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -629,13 +668,172 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                 <><Wand2 className="mr-2 h-3.5 w-3.5" />Regenerate Metadata</>
               )}
             </Button>
+            <button
+              type="button"
+              onClick={() => setHumanizeMetadata((v) => !v)}
+              title={humanizeMetadata ? "Humanize: ON — AI-slop patterns will be stripped" : "Humanize: OFF — click to enable human-style writing"}
+              className={[
+                "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors",
+                humanizeMetadata
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border bg-background text-muted-foreground hover:text-foreground",
+              ].join(" ")}
+            >
+              <Sparkles className="h-3 w-3" />
+              Humanize
+            </button>
+            {video.rawFileKey?.startsWith("http") && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateThumbnail}
+                  disabled={generatingThumbnail}
+                >
+                  {generatingThumbnail ? (
+                    <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Generating…</>
+                  ) : (
+                    <><ImageIcon className="mr-2 h-3.5 w-3.5" />Generate Thumbnail</>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGenerateCaptions}
+                  disabled={generatingCaptions}
+                >
+                  {generatingCaptions ? (
+                    <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Generating…</>
+                  ) : (
+                    <><Captions className="mr-2 h-3.5 w-3.5" />Generate Captions</>
+                  )}
+                </Button>
+              </>
+            )}
           </div>
           {regenError && (
             <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
               {regenError}
             </p>
           )}
+          {thumbnailError && (
+            <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
+              {thumbnailError}
+            </p>
+          )}
+          {captionsError && (
+            <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
+              {captionsError}
+            </p>
+          )}
+          {(video as any).thumbnailGeneratedUrl && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <ImageIcon className="h-4 w-4" />
+                  AI-Selected Thumbnail
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <img
+                  src={(video as any).thumbnailGeneratedUrl}
+                  alt="AI-selected thumbnail"
+                  className="rounded-md w-full max-w-xs object-cover"
+                />
+                <p className="text-xs text-muted-foreground mt-2">
+                  Best frame selected by AI. Use this URL as your YouTube thumbnail.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+          {(video as any).captionsVtt && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Captions className="h-4 w-4" />
+                  Generated Captions
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <pre className="text-xs bg-muted rounded-md p-3 overflow-x-auto max-h-40 whitespace-pre-wrap font-mono">
+                  {(video as any).captionsVtt}
+                </pre>
+                <p className="text-xs text-muted-foreground mt-2">
+                  WebVTT format. Copy and upload as a caption track on YouTube.
+                </p>
+              </CardContent>
+            </Card>
+          )}
           <MetadataEditor video={video as VideoType} />
+          {(video as any).metadataHistory?.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <button
+                  type="button"
+                  className="flex items-center justify-between w-full text-left"
+                  onClick={() => setShowMetadataHistory((v) => !v)}
+                >
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <History className="h-4 w-4" />
+                    Metadata History
+                    <span className="text-xs font-normal text-muted-foreground">
+                      ({(video as any).metadataHistory.length} version{(video as any).metadataHistory.length !== 1 ? "s" : ""})
+                    </span>
+                  </CardTitle>
+                  {showMetadataHistory ? (
+                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </button>
+              </CardHeader>
+              {showMetadataHistory && (
+                <CardContent className="space-y-3 pt-0">
+                  {[...(video as any).metadataHistory].reverse().map(
+                    (version: { savedAt: number; aiTitle?: string; aiDescription?: string; aiTags?: string[] }, idx: number) => (
+                      <div key={version.savedAt} className="rounded-md border p-3 space-y-1.5">
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(version.savedAt).toLocaleString("en-KE", {
+                            timeZone: "Africa/Nairobi",
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })}
+                          {idx === 0 && (
+                            <span className="ml-2 text-primary font-medium">Latest</span>
+                          )}
+                        </p>
+                        {version.aiTitle && (
+                          <p className="text-xs font-medium truncate">{version.aiTitle}</p>
+                        )}
+                        {version.aiDescription && (
+                          <p className="text-xs text-muted-foreground line-clamp-2">
+                            {version.aiDescription}
+                          </p>
+                        )}
+                        {version.aiTags && version.aiTags.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {version.aiTags.slice(0, 5).map((tag) => (
+                              <span
+                                key={tag}
+                                className="inline-flex items-center rounded-sm bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                            {version.aiTags.length > 5 && (
+                              <span className="text-xs text-muted-foreground">
+                                +{version.aiTags.length - 5} more
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  )}
+                </CardContent>
+              )}
+            </Card>
+          )}
 
           {/* YouTube Metrics, shown for published videos */}
           {video.status === "published" && video.publishedVideoId && (

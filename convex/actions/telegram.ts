@@ -4,6 +4,19 @@ import { v } from "convex/values";
 import { action } from "../_generated/server";
 import { api } from "../_generated/api";
 
+function isValidDiscordWebhook(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return (
+      parsed.protocol === "https:" &&
+      (parsed.hostname === "discord.com" || parsed.hostname === "discordapp.com") &&
+      parsed.pathname.startsWith("/api/webhooks/")
+    );
+  } catch {
+    return false;
+  }
+}
+
 export const sendNotification = action({
   args: { 
     userId: v.id("users"), 
@@ -31,10 +44,11 @@ export const sendNotification = action({
       }
     }
 
-    // Discord
-    if ((userSettings as any).discordWebhookUrl) {
+    // Discord — validate URL to prevent SSRF
+    const discordUrl = (userSettings as any).discordWebhookUrl as string | undefined;
+    if (discordUrl && isValidDiscordWebhook(discordUrl)) {
       tasks.push(
-        fetch((userSettings as any).discordWebhookUrl, {
+        fetch(discordUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ content: args.message }),

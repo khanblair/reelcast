@@ -62,13 +62,14 @@ export default function UploadPage() {
     try {
       const signRes = await fetch("/api/cloudinary/sign", { method: "POST" });
       if (!signRes.ok) throw new Error("Failed to get upload signature");
-      const { signature, timestamp, apiKey, cloudName } = await signRes.json();
+      const { signature, timestamp, apiKey, cloudName, maxFileSize } = await signRes.json();
 
       const formData = new FormData();
       formData.append("file", item.file);
       formData.append("signature", signature);
       formData.append("timestamp", timestamp.toString());
       formData.append("api_key", apiKey);
+      if (maxFileSize) formData.append("max_file_size", maxFileSize.toString());
 
       const cloudinaryData = await new Promise<{ secure_url: string; bytes: number }>(
         (resolve, reject) => {
@@ -120,7 +121,10 @@ export default function UploadPage() {
         }
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Upload failed";
+      const raw = err instanceof Error ? err.message : "Upload failed";
+      const message = raw.startsWith("PLAN_LIMIT_EXCEEDED")
+        ? "Upload limit reached for your plan. Upgrade to upload more videos."
+        : raw;
       updateItem(item.id, { status: "error", error: message });
     }
   }, [createVideo, updateItem, generateMetadata]);

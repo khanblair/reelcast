@@ -1,4 +1,17 @@
-import { query } from "./_generated/server";
+import { v } from "convex/values";
+import { query, internalQuery } from "./_generated/server";
+
+// Internal query: fetch recent videoAnalytics rows for a user (for AI context)
+export const getRecentForUser = internalQuery({
+  args: { userId: v.id("users"), limit: v.number() },
+  handler: async (ctx, args) => {
+    return ctx.db
+      .query("videoAnalytics")
+      .withIndex("by_user_fetched", (q) => q.eq("userId", args.userId))
+      .order("desc")
+      .take(args.limit);
+  },
+});
 
 export const getDashboardStats = query({
   args: {},

@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../../../../convex/_generated/api";
-import { Youtube, CheckCircle, AlertCircle, XCircle, Loader2, RefreshCw, Unplug } from "lucide-react";
+import {
+  Youtube, CheckCircle, AlertCircle, XCircle, Loader2, RefreshCw, Unplug, Plus, Star
+} from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,18 +30,18 @@ function StatusBadge({ status }: { status: OAuthStatus }) {
 }
 
 export default function YouTubeSettingsPage() {
-  const user = useQuery(api.users.current);
-  const oauthStatus = useQuery(api.users.getOAuthStatus);
-  const disconnectYoutube = useMutation(api.users.disconnectYoutube);
+  const channels = useQuery(api.youtubeChannels.list);
+  const removeChannel = useMutation(api.youtubeChannels.remove);
+  const setPrimary = useMutation(api.youtubeChannels.setPrimary);
   const checkHealth = useAction(api.actions.oauthHealthCheck.checkMyOAuthHealth);
 
-  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
-  const [disconnecting, setDisconnecting] = useState(false);
-
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+  const [settingPrimaryId, setSettingPrimaryId] = useState<string | null>(null);
   const [healthStatus, setHealthStatus] = useState<"idle" | "loading" | "done">("idle");
   const [healthResult, setHealthResult] = useState<{ status: OAuthStatus } | null>(null);
 
-  if (user === undefined || oauthStatus === undefined) {
+  if (channels === undefined) {
     return (
       <div className="max-w-2xl mx-auto p-6">
         <div className="flex items-center justify-center py-12">
@@ -49,21 +51,26 @@ export default function YouTubeSettingsPage() {
     );
   }
 
-  const isConnected = oauthStatus?.youtubeConnected ?? false;
-  const channelName = oauthStatus?.youtubeChannelName;
-  const currentStatus = oauthStatus?.youtubeOAuthStatus as OAuthStatus;
-
-  const handleDisconnect = async () => {
-    if (!confirmDisconnect) {
-      setConfirmDisconnect(true);
+  const handleRemove = async (channelId: string) => {
+    if (confirmRemoveId !== channelId) {
+      setConfirmRemoveId(channelId);
       return;
     }
-    setDisconnecting(true);
-    setConfirmDisconnect(false);
+    setRemovingId(channelId);
+    setConfirmRemoveId(null);
     try {
-      await disconnectYoutube();
+      await removeChannel({ channelId });
     } finally {
-      setDisconnecting(false);
+      setRemovingId(null);
+    }
+  };
+
+  const handleSetPrimary = async (channelId: string) => {
+    setSettingPrimaryId(channelId);
+    try {
+      await setPrimary({ channelId });
+    } finally {
+      setSettingPrimaryId(null);
     }
   };
 
@@ -97,130 +104,154 @@ export default function YouTubeSettingsPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
           <Youtube className="h-6 w-6 text-primary" />
-          YouTube Connection
+          YouTube Channels
         </h1>
         <p className="text-muted-foreground mt-1">
-          Manage your YouTube account connection and OAuth health.
+          Connect one or more YouTube channels to publish your content.
         </p>
       </div>
 
-      {/* Connection status card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Connection Status</CardTitle>
-          <CardDescription>
-            {isConnected
-              ? "Your YouTube account is linked to Reelcast."
-              : "Connect your YouTube account to enable publishing."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {isConnected ? (
-            <>
-              <div className="flex items-center gap-3 rounded-lg border bg-green-50/50 dark:bg-green-950/30 border-green-200 dark:border-green-800 p-3">
-                <div className="h-3 w-3 rounded-full bg-green-500 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-green-700 dark:text-green-300">
-                    {channelName ? channelName : "YouTube Connected"}
-                  </p>
-                  {currentStatus && (
-                    <div className="mt-1">
-                      <StatusBadge status={currentStatus} />
+      {channels.length === 0 ? (
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <div className="flex items-center gap-3 rounded-lg border bg-muted/40 p-3">
+              <div className="h-3 w-3 rounded-full bg-muted-foreground/40 shrink-0" />
+              <p className="text-sm text-muted-foreground">No YouTube channels connected</p>
+            </div>
+            <Button onClick={() => { window.location.href = "/api/youtube/connect"; }}>
+              <Youtube className="h-4 w-4 mr-2" />
+              Connect YouTube Channel
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="space-y-3">
+          {channels.map((channel) => (
+            <Card key={channel._id}>
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-start gap-3">
+                  <div className="h-3 w-3 rounded-full bg-green-500 shrink-0 mt-1.5" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium truncate">
+                        {channel.channelName ?? channel.channelId}
+                      </p>
+                      {channel.isPrimary && (
+                        <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/30 shrink-0">
+                          <Star className="h-2.5 w-2.5 mr-1" />
+                          Primary
+                        </Badge>
+                      )}
+                      <StatusBadge status={channel.oauthStatus as OAuthStatus} />
                     </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Health check result */}
-              {healthStatus === "done" && healthMsg && (
-                <div className={cn("flex items-center gap-2 rounded-lg border p-3 text-sm", healthMsg.color)}>
-                  <healthMsg.icon className="h-4 w-4 shrink-0" />
-                  {healthMsg.text}
-                </div>
-              )}
-
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCheckHealth}
-                  disabled={healthStatus === "loading"}
-                >
-                  {healthStatus === "loading" ? (
-                    <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Checking...</>
-                  ) : (
-                    <><RefreshCw className="h-4 w-4 mr-1" />Check health</>
-                  )}
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => { window.location.href = "/api/youtube/connect"; }}
-                >
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  Reconnect
-                </Button>
-
-                {confirmDisconnect ? (
-                  <div className="flex gap-2 items-center">
-                    <span className="text-xs text-muted-foreground">Are you sure?</span>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={handleDisconnect}
-                      disabled={disconnecting}
-                    >
-                      {disconnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Yes, disconnect"}
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setConfirmDisconnect(false)}
-                    >
-                      Cancel
-                    </Button>
+                    <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                      Channel ID: {channel.channelId}
+                    </p>
                   </div>
-                ) : (
+                </div>
+
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {!channel.isPrimary && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleSetPrimary(channel.channelId)}
+                      disabled={settingPrimaryId === channel.channelId}
+                    >
+                      {settingPrimaryId === channel.channelId ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <><Star className="h-4 w-4 mr-1" />Set as primary</>
+                      )}
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={handleDisconnect}
-                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => { window.location.href = "/api/youtube/connect"; }}
                   >
-                    <Unplug className="h-4 w-4 mr-1" />
-                    Disconnect
+                    <RefreshCw className="h-4 w-4 mr-1" />
+                    Reconnect
                   </Button>
+                  {confirmRemoveId === channel.channelId ? (
+                    <div className="flex gap-2 items-center">
+                      <span className="text-xs text-muted-foreground">Are you sure?</span>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleRemove(channel.channelId)}
+                        disabled={removingId === channel.channelId}
+                      >
+                        {removingId === channel.channelId ? <Loader2 className="h-4 w-4 animate-spin" /> : "Yes, remove"}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setConfirmRemoveId(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleRemove(channel.channelId)}
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      <Unplug className="h-4 w-4 mr-1" />
+                      Remove
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+
+          {/* Health check for primary channel */}
+          <div className="space-y-2">
+            {healthStatus === "done" && healthMsg && (
+              <div className={cn("flex items-center gap-2 rounded-lg border p-3 text-sm", healthMsg.color)}>
+                <healthMsg.icon className="h-4 w-4 shrink-0" />
+                {healthMsg.text}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCheckHealth}
+                disabled={healthStatus === "loading"}
+              >
+                {healthStatus === "loading" ? (
+                  <><Loader2 className="h-4 w-4 mr-1 animate-spin" />Checking primary channel...</>
+                ) : (
+                  <><RefreshCw className="h-4 w-4 mr-1" />Check primary channel health</>
                 )}
-              </div>
-            </>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center gap-3 rounded-lg border bg-muted/40 p-3">
-                <div className="h-3 w-3 rounded-full bg-muted-foreground/40 shrink-0" />
-                <p className="text-sm text-muted-foreground">No YouTube account connected</p>
-              </div>
-              <Button onClick={() => { window.location.href = "/api/youtube/connect"; }}>
-                <Youtube className="h-4 w-4 mr-2" />
-                Connect YouTube
               </Button>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </div>
 
-      {/* OAuth status explanation */}
+          <Button
+            variant="outline"
+            onClick={() => { window.location.href = "/api/youtube/connect"; }}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Connect another channel
+          </Button>
+        </div>
+      )}
+
+      {/* OAuth status guide */}
       <Card>
         <CardHeader>
           <CardTitle>OAuth Status Guide</CardTitle>
-          <CardDescription>
-            What each status means for your account.
-          </CardDescription>
+          <CardDescription>What each status means for your channels.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2">
           {[
-            { status: "connected" as OAuthStatus, icon: CheckCircle, color: "text-green-600 dark:text-green-400", desc: "Your access token is valid and publishing will work." },
-            { status: "token_expired" as OAuthStatus, icon: AlertCircle, color: "text-yellow-600 dark:text-yellow-400", desc: "Your token has expired. Use Reconnect to restore access." },
+            { status: "connected" as OAuthStatus, icon: CheckCircle, color: "text-green-600 dark:text-green-400", desc: "Access token is valid and publishing will work." },
+            { status: "token_expired" as OAuthStatus, icon: AlertCircle, color: "text-yellow-600 dark:text-yellow-400", desc: "Token has expired. Use Reconnect to restore access." },
             { status: "revoked" as OAuthStatus, icon: XCircle, color: "text-red-600 dark:text-red-400", desc: "YouTube revoked access. Reconnect to grant permissions again." },
             { status: "unknown" as OAuthStatus, icon: AlertCircle, color: "text-muted-foreground", desc: "Status could not be determined. Try checking health or reconnecting." },
           ].map((item) => (
@@ -232,9 +263,8 @@ export default function YouTubeSettingsPage() {
               </div>
             </div>
           ))}
-
           <p className="text-xs text-muted-foreground pt-2">
-            The platform automatically checks your OAuth token health every 6 hours.
+            The platform automatically checks OAuth token health every 6 hours.
           </p>
         </CardContent>
       </Card>

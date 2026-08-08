@@ -21,7 +21,7 @@ export default defineSchema({
       v.literal("unknown"),
     )),
     isAdmin: v.optional(v.boolean()),
-    plan: v.optional(v.union(v.literal("free"), v.literal("pro"))),
+    plan: v.optional(v.union(v.literal("free"), v.literal("pro"), v.literal("elite"))),
   })
     .index("by_supabase_id", ["supabaseId"])
     .index("by_clerk_id", ["clerkId"])
@@ -51,6 +51,15 @@ export default defineSchema({
     aiTitle: v.optional(v.string()),
     aiDescription: v.optional(v.string()),
     aiTags: v.optional(v.array(v.string())),
+    metadataHistory: v.optional(v.array(v.object({
+      savedAt: v.number(),
+      aiTitle: v.optional(v.string()),
+      aiDescription: v.optional(v.string()),
+      aiTags: v.optional(v.array(v.string())),
+    }))),
+    thumbnailGeneratedUrl: v.optional(v.string()),
+    captionsVtt: v.optional(v.string()),
+    youtubeChannelId: v.optional(v.string()),
     aiConfig: v.optional(
       v.object({
         model: v.optional(v.string()),
@@ -152,6 +161,8 @@ export default defineSchema({
     autoPublishNextAt: v.optional(v.number()),
     autoPublishTimeSlots: v.optional(v.array(v.number())),
     autoPublishTimezoneOffset: v.optional(v.number()),
+    // Writing style
+    humanizeWriting: v.optional(v.boolean()),
     // Veo defaults
     veoModel: v.optional(v.string()),
     veoResolution: v.optional(v.string()),
@@ -251,14 +262,34 @@ export default defineSchema({
     unitsUsed: v.number(),
   }).index("by_user", ["userId"]).index("by_user_date", ["userId", "date"]),
 
-  // Monthly usage metering for Free/Pro plan limits
+  // Monthly usage metering for Free/Pro/Elite plan limits
   usageLedger: defineTable({
     userId: v.id("users"),
     month: v.string(), // YYYY-MM
     videosUploaded: v.optional(v.number()),
     metadataGenerated: v.optional(v.number()),
     veoGenerated: v.optional(v.number()),
+    aiMessagesUsed: v.optional(v.number()),
   }).index("by_user", ["userId"]).index("by_user_month", ["userId", "month"]),
+
+  // Connected YouTube channels per user (multi-channel support)
+  youtubeChannels: defineTable({
+    userId: v.id("users"),
+    channelId: v.string(),       // YouTube channel ID — unique across all accounts
+    channelName: v.optional(v.string()),
+    accessToken: v.string(),
+    refreshToken: v.optional(v.string()),
+    tokenExpiry: v.number(),
+    oauthStatus: v.optional(v.union(
+      v.literal("connected"),
+      v.literal("token_expired"),
+      v.literal("revoked"),
+      v.literal("unknown"),
+    )),
+    isPrimary: v.optional(v.boolean()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_channel_id", ["channelId"]),
 
   // Singleton table — one row stores all platform-level API keys set by admin
   platformSettings: defineTable({

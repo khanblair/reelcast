@@ -5,6 +5,8 @@ import { action } from "../_generated/server";
 import { api, internal } from "../_generated/api";
 import { createAiClient } from "../lib/ai";
 import { GoogleGenAI } from "@google/genai";
+import { HUMANIZE_METADATA_RULES } from "../lib/humanizePrompt";
+// Note: internal.usageLedger imported via internal in handler
 
 // ---------------------------------------------------------------------------
 // Build content parts for video analysis.
@@ -75,9 +77,17 @@ export const generateFromPrompt = action({
   args: {
     videoId: v.id("videos"),
     prompt: v.string(),
+    humanize: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     console.log(`[generateFromPrompt] Starting — videoId=${args.videoId} prompt="${args.prompt.slice(0, 80)}"`);
+
+    const video = await ctx.runQuery(internal.videos.internalGet, { id: args.videoId });
+    if (!video) throw new Error("Video not found");
+    await ctx.runMutation(internal.usageLedger.internalConsumeQuota, {
+      userId: video.userId,
+      field: "metadataGenerated",
+    });
 
     const platformSettings = await ctx.runQuery(internal.admin.platformSettings.getInternal);
     const geminiKey = platformSettings?.geminiApiKey ?? process.env.GEMINI_API_KEY;
@@ -89,12 +99,14 @@ export const generateFromPrompt = action({
 
     try {
       console.log("[generateFromPrompt] Calling gemini-2.5-flash for metadata...");
+      const humanizeRules = args.humanize ? `\n\n${HUMANIZE_METADATA_RULES}` : "";
+
       const aiResponse = await ai.models.generateContent({
         model: "gemini-2.5-flash",
         contents: [{
           role: "user",
           parts: [{
-            text: `You are a YouTube Shorts metadata specialist with deep knowledge of YouTube SEO and the VidIQ ranking methodology.
+            text: `You are a YouTube Shorts metadata specialist with deep knowledge of YouTube SEO and the VidIQ ranking methodology.${humanizeRules}
 
 A YouTube Short is being generated from this AI prompt: "${args.prompt}"
 
@@ -147,6 +159,7 @@ export const generateForUpload = action({
   args: {
     videoId: v.id("videos"),
     autoMarkReady: v.optional(v.boolean()),
+    humanize: v.optional(v.boolean()),
   },
   handler: async (ctx, args): Promise<{ title: string; description: string; tags: string[] }> => {
     const video = await ctx.runQuery(internal.videos.internalGet, { id: args.videoId });
@@ -155,6 +168,23 @@ export const generateForUpload = action({
     if (!video) {
       if (args.autoMarkReady) return { title: "", description: "", tags: [] };
       throw new Error("Video not found");
+    }
+
+    // Consume quota — gate by plan
+    try {
+      await ctx.runMutation(internal.usageLedger.internalConsumeQuota, {
+        userId: video.userId,
+        field: "metadataGenerated",
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.startsWith("PLAN_LIMIT_EXCEEDED")) {
+        if (args.autoMarkReady) {
+          await ctx.runMutation(internal.videos.internalClearMetadataSchedule, { id: args.videoId });
+        }
+        throw new Error("Metadata generation limit reached for your plan. Upgrade to regenerate more videos.");
+      }
+      throw err;
     }
 
     // Graceful skip — video was already processed since scheduling
@@ -191,6 +221,8 @@ export const generateForUpload = action({
       const userSettings = await ctx.runQuery(internal.settings.getByVideoUserId, { userId: video.userId });
       const guidelines = userSettings?.aiGuidelines as string | undefined;
       const tone       = userSettings?.aiTone       as string | undefined;
+      const shouldHumanize = args.humanize ?? (userSettings?.humanizeWriting ?? false);
+      const humanizeRules = shouldHumanize ? `\n\n${HUMANIZE_METADATA_RULES}` : "";
 
       const aiResponse = await ai.models.generateContent({
         model: "gemini-2.5-flash",
@@ -199,7 +231,7 @@ export const generateForUpload = action({
           parts: [
             ...videoParts,
             {
-              text: `You are a YouTube Shorts metadata specialist with deep knowledge of YouTube SEO and the VidIQ ranking methodology.
+              text: `You are a YouTube Shorts metadata specialist with deep knowledge of YouTube SEO and the VidIQ ranking methodology.${humanizeRules}
 
 This is a YouTube Short (vertical video, under 60 seconds). Working title: "${hint}".${guidelines ? `\nChannel guidelines: ${guidelines}` : ""}${tone ? `\nContent tone: ${tone}` : ""}
 

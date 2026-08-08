@@ -1,3 +1,6 @@
+import { NextResponse } from "next/server";
+import { randomBytes } from "crypto";
+
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const YOUTUBE_SCOPES = [
   "openid",
@@ -22,6 +25,9 @@ export async function GET(request: Request) {
 
   const redirectUri = `${getAppOrigin(request)}/api/youtube/callback`;
 
+  // Generate a random CSRF state token
+  const state = randomBytes(32).toString("hex");
+
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
@@ -30,7 +36,17 @@ export async function GET(request: Request) {
     prompt: "consent",
     include_granted_scopes: "true",
     scope: YOUTUBE_SCOPES,
+    state,
   });
 
-  return Response.redirect(`${GOOGLE_AUTH_URL}?${params.toString()}`, 302);
+  const response = NextResponse.redirect(`${GOOGLE_AUTH_URL}?${params.toString()}`, 302);
+  // sameSite: "lax" so the cookie is sent on the redirect back from Google
+  response.cookies.set("yt_oauth_state", state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 600, // 10 minutes
+    path: "/",
+  });
+  return response;
 }

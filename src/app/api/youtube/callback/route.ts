@@ -1,3 +1,5 @@
+import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { mintConvexJwt } from "@/lib/convex-jwt";
 import { fetchMutation } from "convex/nextjs";
@@ -15,19 +17,27 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const error = url.searchParams.get("error");
+  const stateParam = url.searchParams.get("state");
+
+  // Validate CSRF state
+  const cookieStore = await cookies();
+  const stateCookie = cookieStore.get("yt_oauth_state")?.value;
+  if (!stateParam || !stateCookie || stateParam !== stateCookie) {
+    return NextResponse.redirect(`${origin}/settings?youtube=error&reason=state_mismatch`, 302);
+  }
 
   if (error) {
-    return Response.redirect(`${origin}/settings?youtube=error&reason=${encodeURIComponent(error)}`, 302);
+    return NextResponse.redirect(`${origin}/settings?youtube=error&reason=${encodeURIComponent(error)}`, 302);
   }
 
   if (!code) {
-    return Response.redirect(`${origin}/settings?youtube=error&reason=missing_code`, 302);
+    return NextResponse.redirect(`${origin}/settings?youtube=error&reason=missing_code`, 302);
   }
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
-    return Response.redirect(`${origin}/settings?youtube=error&reason=server_config`, 302);
+    return NextResponse.redirect(`${origin}/settings?youtube=error&reason=server_config`, 302);
   }
 
   const redirectUri = `${origin}/api/youtube/callback`;
@@ -47,7 +57,7 @@ export async function GET(request: Request) {
   if (!tokenResponse.ok) {
     const errorText = await tokenResponse.text();
     console.error("YouTube token exchange failed:", errorText);
-    return Response.redirect(`${origin}/settings?youtube=error&reason=token_exchange`, 302);
+    return NextResponse.redirect(`${origin}/settings?youtube=error&reason=token_exchange`, 302);
   }
 
   const tokens = await tokenResponse.json();
@@ -73,7 +83,7 @@ export async function GET(request: Request) {
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) {
-    return Response.redirect(`${origin}/sign-in?redirect_url=/settings`, 302);
+    return NextResponse.redirect(`${origin}/sign-in?redirect_url=/settings`, 302);
   }
 
   // Mint a proper Convex RS256 JWT (the Supabase access_token uses a different
@@ -100,11 +110,11 @@ export async function GET(request: Request) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "";
     if (message.includes("CHANNEL_ALREADY_CLAIMED")) {
-      return Response.redirect(`${origin}/settings?youtube=error&reason=channel_already_claimed`, 302);
+      return NextResponse.redirect(`${origin}/settings?youtube=error&reason=channel_already_claimed`, 302);
     }
     console.error("Failed to save YouTube tokens to Convex:", err);
-    return Response.redirect(`${origin}/settings?youtube=error&reason=save_failed`, 302);
+    return NextResponse.redirect(`${origin}/settings?youtube=error&reason=save_failed`, 302);
   }
 
-  return Response.redirect(`${origin}/settings?youtube=connected`, 302);
+  return NextResponse.redirect(`${origin}/settings?youtube=connected`, 302);
 }

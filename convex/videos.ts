@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { getCurrentUserOrThrow } from "./lib/auth";
+import { consumeQuotaInMutation } from "./usageLedger";
 
 export const create = mutation({
   args: {
@@ -22,6 +23,8 @@ export const create = mutation({
     if (!user) {
       throw new Error("User not found in DB");
     }
+
+    await consumeQuotaInMutation(ctx, user._id, "videosUploaded");
 
     return await ctx.db.insert("videos", {
       userId: user._id,
@@ -233,10 +236,28 @@ export const internalUpdateMetadata = internalMutation({
     aiTags: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
+    const current = await ctx.db.get(args.id);
+    // Save previous metadata as a version (if any existed)
+    const existingHistory = (current?.metadataHistory ?? []) as Array<{
+      savedAt: number; aiTitle?: string; aiDescription?: string; aiTags?: string[];
+    }>;
+    let history = existingHistory;
+    if (current?.aiTitle || current?.aiDescription || current?.aiTags) {
+      history = [
+        ...existingHistory,
+        {
+          savedAt: Date.now(),
+          aiTitle: current.aiTitle,
+          aiDescription: current.aiDescription,
+          aiTags: current.aiTags,
+        },
+      ].slice(-10); // keep last 10 versions
+    }
     await ctx.db.patch(args.id, {
       aiTitle: args.aiTitle,
       aiDescription: args.aiDescription,
       aiTags: args.aiTags,
+      metadataHistory: history,
     });
   },
 });
@@ -259,6 +280,20 @@ export const internalSetDuration = internalMutation({
   args: { id: v.id("videos"), duration: v.number() },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.id, { duration: args.duration });
+  },
+});
+
+export const internalSetThumbnailGenerated = internalMutation({
+  args: { id: v.id("videos"), thumbnailGeneratedUrl: v.string() },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, { thumbnailGeneratedUrl: args.thumbnailGeneratedUrl });
+  },
+});
+
+export const internalSetCaptionsVtt = internalMutation({
+  args: { id: v.id("videos"), captionsVtt: v.string() },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, { captionsVtt: args.captionsVtt });
   },
 });
 

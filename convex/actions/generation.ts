@@ -19,6 +19,12 @@ export const startVeoGeneration = action({
       throw new Error("Video not found");
     }
 
+    // Enforce plan gate before spending any API quota
+    await ctx.runMutation(internal.usageLedger.internalConsumeQuota, {
+      userId: video.userId,
+      field: "veoGenerated",
+    });
+
     const settings = await ctx.runQuery(internal.settings.getByVideoUserId, { userId: video.userId });
 
     const aiConfig = video.aiConfig ?? {};

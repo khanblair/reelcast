@@ -92,9 +92,9 @@ export default function AdminUserDetailPage() {
             <Badge
               className={cn(
                 "text-xs",
-                user.plan === "pro"
-                  ? "bg-blue-500 text-white hover:bg-blue-600"
-                  : "bg-muted text-muted-foreground hover:bg-muted",
+                user.plan === "elite" ? "bg-purple-500 text-white hover:bg-purple-600" :
+                user.plan === "pro"   ? "bg-blue-500 text-white hover:bg-blue-600" :
+                                        "bg-muted text-muted-foreground hover:bg-muted",
               )}
             >
               {user.plan ?? "free"}
@@ -139,6 +139,15 @@ export default function AdminUserDetailPage() {
             }
           >
             Pro
+          </Button>
+          <Button
+            variant={user.plan === "elite" ? "default" : "outline"}
+            size="sm"
+            onClick={() =>
+              setPlan({ userId: userId as Id<"users">, plan: "elite" })
+            }
+          >
+            Elite
           </Button>
         </CardContent>
       </Card>

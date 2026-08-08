@@ -35,6 +35,17 @@ export interface Video {
   aiTitle?: string;
   aiDescription?: string;
   aiTags?: string[];
+  metadataHistory?: Array<{
+    savedAt: number;
+    aiTitle?: string;
+    aiDescription?: string;
+    aiTags?: string[];
+  }>;
+  thumbnailGeneratedUrl?: string;
+  captionsVtt?: string;
+  youtubeChannelId?: string;
+  cloudinaryDeletedAt?: number;
+  publishOrder?: number;
   aiConfig?: AIConfig;
   veoOperationName?: string;
   veoOperationDone?: boolean;
@@ -42,7 +53,6 @@ export interface Video {
   publishedVideoId?: string;
   publishedAt?: number;
   scheduledPublishAt?: number;
-  scheduledGenerationAt?: number;
   metadataScheduledAt?: number;
   privacyStatus?: PrivacyStatus;
   publishAs?: "short" | "video";

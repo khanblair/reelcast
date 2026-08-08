@@ -8,12 +8,12 @@ import {
   CalendarClock, CalendarCheck, Clock, X, ExternalLink,
   ChevronDown, ChevronUp, Zap,
   Calendar, CheckSquare, Square, Wand2, RefreshCw, CheckCircle, XCircle,
-  CalendarDays,
+  CalendarDays, Sparkles,
 } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -114,6 +114,7 @@ export default function SchedulePage() {
   const scheduledVideos = useQuery(api.videos.listScheduled);
   const allVideos = useQuery(api.videos.list);
   const userSettings = useQuery(api.settings.get);
+  const suggestedTimes = useQuery(api.scheduling.getSuggestedTimes);
   const schedulePublish    = useMutation(api.videos.schedulePublish);
   const cancelSchedule     = useMutation(api.videos.cancelSchedule);
   const scheduleMetadata   = useMutation(api.videos.scheduleMetadataForVideo);
@@ -905,6 +906,47 @@ export default function SchedulePage() {
                         </div>
                       </div>
                     </div>
+
+                    {suggestedTimes?.suggestedTimes && suggestedTimes.suggestedTimes.length > 0 && (
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm flex items-center gap-2">
+                            <Sparkles className="h-4 w-4 text-primary" />
+                            Your Best Times to Post
+                          </CardTitle>
+                          <p className="text-xs text-muted-foreground">
+                            Based on {suggestedTimes.totalVideosAnalysed} published videos — ranked by CTR and views.
+                          </p>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex flex-col gap-2">
+                            {suggestedTimes.suggestedTimes.map((slot, i) => (
+                              <div key={slot.hourUtc} className="flex items-center justify-between rounded-md border px-3 py-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-medium text-muted-foreground w-4">{i + 1}</span>
+                                  <div>
+                                    <p className="text-sm font-medium">
+                                      {slot.hourEat === 0 ? "12 AM" : slot.hourEat < 12 ? `${slot.hourEat} AM` : slot.hourEat === 12 ? "12 PM" : `${slot.hourEat - 12} PM`} EAT
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      CTR {(slot.avgCtr * 100).toFixed(1)}% · {slot.avgViews.toLocaleString()} avg views
+                                    </p>
+                                  </div>
+                                </div>
+                                <span className={[
+                                  "text-xs font-medium px-2 py-0.5 rounded-full",
+                                  slot.confidence === "high"
+                                    ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400"
+                                    : "bg-muted text-muted-foreground",
+                                ].join(" ")}>
+                                  {slot.confidence === "high" ? "High confidence" : "Low confidence"}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
 
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">

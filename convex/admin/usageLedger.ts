@@ -1,11 +1,9 @@
 import { query } from "../_generated/server";
 
-const FREE_LIMITS = { videosUploaded: 10, metadataGenerated: 5, veoGenerated: 0 };
-const PRO_LIMITS  = { videosUploaded: 999_999, metadataGenerated: 999_999, veoGenerated: 5 };
+const FREE_LIMITS  = { videosUploaded: 10,      metadataGenerated: 5,      veoGenerated: 0, aiMessagesUsed: 0    };
+const PRO_LIMITS   = { videosUploaded: 999_999, metadataGenerated: 999_999, veoGenerated: 5, aiMessagesUsed: 200  };
+const ELITE_LIMITS = { videosUploaded: 999_999, metadataGenerated: 999_999, veoGenerated: 999_999, aiMessagesUsed: 1000 };
 
-/**
- * Current-month usage overview for all users.
- */
 export const getOverview = query({
   args: {},
   handler: async (ctx) => {
@@ -24,7 +22,10 @@ export const getOverview = query({
           .unique();
 
         const plan = user.plan ?? "free";
-        const limits = plan === "pro" ? PRO_LIMITS : FREE_LIMITS;
+        const limits =
+          plan === "elite" ? ELITE_LIMITS :
+          plan === "pro"   ? PRO_LIMITS   :
+                             FREE_LIMITS;
 
         return {
           userId: user._id,
@@ -35,6 +36,7 @@ export const getOverview = query({
           videosUploaded:    ledger?.videosUploaded    ?? 0,
           metadataGenerated: ledger?.metadataGenerated ?? 0,
           veoGenerated:      ledger?.veoGenerated      ?? 0,
+          aiMessagesUsed:    ledger?.aiMessagesUsed    ?? 0,
           limits,
         };
       }),

@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 
-type PlanFilter = "all" | "free" | "pro";
+type PlanFilter = "all" | "free" | "pro" | "elite";
 type YouTubeFilter = "all" | "connected" | "not_connected";
 
 const PAGE_SIZE = 20;
@@ -83,7 +83,7 @@ export default function AdminUsersPage() {
 
         {/* Plan filter */}
         <div className="flex items-center gap-1 border rounded-lg p-1">
-          {(["all", "free", "pro"] as PlanFilter[]).map((p) => (
+          {(["all", "free", "pro", "elite"] as PlanFilter[]).map((p) => (
             <button
               key={p}
               onClick={() => updatePlan(p)}
@@ -145,7 +145,12 @@ export default function AdminUsersPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge className={cn("text-xs", user.plan === "pro" ? "bg-blue-500 text-white hover:bg-blue-600" : "bg-muted text-muted-foreground hover:bg-muted")}>
+                      <Badge className={cn(
+                        "text-xs",
+                        user.plan === "elite" ? "bg-purple-500 text-white hover:bg-purple-600" :
+                        user.plan === "pro"   ? "bg-blue-500 text-white hover:bg-blue-600" :
+                                                "bg-muted text-muted-foreground hover:bg-muted"
+                      )}>
                         {user.plan ?? "free"}
                       </Badge>
                     </td>

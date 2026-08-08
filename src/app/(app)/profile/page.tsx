@@ -3,6 +3,7 @@
 import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { createClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import Image from "next/image";
@@ -98,6 +99,18 @@ export default function ProfilePage() {
                     <Mail className="h-3.5 w-3.5 shrink-0" />
                     <span className="text-sm">{user?.email}</span>
                   </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Plan</span>
+                  <span className={cn(
+                    "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+                    user?.plan === "elite" ? "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300" :
+                    user?.plan === "pro"   ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300" :
+                                             "bg-muted text-muted-foreground"
+                  )}>
+                    {user?.plan ?? "free"}
+                  </span>
                 </div>
 
                 <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">

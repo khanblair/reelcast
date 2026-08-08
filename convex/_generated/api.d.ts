@@ -14,6 +14,8 @@ import type * as actions_backfillDurations from "../actions/backfillDurations.js
 import type * as actions_contentIntelligence from "../actions/contentIntelligence.js";
 import type * as actions_deleteVideo from "../actions/deleteVideo.js";
 import type * as actions_email from "../actions/email.js";
+import type * as actions_generateCaptions from "../actions/generateCaptions.js";
+import type * as actions_generateThumbnail from "../actions/generateThumbnail.js";
 import type * as actions_generation from "../actions/generation.js";
 import type * as actions_metadata from "../actions/metadata.js";
 import type * as actions_oauthHealthCheck from "../actions/oauthHealthCheck.js";
@@ -43,17 +45,20 @@ import type * as jobs from "../jobs.js";
 import type * as lib_ai from "../lib/ai.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_cloudinary from "../lib/cloudinary.js";
+import type * as lib_humanizePrompt from "../lib/humanizePrompt.js";
 import type * as lib_youtube from "../lib/youtube.js";
 import type * as notifications from "../notifications.js";
 import type * as queue from "../queue.js";
 import type * as scheduled_runGeneration from "../scheduled/runGeneration.js";
 import type * as scheduled_runPublish from "../scheduled/runPublish.js";
+import type * as scheduling from "../scheduling.js";
 import type * as settings from "../settings.js";
 import type * as testSupport from "../testSupport.js";
 import type * as usageLedger from "../usageLedger.js";
 import type * as users from "../users.js";
 import type * as videoAnalytics from "../videoAnalytics.js";
 import type * as videos from "../videos.js";
+import type * as youtubeChannels from "../youtubeChannels.js";
 
 import type {
   ApiFromModules,
@@ -68,6 +73,8 @@ declare const fullApi: ApiFromModules<{
   "actions/contentIntelligence": typeof actions_contentIntelligence;
   "actions/deleteVideo": typeof actions_deleteVideo;
   "actions/email": typeof actions_email;
+  "actions/generateCaptions": typeof actions_generateCaptions;
+  "actions/generateThumbnail": typeof actions_generateThumbnail;
   "actions/generation": typeof actions_generation;
   "actions/metadata": typeof actions_metadata;
   "actions/oauthHealthCheck": typeof actions_oauthHealthCheck;
@@ -97,17 +104,20 @@ declare const fullApi: ApiFromModules<{
   "lib/ai": typeof lib_ai;
   "lib/auth": typeof lib_auth;
   "lib/cloudinary": typeof lib_cloudinary;
+  "lib/humanizePrompt": typeof lib_humanizePrompt;
   "lib/youtube": typeof lib_youtube;
   notifications: typeof notifications;
   queue: typeof queue;
   "scheduled/runGeneration": typeof scheduled_runGeneration;
   "scheduled/runPublish": typeof scheduled_runPublish;
+  scheduling: typeof scheduling;
   settings: typeof settings;
   testSupport: typeof testSupport;
   usageLedger: typeof usageLedger;
   users: typeof users;
   videoAnalytics: typeof videoAnalytics;
   videos: typeof videos;
+  youtubeChannels: typeof youtubeChannels;
 }>;
 
 /**

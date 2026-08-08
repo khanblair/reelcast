@@ -3,7 +3,6 @@
 import { v } from "convex/values";
 import { action } from "../_generated/server";
 import { api, internal } from "../_generated/api";
-import { createAiClient } from "../lib/ai";
 import { GoogleGenAI } from "@google/genai";
 import { HUMANIZE_METADATA_RULES } from "../lib/humanizePrompt";
 // Note: internal.usageLedger imported via internal in handler

@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-type PlanFilter = "all" | "free" | "pro";
+type PlanFilter = "all" | "free" | "pro" | "elite";
 type LimitFilter = "all" | "at_limit";
 
 function formatLimit(limit: number) {
@@ -32,7 +32,8 @@ export default function AdminUsagePage() {
         const atLimit =
           (r.limits.videosUploaded < 999999 && r.videosUploaded >= r.limits.videosUploaded) ||
           (r.limits.metadataGenerated < 999999 && r.metadataGenerated >= r.limits.metadataGenerated) ||
-          (r.limits.veoGenerated < 999999 && r.veoGenerated >= r.limits.veoGenerated);
+          (r.limits.veoGenerated < 999999 && r.veoGenerated >= r.limits.veoGenerated) ||
+          (r.limits.aiMessagesUsed > 0 && r.aiMessagesUsed >= r.limits.aiMessagesUsed);
         if (!atLimit) return false;
       }
       return true;
@@ -52,11 +53,13 @@ export default function AdminUsagePage() {
 
   const freeCount = overview.filter((r) => (r.plan ?? "free") === "free").length;
   const proCount = overview.filter((r) => r.plan === "pro").length;
+  const eliteCount = overview.filter((r) => r.plan === "elite").length;
   const atLimitCount = overview.filter(
     (r) =>
       (r.limits.videosUploaded < 999999 && r.videosUploaded >= r.limits.videosUploaded) ||
       (r.limits.metadataGenerated < 999999 && r.metadataGenerated >= r.limits.metadataGenerated) ||
-      (r.limits.veoGenerated < 999999 && r.veoGenerated >= r.limits.veoGenerated)
+      (r.limits.veoGenerated < 999999 && r.veoGenerated >= r.limits.veoGenerated) ||
+      (r.limits.aiMessagesUsed > 0 && r.aiMessagesUsed >= r.limits.aiMessagesUsed)
   ).length;
 
   const updatePlan = (v: PlanFilter) => { setPlanFilter(v); };
@@ -89,6 +92,12 @@ export default function AdminUsagePage() {
         </Card>
         <Card>
           <CardContent className="pt-6">
+            <p className="text-sm text-muted-foreground">Elite Users</p>
+            <p className="text-2xl font-bold">{eliteCount}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">At Upload Limit</p>
             <p className="text-2xl font-bold">{atLimitCount}</p>
           </CardContent>
@@ -99,7 +108,7 @@ export default function AdminUsagePage() {
       <div className="flex flex-wrap items-center gap-3">
         {/* Plan filter */}
         <div className="flex items-center gap-1 border rounded-lg p-1">
-          {(["all", "free", "pro"] as PlanFilter[]).map((p) => (
+          {(["all", "free", "pro", "elite"] as PlanFilter[]).map((p) => (
             <button
               key={p}
               onClick={() => updatePlan(p)}
@@ -151,6 +160,7 @@ export default function AdminUsagePage() {
                     <th className="px-4 py-3 font-medium text-muted-foreground">Uploads (X/limit)</th>
                     <th className="px-4 py-3 font-medium text-muted-foreground">Metadata (X/limit)</th>
                     <th className="px-4 py-3 font-medium text-muted-foreground">Veo (X/limit)</th>
+                    <th className="px-4 py-3 font-medium text-muted-foreground">AI Msgs (X/limit)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -182,9 +192,9 @@ export default function AdminUsagePage() {
                           <Badge
                             className={cn(
                               "text-xs",
-                              row.plan === "pro"
-                                ? "bg-blue-500 text-white hover:bg-blue-600"
-                                : "bg-muted text-muted-foreground hover:bg-muted"
+                              row.plan === "elite" ? "bg-purple-500 text-white hover:bg-purple-600" :
+                              row.plan === "pro"   ? "bg-blue-500 text-white hover:bg-blue-600" :
+                                                    "bg-muted text-muted-foreground hover:bg-muted"
                             )}
                           >
                             {row.plan ?? "free"}
@@ -198,6 +208,9 @@ export default function AdminUsagePage() {
                         </td>
                         <td className="px-4 py-3 font-mono text-xs">
                           {row.veoGenerated} / {formatLimit(row.limits.veoGenerated)}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs">
+                          {row.aiMessagesUsed} / {formatLimit(row.limits.aiMessagesUsed)}
                         </td>
                       </tr>
                     );

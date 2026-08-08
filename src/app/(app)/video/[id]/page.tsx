@@ -682,7 +682,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
               <Sparkles className="h-3 w-3" />
               Humanize
             </button>
-            {video.rawFileKey?.startsWith("http") && (
+            {video.rawFileKey?.includes("res.cloudinary.com") && (
               <>
                 <Button
                   variant="outline"

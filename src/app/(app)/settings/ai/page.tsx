@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../../convex/_generated/api";
 import { Sparkles, Save, Loader2 } from "lucide-react";
@@ -51,6 +51,31 @@ export default function AISettingsPage() {
   const [aiCtaPreferences, setAiCtaPreferences] = useState(settings?.aiCtaPreferences ?? "");
   const [savingBrand, setSavingBrand] = useState(false);
   const [savedBrand, setSavedBrand] = useState(false);
+
+  const settingsSynced = useRef(false);
+  useEffect(() => {
+    if (settings === undefined || settingsSynced.current) return;
+    settingsSynced.current = true;
+    setVeoModel((settings.veoModel as VeoModelKey) ?? "veo-2");
+    setVeoResolution(settings.veoResolution ?? "720p");
+    setVeoAspectRatio(settings.veoAspectRatio ?? "16:9");
+    setVeoDurationSeconds(settings.veoDurationSeconds ?? 8);
+    setVeoEnhancePrompt(settings.veoEnhancePrompt ?? true);
+    setAiAutoGenerate(settings.aiAutoGenerate ?? true);
+    setAiGenerateTitle(settings.aiGenerateTitle ?? true);
+    setAiGenerateDescription(settings.aiGenerateDescription ?? true);
+    setAiGenerateTags(settings.aiGenerateTags ?? true);
+    setAiTone(settings.aiTone ?? "professional");
+    setAiLanguage(settings.aiLanguage ?? "en");
+    setAiDescriptionLength(settings.aiDescriptionLength ?? "medium");
+    setAiGuidelines(settings.aiGuidelines ?? "");
+    setHumanizeWriting(settings.humanizeWriting ?? false);
+    setAiNiche(settings.aiNiche ?? "");
+    setAiTargetAudience(settings.aiTargetAudience ?? "");
+    setAiBrandVoice(settings.aiBrandVoice ?? "");
+    setAiForbiddenWords(settings.aiForbiddenWords ?? "");
+    setAiCtaPreferences(settings.aiCtaPreferences ?? "");
+  }, [settings]);
 
   const handleSaveBrandMemory = async () => {
     setSavingBrand(true);

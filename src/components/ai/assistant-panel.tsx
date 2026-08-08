@@ -39,7 +39,7 @@ interface AssistantPanelProps {
   onClose: () => void;
 }
 
-type ChatResult = { response: string } | { error: "no_api_key" };
+type ChatResult = { response: string } | { error: "no_api_key" } | { error: "plan_limit" };
 
 interface LocalMessage {
   _id: string;
@@ -228,6 +228,7 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [noApiKey, setNoApiKey] = useState(false);
+  const [planLimit, setPlanLimit] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [optimisticMsg, setOptimisticMsg] = useState<LocalMessage | null>(null);
@@ -338,6 +339,7 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
     setInput("");
     setLoading(true);
     setNoApiKey(false);
+    setPlanLimit(false);
     setErrorMsg(null);
 
     // Ensure a session exists
@@ -358,7 +360,10 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
     try {
       const result = (await chat({ message: trimmed, sessionId })) as ChatResult;
       if (abortedRef.current) return;
-      if ("error" in result && result.error === "no_api_key") setNoApiKey(true);
+      if ("error" in result) {
+        if (result.error === "no_api_key") setNoApiKey(true);
+        else if (result.error === "plan_limit") setPlanLimit(true);
+      }
     } catch (err) {
       if (abortedRef.current) return;
       setErrorMsg(
@@ -433,6 +438,22 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
                     Add key in Settings
                   </Link>
                   .
+                </span>
+              </div>
+            )}
+            {planLimit && (
+              <div className="mx-3 mt-3 flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive shrink-0">
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                <span>
+                  You have reached your AI message limit for this month.{" "}
+                  <Link
+                    href={"/settings" as Route}
+                    className="underline underline-offset-2 font-medium"
+                    onClick={onClose}
+                  >
+                    Upgrade your plan
+                  </Link>{" "}
+                  to continue.
                 </span>
               </div>
             )}

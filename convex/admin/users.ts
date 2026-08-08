@@ -95,7 +95,7 @@ export const setAdmin = mutation({
 export const setPlan = mutation({
   args: {
     userId: v.id("users"),
-    plan: v.union(v.literal("free"), v.literal("pro")),
+    plan: v.union(v.literal("free"), v.literal("pro"), v.literal("elite")),
   },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.userId, { plan: args.plan });

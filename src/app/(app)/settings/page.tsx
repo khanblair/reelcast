@@ -255,6 +255,12 @@ export default function SettingsPage() {
                 {youtubeTestResult && (
                   <TestResultBanner result={youtubeTestResult} />
                 )}
+
+                <p className="text-xs text-muted-foreground text-center">
+                  <a href="/settings/youtube" className="underline underline-offset-2 hover:text-foreground transition-colors">
+                    Manage all connected channels
+                  </a>
+                </p>
               </>
             ) : (
               <Button

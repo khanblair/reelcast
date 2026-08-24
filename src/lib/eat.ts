@@ -49,3 +49,24 @@ export function formatCountdown(remainingMs: number): string {
   if (m > 0) return `${m}m ${pad(sec)}s`;
   return `${sec}s`;
 }
+
+// Next wall-clock auto-publish slot strictly after `afterMs`, given hour-of-day
+// slots (0-23) in a fixed timezone offset. Single source of truth for all
+// frontend auto-publish time projections — mirrors nextSlotMs in
+// convex/actions/autoPublish.ts, the backend scheduler's authoritative version.
+export function nextAutoPublishSlot(slots: number[], afterMs: number, tzOffsetHours = 3): number {
+  const TZ_MS = tzOffsetHours * 3_600_000;
+  const shifted = new Date(afterMs + TZ_MS);
+  const msSinceMidnight =
+    shifted.getUTCHours() * 3_600_000 +
+    shifted.getUTCMinutes() * 60_000 +
+    shifted.getUTCSeconds() * 1_000 +
+    shifted.getUTCMilliseconds();
+  const midnight = afterMs - msSinceMidnight;
+  const sorted = [...slots].sort((a, b) => a - b);
+  for (const h of sorted) {
+    const slotMs = midnight + h * 3_600_000;
+    if (slotMs > afterMs) return slotMs;
+  }
+  return midnight + 24 * 3_600_000 + sorted[0] * 3_600_000;
+}

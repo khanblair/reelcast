@@ -7,7 +7,7 @@ import { CalendarDays, ChevronLeft, ChevronRight, ExternalLink } from "lucide-re
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
-import { formatTimeEAT, formatDateTimeEAT } from "@/lib/eat";
+import { formatTimeEAT, formatDateTimeEAT, nextAutoPublishSlot } from "@/lib/eat";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -64,6 +64,8 @@ function computeAutoEvents(videos: any[], settings: any | null): CalendarEvent[]
   const nextAt: number = settings.autoPublishNextAt;
   const intervalMs: number = settings.autoPublishIntervalMs ?? 6 * 3_600_000;
   const count: number = settings.autoPublishCount ?? 1;
+  const timeSlots: number[] | undefined = settings.autoPublishTimeSlots;
+  const tzOffset: number = settings.autoPublishTimezoneOffset ?? 3;
   const readyVideos = [...videos]
     .filter((v) => v.status === "ready")
     .sort(
@@ -71,6 +73,25 @@ function computeAutoEvents(videos: any[], settings: any | null): CalendarEvent[]
         (a.publishOrder ?? 9999) - (b.publishOrder ?? 9999) ||
         a._creationTime - b._creationTime,
     );
+
+  // When specific time-of-day slots are configured, project each future run's
+  // wall-clock time the same way the backend scheduler does — otherwise every
+  // event collapses to the stale default 6h-interval pattern regardless of
+  // what was actually set on the Schedule page.
+  if (timeSlots?.length) {
+    const totalRuns = Math.ceil(readyVideos.length / count);
+    const slotTimes: number[] = [nextAt];
+    for (let r = 1; r < totalRuns; r++) {
+      slotTimes.push(nextAutoPublishSlot(timeSlots, slotTimes[r - 1], tzOffset));
+    }
+    return readyVideos.map((v, i) => ({
+      videoId: v._id,
+      title: v.aiTitle ?? v.title ?? "Untitled",
+      type: "auto" as const,
+      timestamp: slotTimes[Math.floor(i / count)],
+    }));
+  }
+
   return readyVideos.map((v, i) => ({
     videoId: v._id,
     title: v.aiTitle ?? v.title ?? "Untitled",

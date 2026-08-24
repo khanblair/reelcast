@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { api } from "../../../../../convex/_generated/api";
 import { Id } from "../../../../../convex/_generated/dataModel";
-import { formatDateTimeEAT, formatCountdown } from "@/lib/eat";
+import { formatDateTimeEAT, formatCountdown, nextAutoPublishSlot } from "@/lib/eat";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
@@ -96,11 +96,23 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
     const nextAt     = userSettings.autoPublishNextAt;
     const intervalMs = userSettings.autoPublishIntervalMs ?? 6 * 3_600_000;
     const count      = userSettings.autoPublishCount ?? 1;
+    const timeSlots  = (userSettings as any).autoPublishTimeSlots as number[] | undefined;
+    const tzOffset   = ((userSettings as any).autoPublishTimezoneOffset as number | undefined) ?? 3;
     const readyVideos = (allVideos ?? [])
       .filter((v) => v.status === "ready")
       .sort((a, b) => a._creationTime - b._creationTime);
     const idx = readyVideos.findIndex((v) => v._id === video._id);
     if (idx === -1) return undefined;
+
+    if (timeSlots?.length) {
+      const runIdx = Math.floor(idx / count);
+      let slotTime = nextAt;
+      for (let r = 0; r < runIdx; r++) {
+        slotTime = nextAutoPublishSlot(timeSlots, slotTime, tzOffset);
+      }
+      return slotTime;
+    }
+
     return nextAt + Math.floor(idx / count) * intervalMs;
   }, [allVideos, userSettings, video]);
 

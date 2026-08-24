@@ -11,26 +11,10 @@ import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
 import type { Video as VideoType } from "@/types/video";
 import type { VideoStatus } from "@/lib/constants";
+import { nextAutoPublishSlot } from "@/lib/eat";
 
 
 type SortOption = "newest" | "oldest" | "name-az" | "name-za" | "size-desc" | "size-asc";
-
-function nextSlotAfter(slots: number[], afterMs: number, tzOffsetHours: number): number {
-  const TZ_MS = tzOffsetHours * 3_600_000;
-  const shifted = new Date(afterMs + TZ_MS);
-  const msSinceMidnight =
-    shifted.getUTCHours() * 3_600_000 +
-    shifted.getUTCMinutes() * 60_000 +
-    shifted.getUTCSeconds() * 1_000 +
-    shifted.getUTCMilliseconds();
-  const midnight = afterMs - msSinceMidnight;
-  const sorted = [...slots].sort((a, b) => a - b);
-  for (const h of sorted) {
-    const slotMs = midnight + h * 3_600_000;
-    if (slotMs > afterMs) return slotMs;
-  }
-  return midnight + 24 * 3_600_000 + sorted[0] * 3_600_000;
-}
 
 const STATUS_PILLS: { value: VideoStatus | "all"; label: string }[] = [
   { value: "all", label: "All" },
@@ -149,7 +133,7 @@ export default function DraftsPage() {
       const totalRuns = Math.ceil(readyVideos.length / count);
       const slotTimes: number[] = [nextAt];
       for (let r = 1; r < totalRuns; r++) {
-        slotTimes.push(nextSlotAfter(timeSlots, slotTimes[r - 1], tzOffset));
+        slotTimes.push(nextAutoPublishSlot(timeSlots, slotTimes[r - 1], tzOffset));
       }
       readyVideos.forEach((v, i) => {
         map.set(v._id, slotTimes[Math.floor(i / count)]);

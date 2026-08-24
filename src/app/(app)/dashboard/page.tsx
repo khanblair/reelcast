@@ -12,7 +12,7 @@ import { VideoCard } from "@/components/video-card";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
 import type { Video as VideoType } from "@/types/video";
-import { formatDateTimeEAT, formatCountdown } from "@/lib/eat";
+import { formatDateTimeEAT, formatCountdown, nextAutoPublishSlot } from "@/lib/eat";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell,
@@ -194,9 +194,24 @@ export default function DashboardPage() {
     const nextAt      = userSettings.autoPublishNextAt;
     const intervalMs  = userSettings.autoPublishIntervalMs ?? 6 * 3_600_000;
     const count       = userSettings.autoPublishCount ?? 1;
+    const timeSlots   = (userSettings as any).autoPublishTimeSlots as number[] | undefined;
+    const tzOffset    = ((userSettings as any).autoPublishTimezoneOffset as number | undefined) ?? 3;
     const readyVideos = (videos ?? [])
       .filter(v => v.status === "ready")
       .sort((a, b) => a._creationTime - b._creationTime);
+
+    if (timeSlots?.length) {
+      const totalRuns = Math.ceil(readyVideos.length / count);
+      const slotTimes: number[] = [nextAt];
+      for (let r = 1; r < totalRuns; r++) {
+        slotTimes.push(nextAutoPublishSlot(timeSlots, slotTimes[r - 1], tzOffset));
+      }
+      readyVideos.forEach((v, i) => {
+        map.set(v._id, slotTimes[Math.floor(i / count)]);
+      });
+      return map;
+    }
+
     readyVideos.forEach((v, i) => {
       map.set(v._id, nextAt + Math.floor(i / count) * intervalMs);
     });

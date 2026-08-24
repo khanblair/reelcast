@@ -49,6 +49,7 @@ export default function HistoryPage() {
   const retryJob        = useMutation(api.jobs.retryJob);
   const [filter, setFilter]       = useState<JobFilter>("all");
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [retryErrors, setRetryErrors] = useState<Record<string, string>>({});
 
   const loading = jobs === undefined || videos === undefined || scheduledVideos === undefined || generations === undefined;
 
@@ -83,10 +84,12 @@ export default function HistoryPage() {
 
   const handleRetry = async (jobId: Id<"jobs">) => {
     setRetryingId(jobId);
+    setRetryErrors((prev) => ({ ...prev, [jobId]: "" }));
     try {
       await retryJob({ id: jobId });
     } catch (e) {
-      console.error("Retry failed:", e);
+      const message = e instanceof Error ? e.message.replace(/^Uncaught Error: /, "") : "Retry failed.";
+      setRetryErrors((prev) => ({ ...prev, [jobId]: message }));
     } finally {
       setRetryingId(null);
     }
@@ -325,6 +328,11 @@ export default function HistoryPage() {
                 {filteredJobs.map((job) => {
                   const video    = videoMap.get(job.videoId);
                   const isRetrying = retryingId === job._id;
+                  const retryError = retryErrors[job._id];
+                  const alreadyPublished =
+                    job.type === "publish" &&
+                    ((video as any)?.status === "published" || (video as any)?.publishedVideoId);
+                  const canRetry = job.status === "failed" && !alreadyPublished;
 
                   return (
                     <div key={job._id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 gap-3">
@@ -379,10 +387,20 @@ export default function HistoryPage() {
                                 Error: {job.error}
                               </div>
                             )}
+                            {alreadyPublished && job.status === "failed" && (
+                              <div className="text-muted-foreground text-xs pt-0.5">
+                                This video was later published successfully through a different job — nothing to retry here.
+                              </div>
+                            )}
+                            {retryError && (
+                              <div className="text-destructive text-xs pt-0.5 break-words">
+                                {retryError}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
-                      {job.status === "failed" && (
+                      {canRetry && (
                         <Button
                           variant="outline"
                           size="sm"

@@ -191,6 +191,21 @@ export const retryJob = mutation({
       throw new Error("Job not found or unauthorized");
     }
 
+    if (job.type === "publish") {
+      // Guard: a job row is never removed once a video moves on, so an old
+      // failed publish job can outlive a later, separate successful publish
+      // of the same video. Retrying it would force an already-published
+      // video back to "scheduled" and re-upload against files that were
+      // already destroyed post-publish — always failing with a storage 404.
+      const video = await ctx.db.get(job.videoId);
+      if (video?.status === "published" || video?.publishedVideoId) {
+        throw new Error("This video has already been published to YouTube — nothing to retry.");
+      }
+      if ((video as any)?.cloudinaryDeletedAt) {
+        throw new Error("The video file is no longer in storage. Re-upload the video to publish it again.");
+      }
+    }
+
     await ctx.db.patch(args.id, {
       status: "pending",
       error: undefined,

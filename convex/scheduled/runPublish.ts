@@ -11,6 +11,31 @@ import {
 
 const MAX_RETRIES = 2; // 3 total attempts: 0, 1, 2
 
+// Errors that will never succeed on retry — fail fast without burning attempts
+function isNonRetryable(message: string): boolean {
+  return (
+    message.includes("Not Found") ||             // storage 404 — file is gone
+    message.includes("Video not found") ||        // record deleted mid-flight
+    message.includes("User not found") ||         // account deleted
+    message.includes("VIDEO_FILE_DELETED") ||     // explicit deleted flag
+    message.includes("YouTube account is not connected") // no OAuth at all
+  );
+}
+
+// Tailor the Telegram notification copy to the actual failure cause
+function userFacingError(message: string): string {
+  if (message.includes("VIDEO_FILE_DELETED") || message.includes("Not Found")) {
+    return "The video file is no longer in storage (it may have been cleaned up after a previous publish). Re-upload the video to publish it again.";
+  }
+  if (message.includes("YouTube account is not connected")) {
+    return "Your YouTube account is not connected. Go to Settings → YouTube Channels to reconnect.";
+  }
+  if (message.includes("YouTube upload initiation failed") || message.includes("YouTube video upload failed")) {
+    return `YouTube rejected the upload: ${message}`;
+  }
+  return message;
+}
+
 export const processPublishJob = action({
   args: {
     jobId: v.id("jobs"),
@@ -58,6 +83,12 @@ export const processPublishJob = action({
             expiresIn: refreshed.expiresIn,
           });
         }
+      }
+
+      // Pre-flight: if Cloudinary already cleaned up this video's files, fail fast
+      // instead of hitting a 404 after making a resumable-upload request to YouTube.
+      if ((video as any).cloudinaryDeletedAt) {
+        throw new Error("VIDEO_FILE_DELETED: The video file was cleaned up after a previous successful publish. Re-upload to publish again.");
       }
 
       const videoFileUrl = video.processedFileKey ?? video.rawFileKey;
@@ -140,7 +171,9 @@ export const processPublishJob = action({
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Unknown error";
 
-      if (attempt < MAX_RETRIES) {
+      const nonRetryable = isNonRetryable(message);
+
+      if (!nonRetryable && attempt < MAX_RETRIES) {
         // Schedule retry with exponential backoff: 60s, 120s
         const delayMs = 60_000 * Math.pow(2, attempt);
         await ctx.scheduler.runAfter(
@@ -152,7 +185,8 @@ export const processPublishJob = action({
         return;
       }
 
-      // All retries exhausted — mark as failed
+      // Non-retryable error or all retries exhausted — mark as failed
+      const attemptsLabel = nonRetryable ? "1 attempt" : "3 attempts";
       await ctx.runMutation(internal.jobs.internalUpdateStatus, {
         id: args.jobId,
         status: "failed",
@@ -164,16 +198,17 @@ export const processPublishJob = action({
         status: "failed",
       });
 
-      // Best-effort Telegram notification
+      // Best-effort Telegram notification with context-aware message
       try {
         const video = await ctx.runQuery(internal.videos.internalGet, {
           id: args.videoId,
         });
         if (video) {
           const notificationTitle = video.aiTitle ?? video.title ?? title;
+          const friendlyError = userFacingError(message);
           await ctx.runAction(api.actions.telegram.sendNotification, {
             userId: video.userId,
-            message: `❌ Publish failed: "${notificationTitle}" after 3 attempts.\n\nError: ${message}\n\nCheck your YouTube connection in Settings.`,
+            message: `❌ Publish failed: "${notificationTitle}" after ${attemptsLabel}.\n\nReason: ${friendlyError}`,
           });
         }
       } catch (telegramErr) {

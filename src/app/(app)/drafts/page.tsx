@@ -125,7 +125,7 @@ export default function DraftsPage() {
     const tzOffset   = ((userSettings as any).autoPublishTimezoneOffset as number | undefined) ?? 3;
 
     const readyVideos = (videos ?? [])
-      .filter((v) => v.status === "ready")
+      .filter((v) => v.status === "ready" && !(v as any).storageMissing)
       .sort((a, b) => a._creationTime - b._creationTime);
 
     if (timeSlots?.length) {

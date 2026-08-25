@@ -21,6 +21,7 @@ import type * as actions_metadata from "../actions/metadata.js";
 import type * as actions_oauthHealthCheck from "../actions/oauthHealthCheck.js";
 import type * as actions_publishNow from "../actions/publishNow.js";
 import type * as actions_storage from "../actions/storage.js";
+import type * as actions_storageHealth from "../actions/storageHealth.js";
 import type * as actions_telegram from "../actions/telegram.js";
 import type * as actions_testConnections from "../actions/testConnections.js";
 import type * as actions_youtubeAnalytics from "../actions/youtubeAnalytics.js";
@@ -80,6 +81,7 @@ declare const fullApi: ApiFromModules<{
   "actions/oauthHealthCheck": typeof actions_oauthHealthCheck;
   "actions/publishNow": typeof actions_publishNow;
   "actions/storage": typeof actions_storage;
+  "actions/storageHealth": typeof actions_storageHealth;
   "actions/telegram": typeof actions_telegram;
   "actions/testConnections": typeof actions_testConnections;
   "actions/youtubeAnalytics": typeof actions_youtubeAnalytics;

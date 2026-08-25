@@ -38,10 +38,17 @@ export const runAutoPublishBatch = action({
     const count = settings.autoPublishCount ?? 1;
     const privacy = (settings.autoPublishPrivacy ?? "public") as "private" | "public" | "unlisted";
 
-    const readyVideos = await ctx.runQuery(internal.videos.internalGetReadyForUser, {
+    // Overfetch and skip videos already flagged storageMissing (from the storage
+    // health check) — otherwise a run capped at exactly `count` could pull only
+    // known-dead videos and publish nothing, even with healthy videos waiting
+    // further back in the FIFO queue.
+    const candidates = await ctx.runQuery(internal.videos.internalGetReadyForUser, {
       userId: args.userId,
-      limit: count,
+      limit: Math.max(count * 5, 25),
     });
+    const readyVideos = candidates
+      .filter((v) => v.storageMissing !== true)
+      .slice(0, count);
 
     for (const video of readyVideos) {
       let claimed = false;

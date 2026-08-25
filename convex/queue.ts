@@ -67,6 +67,8 @@ export const list = query({
       privacyStatus: video.privacyStatus,
       publishAs: video.publishAs,
       rawFileSize: video.rawFileSize,
+      storageMissing: video.storageMissing ?? false,
+      storageCheckedAt: video.storageCheckedAt,
       estimatedPublishAt: null as null,
     }));
   },

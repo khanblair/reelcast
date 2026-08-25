@@ -99,7 +99,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
     const timeSlots  = (userSettings as any).autoPublishTimeSlots as number[] | undefined;
     const tzOffset   = ((userSettings as any).autoPublishTimezoneOffset as number | undefined) ?? 3;
     const readyVideos = (allVideos ?? [])
-      .filter((v) => v.status === "ready")
+      .filter((v) => v.status === "ready" && !(v as any).storageMissing)
       .sort((a, b) => a._creationTime - b._creationTime);
     const idx = readyVideos.findIndex((v) => v._id === video._id);
     if (idx === -1) return undefined;

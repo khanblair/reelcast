@@ -85,10 +85,14 @@ export const processPublishJob = action({
         }
       }
 
-      // Pre-flight: if Cloudinary already cleaned up this video's files, fail fast
+      // Pre-flight: if Cloudinary already cleaned up this video's files (post-publish
+      // cleanup) or a storage health check already found the file missing, fail fast
       // instead of hitting a 404 after making a resumable-upload request to YouTube.
       if ((video as any).cloudinaryDeletedAt) {
         throw new Error("VIDEO_FILE_DELETED: The video file was cleaned up after a previous successful publish. Re-upload to publish again.");
+      }
+      if ((video as any).storageMissing === true) {
+        throw new Error("VIDEO_FILE_DELETED: The video file is no longer in storage (confirmed by a storage health check). Re-upload to publish again.");
       }
 
       const videoFileUrl = video.processedFileKey ?? video.rawFileKey;

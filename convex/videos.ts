@@ -629,6 +629,16 @@ export const internalClaimForPublishing = internalMutation({
   },
 });
 
+export const internalSetStorageHealth = internalMutation({
+  args: { id: v.id("videos"), storageMissing: v.boolean() },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      storageMissing: args.storageMissing,
+      storageCheckedAt: Date.now(),
+    });
+  },
+});
+
 export const internalSetCloudinaryDeleted = internalMutation({
   args: { id: v.id("videos") },
   handler: async (ctx, args) => {

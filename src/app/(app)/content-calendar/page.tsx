@@ -67,7 +67,7 @@ function computeAutoEvents(videos: any[], settings: any | null): CalendarEvent[]
   const timeSlots: number[] | undefined = settings.autoPublishTimeSlots;
   const tzOffset: number = settings.autoPublishTimezoneOffset ?? 3;
   const readyVideos = [...videos]
-    .filter((v) => v.status === "ready")
+    .filter((v) => v.status === "ready" && !v.storageMissing)
     .sort(
       (a, b) =>
         (a.publishOrder ?? 9999) - (b.publishOrder ?? 9999) ||

@@ -629,6 +629,17 @@ export const internalClaimForPublishing = internalMutation({
   },
 });
 
+// System-wide (all users) ready + scheduled videos — used by the admin storage
+// health check, distinct from internalGetReadyForUser which is scoped to one
+// user for the auto-publish scheduler.
+export const internalGetAllPublishable = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const all = await ctx.db.query("videos").collect();
+    return all.filter((v) => v.status === "ready" || v.status === "scheduled");
+  },
+});
+
 export const internalSetStorageHealth = internalMutation({
   args: { id: v.id("videos"), storageMissing: v.boolean() },
   handler: async (ctx, args) => {

@@ -12,6 +12,7 @@ const ADMIN_TABS = [
   { label: "Jobs",      href: "/admin/jobs" },
   { label: "Quota",     href: "/admin/quota" },
   { label: "Storage",   href: "/admin/storage" },
+  { label: "Health",    href: "/admin/health" },
   { label: "Usage",     href: "/admin/usage" },
   { label: "Settings",  href: "/admin/settings" },
 ];

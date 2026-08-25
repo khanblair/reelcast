@@ -3,6 +3,7 @@
 import { v } from "convex/values";
 import { action } from "../_generated/server";
 import { api, internal } from "../_generated/api";
+import { isFileMissing } from "../lib/storageCheck";
 
 // Compute the next timezone-aligned time slot after nowMs (always at least 60s in future).
 // timeSlots is an array of local hours (0–23). timezoneOffsetHours defaults to EAT (+3).
@@ -38,17 +39,52 @@ export const runAutoPublishBatch = action({
     const count = settings.autoPublishCount ?? 1;
     const privacy = (settings.autoPublishPrivacy ?? "public") as "private" | "public" | "unlisted";
 
-    // Overfetch and skip videos already flagged storageMissing (from the storage
-    // health check) — otherwise a run capped at exactly `count` could pull only
-    // known-dead videos and publish nothing, even with healthy videos waiting
-    // further back in the FIFO queue.
+    // Overfetch candidates — a run capped at exactly `count` could otherwise pull
+    // only known-dead videos and publish nothing, even with healthy videos
+    // waiting further back in the FIFO queue.
     const candidates = await ctx.runQuery(internal.videos.internalGetReadyForUser, {
       userId: args.userId,
       limit: Math.max(count * 5, 25),
     });
-    const readyVideos = candidates
-      .filter((v) => v.storageMissing !== true)
+
+    // Freshly verify each candidate's file right before selecting — don't just
+    // trust a stale storageMissing flag from a prior manual check. This is what
+    // catches a video that died *since* the last check, not only ones someone
+    // already found. Skip the network call for videos already confirmed dead.
+    const checked = await Promise.all(
+      candidates.map(async (video) => {
+        const wasMissing = video.storageMissing === true;
+        const missing = wasMissing || (await isFileMissing(video.processedFileKey ?? video.rawFileKey));
+        if (missing !== wasMissing) {
+          await ctx.runMutation(internal.videos.internalSetStorageHealth, {
+            id: video._id,
+            storageMissing: missing,
+          });
+        }
+        return { video, missing, newlyDetected: missing && !wasMissing };
+      })
+    );
+
+    const newlyDead = checked.filter((c) => c.newlyDetected);
+    const readyVideos = checked
+      .filter((c) => !c.missing)
+      .map((c) => c.video)
       .slice(0, count);
+
+    // Tell the user — otherwise a skip is silent and they only find out when
+    // the video never shows up as published. Fires once per video, right when
+    // it's first detected dead, not on every subsequent run.
+    if (newlyDead.length > 0) {
+      const list = newlyDead
+        .map((c) => `• ${c.video.aiTitle ?? c.video.title}`)
+        .join("\n");
+      await ctx.runAction(api.actions.telegram.sendNotification, {
+        userId: args.userId,
+        message:
+          `⚠️ Auto-publish found ${newlyDead.length} video(s) with a missing storage file and skipped ${newlyDead.length === 1 ? "it" : "them"}:\n${list}\n\n` +
+          `Re-upload to publish. Other queued videos will now publish sooner since they no longer wait behind ${newlyDead.length === 1 ? "this one" : "these"}.`,
+      }).catch(() => {});
+    }
 
     for (const video of readyVideos) {
       let claimed = false;

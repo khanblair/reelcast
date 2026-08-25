@@ -1,6 +1,42 @@
 import { v } from "convex/values";
-import { mutation, query, internalMutation } from "./_generated/server";
+import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
 import { getCurrentUserOrThrow } from "./lib/auth";
+
+const oauthStatusValidator = v.union(
+  v.literal("connected"),
+  v.literal("token_expired"),
+  v.literal("revoked"),
+  v.literal("unknown"),
+);
+
+// Admin/system use — every connected channel across all users, for the
+// admin health page and the multi-channel OAuth health check.
+export const internalListAll = internalQuery({
+  args: {},
+  handler: async (ctx) => ctx.db.query("youtubeChannels").collect(),
+});
+
+export const internalGetById = internalQuery({
+  args: { id: v.id("youtubeChannels") },
+  handler: async (ctx, args) => ctx.db.get(args.id),
+});
+
+// Internal — used by the OAuth health-check to record a fresh status/token
+// for a single channel after probing the YouTube API.
+export const internalUpdateChannelHealth = internalMutation({
+  args: {
+    id: v.id("youtubeChannels"),
+    oauthStatus: oauthStatusValidator,
+    accessToken: v.optional(v.string()),
+    tokenExpiry: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const updates: Record<string, unknown> = { oauthStatus: args.oauthStatus };
+    if (args.accessToken !== undefined) updates.accessToken = args.accessToken;
+    if (args.tokenExpiry !== undefined) updates.tokenExpiry = args.tokenExpiry;
+    await ctx.db.patch(args.id, updates);
+  },
+});
 
 // List all YouTube channels connected to the current user's account
 export const list = query({

@@ -148,3 +148,101 @@ export const checkAllUsersOAuthHealth = internalAction({
     }
   },
 });
+
+/**
+ * Internal action — checks OAuth health for a single row in the multi-channel
+ * youtubeChannels table (as opposed to checkUserOAuthHealth, which only
+ * covers the legacy single-channel fields on the users table). Secondary
+ * (non-primary) channels are never touched by the users-table health check,
+ * so this is the only path that verifies them.
+ */
+export const checkChannelOAuthHealth = internalAction({
+  args: { channelId: v.id("youtubeChannels") },
+  handler: async (ctx, args): Promise<OAuthStatus> => {
+    const channel = await ctx.runQuery(internal.youtubeChannels.internalGetById, {
+      id: args.channelId,
+    });
+    if (!channel) return "unknown";
+
+    let response: Response;
+    try {
+      response = await fetch(
+        "https://www.googleapis.com/youtube/v3/channels?part=id&mine=true",
+        { headers: { Authorization: `Bearer ${channel.accessToken}` } }
+      );
+    } catch (err) {
+      console.error(`[oauthHealthCheck] Network error for channel ${args.channelId}:`, err);
+      await ctx.runMutation(internal.youtubeChannels.internalUpdateChannelHealth, {
+        id: args.channelId,
+        oauthStatus: "unknown",
+      });
+      return "unknown";
+    }
+
+    if (response.ok) {
+      await ctx.runMutation(internal.youtubeChannels.internalUpdateChannelHealth, {
+        id: args.channelId,
+        oauthStatus: "connected",
+      });
+      return "connected";
+    }
+
+    if (response.status === 401) {
+      if (!channel.refreshToken) {
+        await ctx.runMutation(internal.youtubeChannels.internalUpdateChannelHealth, {
+          id: args.channelId,
+          oauthStatus: "revoked",
+        });
+        return "revoked";
+      }
+      try {
+        const { accessToken, expiresIn } = await refreshYouTubeToken(channel.refreshToken);
+        await ctx.runMutation(internal.youtubeChannels.internalUpdateChannelHealth, {
+          id: args.channelId,
+          oauthStatus: "connected",
+          accessToken,
+          tokenExpiry: Date.now() + expiresIn * 1000,
+        });
+        return "connected";
+      } catch {
+        await ctx.runMutation(internal.youtubeChannels.internalUpdateChannelHealth, {
+          id: args.channelId,
+          oauthStatus: "revoked",
+        });
+        return "revoked";
+      }
+    }
+
+    console.warn(`[oauthHealthCheck] Unexpected status ${response.status} for channel ${args.channelId}`);
+    await ctx.runMutation(internal.youtubeChannels.internalUpdateChannelHealth, {
+      id: args.channelId,
+      oauthStatus: "unknown",
+    });
+    return "unknown";
+  },
+});
+
+/**
+ * Public action, admin-only — checks every connected YouTube channel across
+ * all users (both primary and secondary), sequentially to avoid hammering
+ * the YouTube API. Triggered on demand from the admin health page.
+ */
+export const checkAllChannelsOAuthHealth = action({
+  args: {},
+  handler: async (ctx): Promise<{ checked: number }> => {
+    const user = await ctx.runQuery(api.users.current);
+    if (!user?.isAdmin) throw new Error("Admin required");
+
+    const channels = await ctx.runQuery(internal.youtubeChannels.internalListAll);
+    for (const channel of channels) {
+      try {
+        await ctx.runAction(internal.actions.oauthHealthCheck.checkChannelOAuthHealth, {
+          channelId: channel._id,
+        });
+      } catch (err) {
+        console.error(`[oauthHealthCheck] Unhandled error for channel ${channel._id}:`, err);
+      }
+    }
+    return { checked: channels.length };
+  },
+});

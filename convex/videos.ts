@@ -345,6 +345,22 @@ export const internalUpdateVeoOperation = internalMutation({
   },
 });
 
+// Internal query — used by the weekly digest email to fetch a user's videos
+// published within a given time window. Relies on the existing
+// by_user_status compound index; publishedAt filtering happens in-memory
+// since there's no by_user_status_publishedAt index (published video counts
+// per user are small, so this is cheap).
+export const internalListPublishedSince = internalQuery({
+  args: { userId: v.id("users"), since: v.number() },
+  handler: async (ctx, args) => {
+    const videos = await ctx.db
+      .query("videos")
+      .withIndex("by_user_status", (q) => q.eq("userId", args.userId).eq("status", "published"))
+      .collect();
+    return videos.filter((v) => (v.publishedAt ?? 0) >= args.since);
+  },
+});
+
 export const internalUpdateProcessedFile = internalMutation({
   args: {
     id: v.id("videos"),

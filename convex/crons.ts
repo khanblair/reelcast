@@ -17,11 +17,10 @@ crons.interval(
 );
 
 // Every Sunday at 08:00 UTC: send weekly digest notifications.
-// TODO(email agent): uncomment once internal.actions.email.sendWeeklyDigestToAll is implemented.
-// crons.weekly(
-//   "weekly digest notifications",
-//   { dayOfWeek: "sunday", hourUTC: 8, minuteUTC: 0 },
-//   internal.actions.email.sendWeeklyDigestToAll,
-// );
+crons.weekly(
+  "weekly digest notifications",
+  { dayOfWeek: "sunday", hourUTC: 8, minuteUTC: 0 },
+  internal.actions.email.sendWeeklyDigestToAll,
+);
 
 export default crons;

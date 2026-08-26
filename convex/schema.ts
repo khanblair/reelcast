@@ -22,11 +22,28 @@ export default defineSchema({
     )),
     isAdmin: v.optional(v.boolean()),
     plan: v.optional(v.union(v.literal("free"), v.literal("pro"), v.literal("elite"))),
+    // Lemon Squeezy billing
+    lemonSqueezyCustomerId: v.optional(v.string()),
+    lemonSqueezySubscriptionId: v.optional(v.string()),
+    lemonSqueezyVariantId: v.optional(v.string()),
+    subscriptionStatus: v.optional(v.union(
+      v.literal("on_trial"),
+      v.literal("active"),
+      v.literal("paused"),
+      v.literal("past_due"),
+      v.literal("unpaid"),
+      v.literal("cancelled"),
+      v.literal("expired"),
+    )),
+    subscriptionRenewsAt: v.optional(v.number()),
+    subscriptionEndsAt: v.optional(v.number()),
   })
     .index("by_supabase_id", ["supabaseId"])
     .index("by_clerk_id", ["clerkId"])
     .index("by_email", ["email"])
-    .index("by_youtube_channel_id", ["youtubeChannelId"]),
+    .index("by_youtube_channel_id", ["youtubeChannelId"])
+    .index("by_lemonsqueezy_customer_id", ["lemonSqueezyCustomerId"])
+    .index("by_lemonsqueezy_subscription_id", ["lemonSqueezySubscriptionId"]),
 
   videos: defineTable({
     userId: v.id("users"),
@@ -298,4 +315,22 @@ export default defineSchema({
     deepseekApiKey: v.optional(v.string()),
     geminiApiKey: v.optional(v.string()),
   }),
+
+  // Lemon Squeezy webhook event log — idempotency guard + audit trail
+  billingEvents: defineTable({
+    eventId: v.string(),        // Lemon Squeezy webhook meta.event_name + object id, de-duped key
+    eventName: v.string(),      // e.g. "subscription_created"
+    userId: v.optional(v.id("users")),
+    subscriptionId: v.optional(v.string()),
+    processedAt: v.number(),
+  }).index("by_event_id", ["eventId"]),
+
+  // Contact form submissions from the marketing site
+  contactSubmissions: defineTable({
+    name: v.string(),
+    email: v.string(),
+    subject: v.string(),
+    message: v.string(),
+    status: v.union(v.literal("new"), v.literal("read")),
+  }).index("by_status", ["status"]),
 });

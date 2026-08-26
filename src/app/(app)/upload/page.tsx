@@ -111,8 +111,11 @@ export default function UploadPage() {
         videoId: videoId as Id<"videos">,
       });
 
-      // Auto-generate metadata if the user has it enabled
-      if (settingsRef.current?.aiAutoGenerate) {
+      // Auto-generate metadata if the user has it enabled.
+      // Default is ON: a brand-new user's settings row hasn't been created yet
+      // (aiAutoGenerate is undefined), and every settings UI shows the toggle
+      // on by default, so only an explicit `false` should skip this.
+      if (settingsRef.current?.aiAutoGenerate !== false) {
         try {
           await generateMetadata({ videoId: videoId as Id<"videos"> });
         } catch (e) {

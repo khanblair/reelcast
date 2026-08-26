@@ -145,6 +145,12 @@ export const update = mutation({
       .unique();
 
     const updateData: Record<string, unknown> = {};
+    // Normalise aiAutoGenerate to an explicit boolean so the settings UI
+    // never shows an indeterminate toggle. Applies on first insert AND as a
+    // one-time backfill for existing rows that predate this default.
+    if (args.aiAutoGenerate === undefined && (!settings || settings.aiAutoGenerate === undefined)) {
+      updateData.aiAutoGenerate = true;
+    }
     if (args.aiPreset !== undefined) updateData.aiPreset = args.aiPreset;
     if (args.defaultQuality !== undefined) updateData.defaultQuality = args.defaultQuality;
     if (args.defaultAspectRatio !== undefined) updateData.defaultAspectRatio = args.defaultAspectRatio;

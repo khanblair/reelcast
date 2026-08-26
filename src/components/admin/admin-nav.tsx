@@ -14,6 +14,7 @@ const ADMIN_TABS = [
   { label: "Storage",   href: "/admin/storage" },
   { label: "Health",    href: "/admin/health" },
   { label: "Usage",     href: "/admin/usage" },
+  { label: "Contact",   href: "/admin/contact" },
   { label: "Settings",  href: "/admin/settings" },
 ];
 

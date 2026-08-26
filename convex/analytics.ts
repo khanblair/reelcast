@@ -13,6 +13,27 @@ export const getRecentForUser = internalQuery({
   },
 });
 
+// Internal query: best-effort latest analytics snapshot (views) for a set of
+// videos. Used by the weekly digest — many users will have zero rows for a
+// given video (analytics may not have been fetched yet), which is fine; those
+// videos are simply omitted from the result rather than causing an error.
+export const internalGetLatestForVideos = internalQuery({
+  args: { videoIds: v.array(v.id("videos")) },
+  handler: async (ctx, args) => {
+    const results: Array<{ videoId: string; views?: number }> = [];
+    for (const videoId of args.videoIds) {
+      const rows = await ctx.db
+        .query("videoAnalytics")
+        .withIndex("by_video", (q) => q.eq("videoId", videoId))
+        .collect();
+      if (rows.length === 0) continue;
+      const latest = rows.reduce((best, r) => (r.fetchedAt > best.fetchedAt ? r : best));
+      results.push({ videoId, views: latest.views });
+    }
+    return results;
+  },
+});
+
 export const getDashboardStats = query({
   args: {},
   handler: async (ctx) => {

@@ -169,3 +169,127 @@ export const sendMetadataReady = internalAction({
     });
   },
 });
+
+export const sendWeeklyDigest = internalAction({
+  args: {
+    userId: v.id("users"),
+    videosPublished: v.number(),
+    totalViews: v.optional(v.number()),
+    topVideoTitle: v.optional(v.string()),
+    topVideoViews: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<{ sent: boolean; reason?: string; error?: string }> => {
+    const historyUrl = `${APP_URL}/history`;
+    const videoLabel = args.videosPublished === 1 ? "video" : "videos";
+
+    const statsRows = [
+      `<tr><td style="padding: 8px 0; color: #6b7280;">Videos published</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${args.videosPublished}</td></tr>`,
+      args.totalViews !== undefined
+        ? `<tr><td style="padding: 8px 0; color: #6b7280;">Total views (so far)</td><td style="padding: 8px 0; text-align: right; font-weight: 600;">${args.totalViews.toLocaleString()}</td></tr>`
+        : "",
+    ].join("");
+
+    const topVideoSection = args.topVideoTitle
+      ? `<p style="margin: 16px 0 0; padding: 12px; background: #f9fafb; border-radius: 6px;"><strong>Top video:</strong> ${escapeHtml(args.topVideoTitle)}${args.topVideoViews !== undefined ? ` — ${args.topVideoViews.toLocaleString()} views` : ""}</p>`
+      : "";
+
+    const body = `
+      <h2 style="margin: 0 0 16px; font-size: 18px;">Your weekly digest</h2>
+      <p style="margin: 0 0 16px; color: #6b7280;">Here's how your channel did this past week.</p>
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 8px;">
+        ${statsRows}
+      </table>
+      ${topVideoSection}
+      <p style="margin: 24px 0 0;">
+        <a href="${escapeHtml(historyUrl)}" style="display: inline-block; background: #111827; color: #ffffff; padding: 10px 20px; border-radius: 6px; text-decoration: none; font-weight: 600;">View Full History</a>
+      </p>
+    `;
+
+    const textLines = [
+      `You published ${args.videosPublished} ${videoLabel} this week.`,
+      args.totalViews !== undefined ? `Total views so far: ${args.totalViews}` : undefined,
+      args.topVideoTitle
+        ? `Top video: ${args.topVideoTitle}${args.topVideoViews !== undefined ? ` (${args.topVideoViews} views)` : ""}`
+        : undefined,
+      `View your history at: ${historyUrl}`,
+    ].filter((line): line is string => Boolean(line));
+
+    return await ctx.runAction(internal.actions.email.sendEmail, {
+      userId: args.userId,
+      subject: `Your weekly digest: ${args.videosPublished} ${videoLabel} published`,
+      html: emailTemplate(body),
+      text: textLines.join("\n\n"),
+    });
+  },
+});
+
+// Fans out the weekly digest to every YouTube-connected user who has opted
+// into both weekly-digest notifications and email notifications generally,
+// and has a Resend API key configured. Skips users with nothing published
+// this week to avoid sending an empty/useless email. Called by the
+// "weekly digest notifications" cron.
+export const sendWeeklyDigestToAll = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{ processed: number; sent: number }> => {
+    const users = await ctx.runQuery(internal.users.listConnectedUsers, {});
+    const since = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    let sent = 0;
+
+    for (const user of users) {
+      const settings = await ctx.runQuery(internal.settings.getByVideoUserId, {
+        userId: user._id,
+      });
+
+      if (!settings?.notifyOnWeeklyDigest || !settings.emailNotificationsEnabled || !settings.resendApiKey) {
+        continue;
+      }
+
+      const publishedVideos = await ctx.runQuery(internal.videos.internalListPublishedSince, {
+        userId: user._id,
+        since,
+      });
+
+      // Nothing published this week — skip rather than send a useless email.
+      if (publishedVideos.length === 0) {
+        continue;
+      }
+
+      let totalViews: number | undefined;
+      let topVideoTitle: string | undefined;
+      let topVideoViews: number | undefined;
+
+      try {
+        const analyticsRows = await ctx.runQuery(internal.analytics.internalGetLatestForVideos, {
+          videoIds: publishedVideos.map((v) => v._id),
+        });
+
+        if (analyticsRows.length > 0) {
+          totalViews = analyticsRows.reduce((sum, r) => sum + (r.views ?? 0), 0);
+          const best = [...analyticsRows].sort((a, b) => (b.views ?? 0) - (a.views ?? 0))[0];
+          if (best && (best.views ?? 0) > 0) {
+            const video = publishedVideos.find((v) => v._id === best.videoId);
+            if (video) {
+              topVideoTitle = video.aiTitle || video.title;
+              topVideoViews = best.views ?? 0;
+            }
+          }
+        }
+      } catch (err) {
+        // Analytics are best-effort — never let a fetch failure block the digest.
+        console.error("[email] failed to fetch weekly analytics for digest:", err);
+      }
+
+      const result = await ctx.runAction(internal.actions.email.sendWeeklyDigest, {
+        userId: user._id,
+        videosPublished: publishedVideos.length,
+        totalViews,
+        topVideoTitle,
+        topVideoViews,
+      });
+
+      if (result.sent) sent++;
+    }
+
+    return { processed: users.length, sent };
+  },
+});

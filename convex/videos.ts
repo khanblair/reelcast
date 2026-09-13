@@ -700,11 +700,18 @@ export const bulkMarkDraftsReady = mutation({
       .filter((q) => q.eq(q.field("status"), "draft"))
       .collect();
 
+    // Skip drafts with no usable video file yet (e.g. an AI-generation row
+    // created with a placeholder empty rawFileKey whose generation job never
+    // ran or never finished) — promoting one to "ready" would surface a video
+    // with nothing playable and no way for auto-publish to catch it later.
+    let count = 0;
     for (const video of drafts) {
+      if (!video.rawFileKey && !video.processedFileKey) continue;
       await ctx.db.patch(video._id, { status: "ready" });
+      count++;
     }
 
-    return { count: drafts.length };
+    return { count };
   },
 });
 

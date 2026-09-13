@@ -659,9 +659,18 @@ export const internalGetAllPublishable = internalQuery({
 export const internalSetStorageHealth = internalMutation({
   args: { id: v.id("videos"), storageMissing: v.boolean() },
   handler: async (ctx, args) => {
+    const video = await ctx.db.get(args.id);
+    // A confirmed-missing file can never be published — demote it out of
+    // "ready"/"scheduled" instead of leaving it to sit there indefinitely
+    // looking publishable with a dead link. Leave other statuses alone.
+    const shouldFail =
+      args.storageMissing &&
+      video &&
+      (video.status === "ready" || video.status === "scheduled");
     await ctx.db.patch(args.id, {
       storageMissing: args.storageMissing,
       storageCheckedAt: Date.now(),
+      ...(shouldFail ? { status: "failed" as const } : {}),
     });
   },
 });

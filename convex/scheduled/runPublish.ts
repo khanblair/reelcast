@@ -61,6 +61,21 @@ export const processPublishJob = action({
       });
       if (!video) throw new Error("Video not found");
 
+      // Idempotency guard: a prior attempt of this same job may have already
+      // uploaded to YouTube successfully and then thrown on one of the
+      // bookkeeping mutations that follow (marking published, saving the
+      // video ID, marking the job complete) — before automatic retry existed
+      // as a possibility. Re-running from the top would re-upload the same
+      // video to YouTube a second time. If it's already published, there's
+      // nothing left to do but finish the job.
+      if (video.publishedVideoId) {
+        await ctx.runMutation(internal.jobs.internalUpdateStatus, {
+          id: args.jobId,
+          status: "completed",
+        });
+        return;
+      }
+
       const user = await ctx.runQuery(internal.users.internalGetById, {
         userId: video.userId,
       });

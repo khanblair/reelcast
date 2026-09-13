@@ -54,10 +54,10 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
   const updateStatus = useMutation(api.videos.updateStatus);
   const updatePrivacy = useMutation(api.videos.updatePrivacyStatus);
   const updatePublishAs = useMutation(api.videos.updatePublishAs);
-  const triggerPublish = useMutation(api.jobs.create);
   const triggerGeneration = useMutation(api.jobs.create);
   const schedulePublishMutation = useMutation(api.videos.schedulePublish);
   const deleteVideoAction = useAction(api.actions.deleteVideo.deleteVideo);
+  const publishNowAction = useAction(api.actions.publishNow.publishNow);
   const generateMetadata = useAction(api.actions.metadata.generateForUpload);
   const fetchVideoAnalytics = useAction(api.actions.youtubeAnalytics.fetchForVideo);
   const generateThumbnail = useAction(api.actions.generateThumbnail.generate);
@@ -74,6 +74,8 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [regenerating, setRegenerating] = useState(false);
   const [regenError, setRegenError] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
   const [countdownMs, setCountdownMs] = useState(0);
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const [scheduleTime, setScheduleTime] = useState("");
@@ -165,8 +167,14 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
   const isUploaded = video.sourceType === "upload" || (!video.sourceType && video.rawFileKey?.startsWith("http"));
 
   const handlePublish = async () => {
-    await updateStatus({ id: video._id, status: "publishing" });
-    await triggerPublish({ videoId: video._id, type: "publish" });
+    setPublishing(true);
+    setPublishError(null);
+    try {
+      await publishNowAction({ videoId: video._id });
+    } catch (err) {
+      setPublishError(err instanceof Error ? err.message : "Failed to publish video");
+      setPublishing(false);
+    }
   };
 
   const handleGenerate = async () => {
@@ -361,8 +369,12 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                 <Button variant="outline" onClick={() => setShowScheduleDialog(true)}>
                   <CalendarIcon className="mr-2 h-4 w-4" /> Schedule
                 </Button>
-                <Button onClick={handlePublish} className="bg-primary hover:bg-primary/90 text-white">
-                  <Youtube className="mr-2 h-4 w-4" /> Publish Now
+                <Button onClick={handlePublish} disabled={publishing} className="bg-primary hover:bg-primary/90 text-white">
+                  {publishing ? (
+                    <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Publishing…</>
+                  ) : (
+                    <><Youtube className="mr-2 h-4 w-4" /> Publish Now</>
+                  )}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
@@ -373,6 +385,9 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                 {" · "}
                 {PRIVACY_LABELS[(video.privacyStatus ?? "public") as PrivacyStatus]}
               </p>
+              {publishError && (
+                <p className="text-xs text-destructive">{publishError}</p>
+              )}
             </>
           )}
           <Button

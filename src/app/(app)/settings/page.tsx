@@ -27,10 +27,14 @@ function DiscordIcon({ className }: { className?: string }) {
 export default function SettingsPage() {
   const [youtubeBanner, setYoutubeBanner] = useState<{ success: boolean; message: string } | null>(null);
 
+  // Reading window.location must stay in an effect: it's unavailable during
+  // SSR, and computing it during the initial client render (even lazily)
+  // would produce a hydration mismatch against the server-rendered output.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const yt = params.get("youtube");
     if (yt === "connected") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setYoutubeBanner({ success: true, message: "YouTube connected successfully!" });
     } else if (yt === "error") {
       const reason = params.get("reason") ?? "unknown";
@@ -388,7 +392,7 @@ export default function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {(settings as any).discordWebhookUrl ? (
+            {settings?.discordWebhookUrl ? (
               <>
                 <div className="flex items-center justify-between gap-3 p-3 border rounded-md bg-secondary/50">
                   <div className="min-w-0">

@@ -245,12 +245,10 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
   );
 
   // Auto-select the most recent session on first load
-  useEffect(() => {
-    if (!hasAutoSelected && sessions && sessions.length > 0) {
-      setCurrentSessionId(sessions[0]._id as Id<"aiSessions">);
-      setHasAutoSelected(true);
-    }
-  }, [sessions, hasAutoSelected]);
+  if (!hasAutoSelected && sessions && sessions.length > 0) {
+    setHasAutoSelected(true);
+    setCurrentSessionId(sessions[0]._id as Id<"aiSessions">);
+  }
 
   // Combined messages: DB + optimistic
   const messages: LocalMessage[] = [
@@ -275,13 +273,12 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
 
   // Clear optimistic message the moment the real DB version arrives —
   // don't wait for loading to finish, otherwise both show simultaneously.
-  useEffect(() => {
-    if (!optimisticMsg || !dbMessages) return;
+  if (optimisticMsg && dbMessages) {
     const synced = dbMessages.some(
       (m) => m.role === "user" && m.content === optimisticMsg.content,
     );
     if (synced) setOptimisticMsg(null);
-  }, [dbMessages, optimisticMsg]);
+  }
 
   const handleScroll = () => {
     const el = scrollRef.current;

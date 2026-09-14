@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
+import { useCountdown } from "@/hooks/use-countdown";
+import { useNow } from "@/hooks/use-now";
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { Upload, Film, Zap, Youtube, HardDrive, Sparkles, Wand2, CalendarClock, ArrowRight } from "lucide-react";
@@ -118,15 +120,8 @@ export default function DashboardPage() {
   const [period, setPeriod] = useState<Period>("today");
 
   // Live countdown to next auto-publish run
-  const [autoCountdownMs, setAutoCountdownMs] = useState(0);
-  useEffect(() => {
-    const target = userSettings?.autoPublishNextAt;
-    if (!target) { setAutoCountdownMs(0); return; }
-    const tick = () => setAutoCountdownMs(Math.max(0, target - Date.now()));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [userSettings?.autoPublishNextAt]);
+  const autoCountdownMs = useCountdown(userSettings?.autoPublishNextAt);
+  const now = useNow();
 
   const rangeStart     = getRangeStart(period);
   const filteredVideos = useMemo(
@@ -167,15 +162,15 @@ export default function DashboardPage() {
 
   // Pipeline counts
   const metadataQueueCount = useMemo(
-    () => (videos ?? []).filter(v => v.metadataScheduledAt && v.metadataScheduledAt > Date.now()).length,
-    [videos]
+    () => (videos ?? []).filter(v => v.metadataScheduledAt && v.metadataScheduledAt > now).length,
+    [videos, now]
   );
   const nextMetadataAt = useMemo(() => {
     const times = (videos ?? [])
       .map(v => v.metadataScheduledAt)
-      .filter((t): t is number => !!t && t > Date.now());
+      .filter((t): t is number => !!t && t > now);
     return times.length > 0 ? Math.min(...times) : undefined;
-  }, [videos]);
+  }, [videos, now]);
   const readyCount = useMemo(
     () => (videos ?? []).filter(v => v.status === "ready").length,
     [videos]
@@ -194,10 +189,10 @@ export default function DashboardPage() {
     const nextAt      = userSettings.autoPublishNextAt;
     const intervalMs  = userSettings.autoPublishIntervalMs ?? 6 * 3_600_000;
     const count       = userSettings.autoPublishCount ?? 1;
-    const timeSlots   = (userSettings as any).autoPublishTimeSlots as number[] | undefined;
-    const tzOffset    = ((userSettings as any).autoPublishTimezoneOffset as number | undefined) ?? 3;
+    const timeSlots   = userSettings.autoPublishTimeSlots;
+    const tzOffset    = userSettings.autoPublishTimezoneOffset ?? 3;
     const readyVideos = (videos ?? [])
-      .filter(v => v.status === "ready" && !(v as any).storageMissing)
+      .filter(v => v.status === "ready" && !v.storageMissing)
       .sort((a, b) => a._creationTime - b._creationTime);
 
     if (timeSlots?.length) {

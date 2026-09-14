@@ -51,9 +51,14 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
   const [veoDurationSeconds, setVeoDurationSeconds] = useState(8);
   const [veoEnhancePrompt, setVeoEnhancePrompt] = useState(true);
 
-  // Sync from loaded settings whenever modal opens
+  // Sync from loaded settings whenever modal opens. This intentionally stays
+  // an effect rather than a render-time adjustment: it seeds 13 independent
+  // form fields together from async query data keyed off two conditions
+  // (open + settings loaded), which the render-time "compare to a stored
+  // previous value" pattern doesn't fit without a larger remount refactor.
   useEffect(() => {
     if (open && settings) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAiAutoGenerate(settings.aiAutoGenerate ?? true);
       setAiGenerateTitle(settings.aiGenerateTitle ?? true);
       setAiGenerateDescription(settings.aiGenerateDescription ?? true);

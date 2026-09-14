@@ -1,15 +1,16 @@
 import { v } from "convex/values";
 import { internalMutation, query } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
 import { getCurrentUserOrThrow } from "./lib/auth";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function getCurrentUserRecord(ctx: Parameters<typeof getCurrentUserOrThrow>[0]) {
+async function getCurrentUserRecord(ctx: QueryCtx) {
   const identity = await getCurrentUserOrThrow(ctx);
-  return (ctx as any).db
+  return ctx.db
     .query("users")
-    .withIndex("by_supabase_id", (q: any) => q.eq("supabaseId", identity.subject))
-    .unique() as Promise<any | null>;
+    .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
+    .unique();
 }
 
 // ── Queries ───────────────────────────────────────────────────────────────────

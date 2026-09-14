@@ -3,7 +3,7 @@
 import { v } from "convex/values";
 import { action } from "../_generated/server";
 import { internal } from "../_generated/api";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, FileState } from "@google/genai";
 
 // Generate a WebVTT caption file for a video using Gemini transcription.
 // For Cloudinary-hosted videos we send frames + ask for timestamped transcript.
@@ -70,15 +70,15 @@ export const generate = action({
       const blob = await res.blob();
       const mimeType = blob.type || "video/mp4";
 
-      let file = await (ai as any).files.upload({
+      let file = await ai.files.upload({
         file: blob,
         config: { mimeType, displayName: "video" },
       });
-      for (let i = 0; i < 60 && file?.state === "PROCESSING"; i++) {
+      for (let i = 0; i < 60 && file?.state === FileState.PROCESSING; i++) {
         await new Promise((r) => setTimeout(r, 2000));
-        file = await (ai as any).files.get({ name: file.name });
+        file = await ai.files.get({ name: file.name! });
       }
-      if (file?.state === "FAILED") throw new Error("Gemini file processing failed.");
+      if (file?.state === FileState.FAILED) throw new Error("Gemini file processing failed.");
 
       parts = [
         { fileData: { fileUri: file.uri, mimeType } },

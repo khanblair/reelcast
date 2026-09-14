@@ -1,11 +1,12 @@
 import { v } from "convex/values";
 import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
+import type { QueryCtx, MutationCtx } from "./_generated/server";
 import { getCurrentUserOrThrow } from "./lib/auth";
 
-async function getUserBySupabaseId(ctx: any, supabaseId: string) {
+async function getUserBySupabaseId(ctx: QueryCtx | MutationCtx, supabaseId: string) {
   return ctx.db
     .query("users")
-    .withIndex("by_supabase_id", (q: any) => q.eq("supabaseId", supabaseId))
+    .withIndex("by_supabase_id", (q) => q.eq("supabaseId", supabaseId))
     .unique();
 }
 
@@ -25,9 +26,10 @@ export const store = mutation({
 
     // Migrated user: find by email so all their existing videos/settings stay linked
     if (identity.email) {
+      const email = identity.email;
       const byEmail = await ctx.db
         .query("users")
-        .withIndex("by_email", (q: any) => q.eq("email", identity.email))
+        .withIndex("by_email", (q) => q.eq("email", email))
         .unique();
 
       if (byEmail) {

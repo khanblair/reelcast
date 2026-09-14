@@ -3,10 +3,14 @@
 import { v } from "convex/values";
 import { action, ActionCtx } from "../_generated/server";
 import { api, internal } from "../_generated/api";
-import { Id } from "../_generated/dataModel";
+import { Doc, Id } from "../_generated/dataModel";
 import { refreshYouTubeToken } from "../lib/youtube";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Errors thrown for an expired/revoked YouTube token carry `.code = 401` so
+// callers can record `youtubeOAuthStatus` before re-throwing.
+type CodedError = Error & { code?: number };
 
 function toYYYYMMDD(ts: number): string {
   return new Date(ts).toISOString().slice(0, 10);
@@ -32,8 +36,8 @@ async function ensureValidToken(
     return user.youtubeAccessToken;
   }
   if (!user.youtubeRefreshToken) {
-    const err = new Error("No YouTube refresh token available — reconnect your YouTube account");
-    (err as any).code = 401;
+    const err: CodedError = new Error("No YouTube refresh token available — reconnect your YouTube account");
+    err.code = 401;
     throw err;
   }
   try {
@@ -44,12 +48,13 @@ async function ensureValidToken(
       expiresIn,
     });
     return accessToken;
-  } catch (refreshErr: any) {
+  } catch (refreshErr) {
     // refreshYouTubeToken throws a plain Error on any HTTP failure (revoked or
     // expired refresh token). Wrap it with code 401 so callers can record the
     // OAuth status before propagating the error.
-    const wrapped = new Error(`YouTube token refresh failed: ${refreshErr.message}`);
-    (wrapped as any).code = 401;
+    const message = refreshErr instanceof Error ? refreshErr.message : String(refreshErr);
+    const wrapped: CodedError = new Error(`YouTube token refresh failed: ${message}`);
+    wrapped.code = 401;
     throw wrapped;
   }
 }
@@ -83,8 +88,8 @@ async function callAnalyticsAPI(
   );
 
   if (res.status === 401) {
-    const err = new Error("YouTube Analytics token expired or revoked (401)");
-    (err as any).code = 401;
+    const err: CodedError = new Error("YouTube Analytics token expired or revoked (401)");
+    err.code = 401;
     throw err;
   }
 
@@ -159,8 +164,8 @@ async function doFetchForVideo(
   let accessToken: string;
   try {
     accessToken = await ensureValidToken(ctx, user);
-  } catch (err: any) {
-    if (err.code === 401) {
+  } catch (err) {
+    if ((err as CodedError).code === 401) {
       await ctx.runMutation(internal.videoAnalytics.internalSetYoutubeOAuthStatus, {
         userId: user._id,
         status: "token_expired",
@@ -182,8 +187,8 @@ async function doFetchForVideo(
   let metrics: Record<string, number> | null;
   try {
     metrics = await callAnalyticsAPI(accessToken, youtubeVideoId, startDate, endDate, CORE_METRICS);
-  } catch (err: any) {
-    if (err.code === 401) {
+  } catch (err) {
+    if ((err as CodedError).code === 401) {
       await ctx.runMutation(internal.videoAnalytics.internalSetYoutubeOAuthStatus, {
         userId: user._id,
         status: "token_expired",
@@ -243,8 +248,14 @@ export const fetchForUser = action({
   args: {},
   handler: async (ctx) => {
     const videos = await ctx.runQuery(api.videos.list, {});
+    // NOTE: `videos` and its elements resolve fine outside this file, but
+    // TypeScript can't fully thread `FunctionReturnType<typeof api.videos.list>`
+    // through inline callbacks *within* this file — this module is one of the
+    // ones `_generated/api.d.ts` derives its types from, so referencing `api`
+    // from here is a self-referential cycle. Annotate explicitly so the
+    // callback parameter is a real `Doc<"videos">`, not a silent implicit any.
     const published = (videos ?? []).filter(
-      (vid: any) => vid.status === "published" && vid.publishedVideoId,
+      (vid: Doc<"videos">) => vid.status === "published" && vid.publishedVideoId,
     );
 
     const results: {
@@ -258,9 +269,10 @@ export const fetchForUser = action({
       try {
         const data = await doFetchForVideo(ctx, vid._id as Id<"videos">);
         results.push({ videoId: vid._id, ok: true, data });
-      } catch (err: any) {
+      } catch (err) {
         console.error(`Analytics fetch failed for video ${vid._id}:`, err);
-        results.push({ videoId: vid._id, ok: false, error: err.message ?? String(err) });
+        const message = err instanceof Error ? err.message : String(err);
+        results.push({ videoId: vid._id, ok: false, error: message });
       }
     }
 
@@ -283,8 +295,8 @@ export const fetchChannelStats = action({
     let accessToken: string;
     try {
       accessToken = await ensureValidToken(ctx, user);
-    } catch (err: any) {
-      if (err.code === 401) {
+    } catch (err) {
+      if ((err as CodedError).code === 401) {
         await ctx.runMutation(internal.videoAnalytics.internalSetYoutubeOAuthStatus, {
           userId: user._id,
           status: "token_expired",

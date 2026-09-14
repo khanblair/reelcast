@@ -87,7 +87,7 @@ export const backfillDurations = action({
       if (!dur) { skipped++; continue; }
 
       await ctx.runMutation(internal.videos.internalSetDuration, {
-        id: video._id as any,
+        id: video._id,
         duration: dur,
       });
       updated++;
@@ -95,7 +95,7 @@ export const backfillDurations = action({
       // Auto-switch videos >60s to Video mode (avoids YouTube Content ID blocks)
       if (dur > 60 && !video.publishAs) {
         await ctx.runMutation(internal.videos.internalSetPublishAs, {
-          id: video._id as any,
+          id: video._id,
           publishAs: "video",
         });
         switched++;

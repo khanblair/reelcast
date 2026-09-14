@@ -51,7 +51,7 @@ export const generate = action({
 
       if (frames.length > 0) {
         // Ask Gemini which frame would make the best thumbnail
-        const parts = frames.map((f) => ({
+        const parts: Array<Record<string, unknown>> = frames.map((f) => ({
           inlineData: { data: f.base64!, mimeType: "image/jpeg" },
         }));
         parts.push({
@@ -59,7 +59,7 @@ export const generate = action({
             `Which frame index (0 to ${frames.length - 1}, zero-based) would make the most compelling YouTube thumbnail? ` +
             `Consider: clear subject, interesting composition, good lighting, and emotional impact. ` +
             `Reply with ONLY the index number (e.g. "2"), nothing else.`,
-        } as any);
+        });
 
         try {
           const aiRes = await ai.models.generateContent({

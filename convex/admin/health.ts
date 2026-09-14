@@ -1,11 +1,12 @@
-import { query } from "../_generated/server";
+import { query, QueryCtx } from "../_generated/server";
+import { Doc, Id } from "../_generated/dataModel";
 import { getCurrentUserOrThrow } from "../lib/auth";
 
-async function requireAdmin(ctx: { auth: { getUserIdentity: () => Promise<{ subject: string } | null> }; db: any }) {
-  const identity = await getCurrentUserOrThrow(ctx as any);
+async function requireAdmin(ctx: QueryCtx) {
+  const identity = await getCurrentUserOrThrow(ctx);
   const user = await ctx.db
     .query("users")
-    .withIndex("by_supabase_id", (q: any) => q.eq("supabaseId", identity.subject))
+    .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
     .unique();
   if (!user?.isAdmin) throw new Error("Admin required");
 }
@@ -16,18 +17,22 @@ async function requireAdmin(ctx: { auth: { getUserIdentity: () => Promise<{ subj
 export const getStorageHealth = query({
   args: {},
   handler: async (ctx) => {
-    await requireAdmin(ctx as any);
+    await requireAdmin(ctx);
 
     const all = await ctx.db.query("videos").collect();
-    const relevant = all.filter((v: any) => v.status === "ready" || v.status === "scheduled");
+    const relevant = all.filter((v) => v.status === "ready" || v.status === "scheduled");
 
-    const missing = relevant.filter((v: any) => v.storageMissing === true);
-    const healthy = relevant.filter((v: any) => v.storageMissing === false);
+    const missing = relevant.filter((v) => v.storageMissing === true);
+    const healthy = relevant.filter((v) => v.storageMissing === false);
     const uncheckedCount = relevant.length - missing.length - healthy.length;
 
-    const userIds = [...new Set(missing.map((v: any) => v.userId))];
+    const userIds = [...new Set(missing.map((v) => v.userId))];
     const users = await Promise.all(userIds.map((id) => ctx.db.get(id)));
-    const emailByUserId = new Map(users.filter(Boolean).map((u: any) => [u._id, u.email]));
+    const emailByUserId = new Map(
+      users
+        .filter((u): u is Doc<"users"> => Boolean(u))
+        .map((u): [Id<"users">, string] => [u._id, u.email]),
+    );
 
     return {
       totalRelevant: relevant.length,
@@ -35,14 +40,14 @@ export const getStorageHealth = query({
       missingCount: missing.length,
       uncheckedCount,
       missingVideos: missing
-        .map((v: any) => ({
+        .map((v) => ({
           videoId: v._id,
           title: v.aiTitle ?? v.title,
           userEmail: emailByUserId.get(v.userId) ?? "unknown",
           status: v.status,
           checkedAt: v.storageCheckedAt ?? null,
         }))
-        .sort((a: any, b: any) => (b.checkedAt ?? 0) - (a.checkedAt ?? 0)),
+        .sort((a, b) => (b.checkedAt ?? 0) - (a.checkedAt ?? 0)),
     };
   },
 });
@@ -52,14 +57,18 @@ export const getStorageHealth = query({
 export const getTokenHealth = query({
   args: {},
   handler: async (ctx) => {
-    await requireAdmin(ctx as any);
+    await requireAdmin(ctx);
 
     const channels = await ctx.db.query("youtubeChannels").collect();
-    const userIds = [...new Set(channels.map((c: any) => c.userId))];
+    const userIds = [...new Set(channels.map((c) => c.userId))];
     const users = await Promise.all(userIds.map((id) => ctx.db.get(id)));
-    const emailByUserId = new Map(users.filter(Boolean).map((u: any) => [u._id, u.email]));
+    const emailByUserId = new Map(
+      users
+        .filter((u): u is Doc<"users"> => Boolean(u))
+        .map((u): [Id<"users">, string] => [u._id, u.email]),
+    );
 
-    const rows = channels.map((c: any) => ({
+    const rows = channels.map((c) => ({
       channelId: c.channelId,
       channelName: c.channelName ?? c.channelId,
       userEmail: emailByUserId.get(c.userId) ?? "unknown",

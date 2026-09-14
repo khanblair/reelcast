@@ -3,16 +3,17 @@
 import { v } from "convex/values";
 import { action } from "../_generated/server";
 import { api, internal } from "../_generated/api";
+import type { Doc } from "../_generated/dataModel";
 
 export const chat = action({
   args: { message: v.string(), sessionId: v.id("aiSessions") },
   handler: async (ctx, args) => {
     // 1. Get current user
-    const user = await ctx.runQuery(api.users.current);
+    const user: Doc<"users"> | null = await ctx.runQuery(api.users.current);
     if (!user) throw new Error("Unauthenticated");
 
     // 2. Enforce plan gate — Free users have no AI assistant access
-    const plan = (user as any).plan ?? "free";
+    const plan = user.plan ?? "free";
     if (plan === "free") {
       return { error: "plan_limit" } as const;
     }
@@ -31,7 +32,7 @@ export const chat = action({
     let usageResult: { used: number; limit: number };
     try {
       usageResult = await ctx.runMutation(internal.usageLedger.internalConsumeQuota, {
-        userId: (user as any)._id,
+        userId: user._id,
         field: "aiMessagesUsed",
       });
     } catch (err) {
@@ -57,7 +58,9 @@ export const chat = action({
     // 7. Build a rich context snapshot from the user's library, settings, and analytics
     const [videos, analyticsRows] = await Promise.all([
       ctx.runQuery(api.videos.list),
-      ctx.runQuery(internal.analytics.getRecentForUser, { userId: (user as any)._id, limit: 20 }).catch(() => []),
+      ctx.runQuery(internal.analytics.getRecentForUser, { userId: user._id, limit: 20 }).catch(
+        (): Doc<"videoAnalytics">[] => []
+      ),
     ]);
 
     const statusCounts: Record<string, number> = {};
@@ -74,12 +77,12 @@ export const chat = action({
     // Summarise analytics for context
     let analyticsContext: Record<string, unknown> | null = null;
     if (analyticsRows && analyticsRows.length > 0) {
-      const totalViews = analyticsRows.reduce((s: number, r: any) => s + (r.views ?? 0), 0);
-      const avgCtr = analyticsRows.reduce((s: number, r: any) => s + (r.ctr ?? 0), 0) / analyticsRows.length;
+      const totalViews = analyticsRows.reduce((s, r) => s + (r.views ?? 0), 0);
+      const avgCtr = analyticsRows.reduce((s, r) => s + (r.ctr ?? 0), 0) / analyticsRows.length;
       const topByViews = [...analyticsRows]
-        .sort((a: any, b: any) => (b.views ?? 0) - (a.views ?? 0))
+        .sort((a, b) => (b.views ?? 0) - (a.views ?? 0))
         .slice(0, 3)
-        .map((r: any) => ({ youtubeVideoId: r.youtubeVideoId, views: r.views, ctr: r.ctr }));
+        .map((r) => ({ youtubeVideoId: r.youtubeVideoId, views: r.views, ctr: r.ctr }));
       analyticsContext = {
         totalViewsRecent: totalViews,
         avgCtr: Math.round(avgCtr * 1000) / 1000,

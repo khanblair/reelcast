@@ -6,7 +6,7 @@ import { getCurrentUserOrThrow } from "./lib/auth";
 async function getUserBySubject(ctx: any, subject: string) {
   return ctx.db
     .query("users")
-    .withIndex("by_supabase_id", (q: any) => q.eq("supabaseId", subject))
+    .withIndex("by_supabase_id", (q) => q.eq("supabaseId", subject))
     .unique();
 }
 
@@ -40,9 +40,8 @@ export const getContext = query({
     if (args.sessionId) {
       // Messages for this session, newest-first then reversed → chronological
       const msgs = await ctx.db
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .query("aiMessages")
-        .withIndex("by_session", (q: any) => q.eq("sessionId", args.sessionId))
+        .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
         .order("desc")
         .take(100);
       return msgs.reverse();

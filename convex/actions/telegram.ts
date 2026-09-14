@@ -45,7 +45,7 @@ export const sendNotification = action({
     }
 
     // Discord — validate URL to prevent SSRF
-    const discordUrl = (userSettings as any).discordWebhookUrl as string | undefined;
+    const discordUrl = userSettings.discordWebhookUrl;
     if (discordUrl && isValidDiscordWebhook(discordUrl)) {
       tasks.push(
         fetch(discordUrl, {

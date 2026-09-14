@@ -3,7 +3,7 @@
 import { v } from "convex/values";
 import { action } from "../_generated/server";
 import { api, internal } from "../_generated/api";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, FileState } from "@google/genai";
 import { HUMANIZE_METADATA_RULES } from "../lib/humanizePrompt";
 // Note: internal.usageLedger imported via internal in handler
 
@@ -56,18 +56,18 @@ async function buildVideoParts(
   const mimeType =
     blob.type && blob.type !== "application/octet-stream" ? blob.type : "video/mp4";
 
-  let file = await (ai as any).files.upload({
+  let file = await ai.files.upload({
     file: blob,
     config: { mimeType, displayName: "video" },
   });
 
   // Poll until Gemini finishes processing (up to 2 minutes)
-  for (let i = 0; i < 60 && file?.state === "PROCESSING"; i++) {
+  for (let i = 0; i < 60 && file?.state === FileState.PROCESSING; i++) {
     await new Promise(r => setTimeout(r, 2000));
-    file = await (ai as any).files.get({ name: file.name });
+    file = await ai.files.get({ name: file.name! });
   }
 
-  if (file?.state === "FAILED") throw new Error("Gemini file processing failed.");
+  if (file?.state === FileState.FAILED) throw new Error("Gemini file processing failed.");
 
   return [{ fileData: { fileUri: file.uri, mimeType } }];
 }
@@ -196,7 +196,7 @@ export const generateForUpload = action({
       };
     }
 
-    const hint = (video as any).aiTitle ?? video.title;
+    const hint = video.aiTitle ?? video.title;
 
     const platformSettings = await ctx.runQuery(internal.admin.platformSettings.getInternal);
     const geminiKey = platformSettings?.geminiApiKey ?? process.env.GEMINI_API_KEY;

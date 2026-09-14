@@ -201,7 +201,7 @@ export const retryJob = mutation({
       if (video?.status === "published" || video?.publishedVideoId) {
         throw new Error("This video has already been published to YouTube — nothing to retry.");
       }
-      if ((video as any)?.cloudinaryDeletedAt) {
+      if (video?.cloudinaryDeletedAt) {
         throw new Error("The video file is no longer in storage. Re-upload the video to publish it again.");
       }
     }

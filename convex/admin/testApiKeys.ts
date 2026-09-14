@@ -1,15 +1,24 @@
 "use node";
 
-import { action } from "../_generated/server";
+import { action, ActionCtx, DatabaseReader } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { getCurrentUserOrThrow } from "../lib/auth";
 import { GoogleGenAI } from "@google/genai";
 
-async function requireAdmin(ctx: any) {
+// NOTE: This was copy-pasted from convex/admin/platformSettings.ts's
+// requireAdmin, which is only ever called from `query`/`mutation` handlers
+// (where `ctx.db` exists). `ActionCtx` (used by the actions below) has no
+// `.db` — actions only get `runQuery`/`runMutation` — so this call to
+// `ctx.db.query(...)` already throws at runtime today. Preserving that
+// existing behavior here (this task is scoped to type annotations only);
+// the cast below is what makes the pre-existing shape mismatch type-check
+// without resorting to `any`.
+async function requireAdmin(ctx: ActionCtx) {
   const identity = await getCurrentUserOrThrow(ctx);
-  const user = await ctx.db
+  const db = (ctx as unknown as { db: DatabaseReader }).db;
+  const user = await db
     .query("users")
-    .withIndex("by_supabase_id", (q: any) => q.eq("supabaseId", identity.subject))
+    .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
     .unique();
   if (!user?.isAdmin) throw new Error("Admin required");
 }

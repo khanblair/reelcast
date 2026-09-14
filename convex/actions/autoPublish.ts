@@ -119,8 +119,8 @@ export const runAutoPublishBatch = action({
       }
     }
 
-    const timeSlots = (settings as any).autoPublishTimeSlots as number[] | undefined;
-    const tzOffset = (settings as any).autoPublishTimezoneOffset as number | undefined;
+    const timeSlots = settings.autoPublishTimeSlots;
+    const tzOffset = settings.autoPublishTimezoneOffset;
     const nextAt = timeSlots?.length
       ? nextSlotMs(timeSlots, Date.now(), tzOffset ?? 3)
       : Date.now() + intervalMs;

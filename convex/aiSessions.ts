@@ -6,7 +6,7 @@ import { getCurrentUserOrThrow } from "./lib/auth";
 async function getUserBySubject(ctx: any, subject: string) {
   return ctx.db
     .query("users")
-    .withIndex("by_supabase_id", (q: any) => q.eq("supabaseId", subject))
+    .withIndex("by_supabase_id", (q) => q.eq("supabaseId", subject))
     .unique();
 }
 

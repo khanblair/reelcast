@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
 import { getCurrentUserOrThrow } from "./lib/auth";
 import type { Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 
 export type UsageField = "videosUploaded" | "metadataGenerated" | "veoGenerated" | "aiMessagesUsed";
 
@@ -40,7 +41,7 @@ function getMonthString(): string {
 // Helper for use inside mutations (cannot call other mutations).
 // Reads the ledger, checks limit, increments — all in one transaction.
 export async function consumeQuotaInMutation(
-  ctx: { db: any },
+  ctx: MutationCtx,
   userId: Id<"users">,
   field: UsageField
 ): Promise<{ used: number; limit: number }> {
@@ -51,7 +52,7 @@ export async function consumeQuotaInMutation(
 
   const row = await ctx.db
     .query("usageLedger")
-    .withIndex("by_user_month", (q: any) => q.eq("userId", userId).eq("month", month))
+    .withIndex("by_user_month", (q) => q.eq("userId", userId).eq("month", month))
     .unique();
 
   const used = ((row?.[field] ?? 0) as number);
@@ -156,43 +157,7 @@ export const getCurrentMonth = query({
   },
 });
 
-// Public: returns usage + limits for every metered field for the current
-// user's current month, in one call. Powers the /billing page's usage
-// section without requiring four separate checkLimit round-trips.
-export const getUsageSummary = query({
-  args: {},
-  handler: async (ctx) => {
-    const identity = await getCurrentUserOrThrow(ctx);
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
-      .unique();
-    if (!user) throw new Error("User not found in DB");
-
-    const month = getMonthString();
-    const row = await ctx.db
-      .query("usageLedger")
-      .withIndex("by_user_month", (q) =>
-        q.eq("userId", user._id).eq("month", month)
-      )
-      .unique();
-
-    const limits = getPlanLimits(user.plan);
-    const fields: UsageField[] = ["videosUploaded", "metadataGenerated", "veoGenerated", "aiMessagesUsed"];
-
-    return {
-      plan: user.plan ?? "free",
-      month,
-      usage: Object.fromEntries(
-        fields.map((field) => [
-          field,
-          { used: (row?.[field] ?? 0) as number, limit: limits[field] },
-        ])
-      ) as Record<UsageField, { used: number; limit: number }>,
-    };
-  },
-});
-
+// Public: checks whether the current user is within the plan limit for a field.
 export const checkLimit = query({
   args: {
     field: v.union(

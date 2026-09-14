@@ -296,12 +296,16 @@ export default function DashboardPage() {
             {isAutoActive ? (
               <>
                 <div className="text-lg font-bold font-mono tabular-nums leading-tight">
-                  {userSettings?.autoPublishNextAt
-                    ? formatCountdown(autoCountdownMs)
-                    : "—"}
+                  {readyCount === 0
+                    ? "—"
+                    : userSettings?.autoPublishNextAt
+                      ? formatCountdown(autoCountdownMs)
+                      : "—"}
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {readyCount} ready · {userSettings?.autoPublishNextAt ? formatDateTimeEAT(userSettings.autoPublishNextAt) : ""}
+                <p className={`text-xs mt-0.5 ${readyCount === 0 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+                  {readyCount === 0
+                    ? "Queue empty — nothing will publish"
+                    : `${readyCount} ready · ${userSettings?.autoPublishNextAt ? formatDateTimeEAT(userSettings.autoPublishNextAt) : ""}`}
                 </p>
               </>
             ) : (
@@ -364,7 +368,14 @@ export default function DashboardPage() {
                 <CalendarClock className="h-3.5 w-3.5" />
                 Next Publish
               </div>
-              {isAutoActive && userSettings?.autoPublishNextAt ? (
+              {isAutoActive && userSettings?.autoPublishNextAt && readyCount === 0 ? (
+                <>
+                  <div className="text-sm font-semibold text-amber-600 dark:text-amber-400">Queue empty</div>
+                  <div className="text-xs text-muted-foreground">
+                    Next check {formatDateTimeEAT(userSettings.autoPublishNextAt)}
+                  </div>
+                </>
+              ) : isAutoActive && userSettings?.autoPublishNextAt ? (
                 <>
                   <div className="flex items-center gap-1.5">
                     <Badge className="bg-primary/15 text-primary border-primary/30 text-xs px-1.5 py-0 h-5">Auto</Badge>

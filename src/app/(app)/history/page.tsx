@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useQuery, useMutation } from "convex/react";
 import { History, RefreshCw, ExternalLink, CheckCircle, Clock, XCircle, Loader2, Wand2, CalendarClock } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
-import { Id } from "../../../../convex/_generated/dataModel";
+import { Id, Doc } from "../../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
 import { formatDistanceToNow } from "date-fns";
 import { formatDateTimeEAT, formatFullDateEAT } from "@/lib/eat";
+import { useNow } from "@/hooks/use-now";
 
 type JobFilter = "all" | "generation" | "publish" | "metadata" | "scheduled" | "generations";
 
@@ -53,17 +54,19 @@ export default function HistoryPage() {
 
   const loading = jobs === undefined || videos === undefined || scheduledVideos === undefined || generations === undefined;
 
+  const now = useNow();
+
   const videoMap = useMemo(
-    () => new Map((videos ?? []).map((v) => [v._id, v])),
+    () => new Map<Id<"videos">, Doc<"videos">>((videos ?? []).map((v) => [v._id, v])),
     [videos]
   );
 
   // Metadata queue, draft videos with a future metadataScheduledAt
   const metadataQueue = useMemo(
     () => (videos ?? [])
-      .filter(v => v.status === "draft" && v.metadataScheduledAt && v.metadataScheduledAt > Date.now())
+      .filter(v => v.status === "draft" && v.metadataScheduledAt && v.metadataScheduledAt > now)
       .sort((a, b) => (a.metadataScheduledAt ?? 0) - (b.metadataScheduledAt ?? 0)),
-    [videos]
+    [videos, now]
   );
 
   // Scheduled publish, videos waiting for their pinned publish time
@@ -281,10 +284,10 @@ export default function HistoryPage() {
                               <div className="flex items-center gap-1 pt-0.5">
                                 <span>Video:</span>
                                 <Link
-                                  href={`/video/${(video as any)._id}`}
+                                  href={`/video/${video._id}`}
                                   className="text-primary hover:underline inline-flex items-center gap-1"
                                 >
-                                  {(video as any).aiTitle ?? (video as any).title}
+                                  {video.aiTitle ?? video.title}
                                   <ExternalLink className="h-3 w-3" />
                                 </Link>
                               </div>
@@ -292,9 +295,9 @@ export default function HistoryPage() {
                           </div>
                         </div>
                       </div>
-                      {gen.status === "completed" && (gen as any).outputVideoUrl && (
+                      {gen.status === "completed" && gen.outputVideoUrl && (
                         <a
-                          href={(gen as any).outputVideoUrl}
+                          href={gen.outputVideoUrl}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="shrink-0"
@@ -331,7 +334,7 @@ export default function HistoryPage() {
                   const retryError = retryErrors[job._id];
                   const alreadyPublished =
                     job.type === "publish" &&
-                    ((video as any)?.status === "published" || (video as any)?.publishedVideoId);
+                    (video?.status === "published" || video?.publishedVideoId);
                   const canRetry = job.status === "failed" && !alreadyPublished;
 
                   return (
@@ -374,10 +377,10 @@ export default function HistoryPage() {
                               <div className="flex items-center gap-1 pt-0.5">
                                 <span>Video:</span>
                                 <Link
-                                  href={`/video/${(video as any)._id}`}
+                                  href={`/video/${video._id}`}
                                   className="text-primary hover:underline inline-flex items-center gap-1"
                                 >
-                                  {(video as any).title}
+                                  {video.title}
                                   <ExternalLink className="h-3 w-3" />
                                 </Link>
                               </div>

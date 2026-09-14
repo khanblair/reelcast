@@ -72,7 +72,7 @@ export default function GeneratePage() {
     const list = allVideos ?? [];
     if (!metaSearch.trim()) return list;
     const q = metaSearch.toLowerCase();
-    return list.filter(v => ((v as any).aiTitle ?? v.title).toLowerCase().includes(q));
+    return list.filter(v => (v.aiTitle ?? v.title).toLowerCase().includes(q));
   }, [allVideos, metaSearch]);
 
   const videosWithMeta = useMemo(() =>
@@ -392,7 +392,7 @@ export default function GeneratePage() {
                         ? <CheckSquare className="h-4 w-4 text-primary shrink-0" />
                         : <Square className="h-4 w-4 text-muted-foreground shrink-0" />
                       }
-                      <span className="text-sm truncate flex-1">{(v as any).aiTitle ?? v.title}</span>
+                      <span className="text-sm truncate flex-1">{v.aiTitle ?? v.title}</span>
                       <span className="text-xs text-muted-foreground capitalize shrink-0">{v.status}</span>
                       {metaResults.has(v._id) && (
                         "title" in metaResults.get(v._id)!
@@ -443,7 +443,7 @@ export default function GeneratePage() {
               <CardContent className="space-y-2">
                 {[...metaResults.entries()].map(([id, result]) => {
                   const video = (allVideos ?? []).find(v => v._id === id);
-                  const label = video ? ((video as any).aiTitle ?? video.title) : id;
+                  const label = video ? (video.aiTitle ?? video.title) : id;
                   if ("title" in result) {
                     return (
                       <div key={id} className="flex items-start gap-2">
@@ -464,7 +464,7 @@ export default function GeneratePage() {
                           <span className="text-sm">
                             <span className="text-muted-foreground truncate">{label}</span>
                             {" → "}
-                            <span className="font-medium">"{result.title}"</span>
+                            <span className="font-medium">&quot;{result.title}&quot;</span>
                           </span>
                         </button>
                       </div>

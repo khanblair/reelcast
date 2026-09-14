@@ -59,8 +59,8 @@ export default function DraftsPage() {
     () =>
       (videos ?? []).filter(
         (v) =>
-          (v as any).duration > 60 &&
-          (v as any).publishAs !== "video" &&
+          (v.duration ?? 0) > 60 &&
+          v.publishAs !== "video" &&
           v.status !== "published"
       ).length,
     [videos]
@@ -121,11 +121,11 @@ export default function DraftsPage() {
     const nextAt     = userSettings.autoPublishNextAt;
     const intervalMs = userSettings.autoPublishIntervalMs ?? 6 * 3_600_000;
     const count      = userSettings.autoPublishCount ?? 1;
-    const timeSlots  = (userSettings as any).autoPublishTimeSlots as number[] | undefined;
-    const tzOffset   = ((userSettings as any).autoPublishTimezoneOffset as number | undefined) ?? 3;
+    const timeSlots  = userSettings.autoPublishTimeSlots;
+    const tzOffset   = userSettings.autoPublishTimezoneOffset ?? 3;
 
     const readyVideos = (videos ?? [])
-      .filter((v) => v.status === "ready" && !(v as any).storageMissing)
+      .filter((v) => v.status === "ready" && !v.storageMissing)
       .sort((a, b) => a._creationTime - b._creationTime);
 
     if (timeSlots?.length) {
@@ -242,7 +242,7 @@ export default function DraftsPage() {
       )}
 
       {/* Scan durations banner, shown when videos have no duration data yet */}
-      {!scanning && !scanResult && (videos ?? []).some((v) => !(v as any).duration && !(v as any).cloudinaryDeletedAt) && (
+      {!scanning && !scanResult && (videos ?? []).some((v) => !v.duration && !v.cloudinaryDeletedAt) && (
         <div className="flex items-center justify-between gap-4 rounded-lg border border-muted bg-muted/40 px-4 py-3">
           <div className="flex items-center gap-2.5 min-w-0">
             <Timer className="h-4 w-4 text-muted-foreground shrink-0" />

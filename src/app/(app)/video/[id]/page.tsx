@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useMemo, useEffect } from "react";
+import { use, useState, useMemo } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { useRouter } from "next/navigation";
 import {
@@ -42,6 +42,8 @@ import { GenerationProgress } from "@/components/generation/generation-progress"
 import { MetadataEditor } from "@/components/metadata-editor";
 import { PRIVACY_STATUS, PRIVACY_LABELS, type PrivacyStatus } from "@/lib/constants";
 import type { Video as VideoType } from "@/types/video";
+import { useNow } from "@/hooks/use-now";
+import { useCountdown } from "@/hooks/use-countdown";
 
 export default function VideoDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const unwrappedParams = use(params);
@@ -76,7 +78,6 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
   const [regenError, setRegenError] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
-  const [countdownMs, setCountdownMs] = useState(0);
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
   const [scheduleTime, setScheduleTime] = useState("");
   const [scheduling, setScheduling] = useState(false);
@@ -98,10 +99,10 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
     const nextAt     = userSettings.autoPublishNextAt;
     const intervalMs = userSettings.autoPublishIntervalMs ?? 6 * 3_600_000;
     const count      = userSettings.autoPublishCount ?? 1;
-    const timeSlots  = (userSettings as any).autoPublishTimeSlots as number[] | undefined;
-    const tzOffset   = ((userSettings as any).autoPublishTimezoneOffset as number | undefined) ?? 3;
+    const timeSlots  = userSettings.autoPublishTimeSlots;
+    const tzOffset   = userSettings.autoPublishTimezoneOffset ?? 3;
     const readyVideos = (allVideos ?? [])
-      .filter((v) => v.status === "ready" && !(v as any).storageMissing)
+      .filter((v) => v.status === "ready" && !v.storageMissing)
       .sort((a, b) => a._creationTime - b._creationTime);
     const idx = readyVideos.findIndex((v) => v._id === video._id);
     if (idx === -1) return undefined;
@@ -118,18 +119,16 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
     return nextAt + Math.floor(idx / count) * intervalMs;
   }, [allVideos, userSettings, video]);
 
+  // Periodically-refreshed "now" for render-time comparisons, so we never
+  // call the impure Date.now() directly during render.
+  const now = useNow();
+
   // Live countdown, ticks every second toward the nearest upcoming event
-  useEffect(() => {
-    const target =
-      video?.status === "draft" && video?.metadataScheduledAt && video.metadataScheduledAt > Date.now()
-        ? video.metadataScheduledAt
-        : estimatedPublishAt;
-    if (!target) { setCountdownMs(0); return; }
-    const tick = () => setCountdownMs(Math.max(0, target - Date.now()));
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [video, estimatedPublishAt]);
+  const countdownTarget =
+    video?.status === "draft" && video?.metadataScheduledAt && video.metadataScheduledAt > now
+      ? video.metadataScheduledAt
+      : estimatedPublishAt;
+  const countdownMs = useCountdown(countdownTarget);
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -285,20 +284,20 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                 ? `${(video.rawFileSize / (1024 * 1024)).toFixed(1)} MB \u2022 Uploaded ${new Date(video._creationTime).toLocaleDateString()}`
                 : `Created ${new Date(video._creationTime).toLocaleDateString()}`
             }
-            {(video as any).duration && (
+            {video.duration && (
               <>
                 <span className="opacity-40">\u00b7</span>
                 <span
                   className={`inline-flex items-center gap-1 font-medium ${
-                    (video as any).duration > 60 && (video as any).publishAs !== "video"
+                    video.duration > 60 && video.publishAs !== "video"
                       ? "text-orange-500"
                       : "text-foreground"
                   }`}
                 >
-                  {(video as any).duration > 60 && (video as any).publishAs !== "video" && (
+                  {video.duration > 60 && video.publishAs !== "video" && (
                     <AlertTriangle className="h-3.5 w-3.5" />
                   )}
-                  {Math.floor((video as any).duration / 60)}:{((video as any).duration % 60).toString().padStart(2, "0")}s
+                  {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, "0")}s
                 </span>
               </>
             )}
@@ -313,7 +312,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
               <Youtube className="w-4 h-4" /> View on YouTube <ExternalLink className="w-3 h-3" />
             </a>
           )}
-          {(video as any).cloudinaryDeletedAt && (
+          {video.cloudinaryDeletedAt && (
             <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
               Storage freed · Cloudinary files deleted after publish
@@ -331,7 +330,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                     type="button"
                     onClick={() => updatePublishAs({ id: video._id, publishAs: "short" })}
                     className={`px-3 py-1.5 transition-colors ${
-                      (video as any).publishAs !== "video"
+                      video.publishAs !== "video"
                         ? "bg-primary text-primary-foreground"
                         : "hover:bg-muted text-muted-foreground"
                     }`}
@@ -342,7 +341,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                     type="button"
                     onClick={() => updatePublishAs({ id: video._id, publishAs: "video" })}
                     className={`px-3 py-1.5 transition-colors ${
-                      (video as any).publishAs === "video"
+                      video.publishAs === "video"
                         ? "bg-primary text-primary-foreground"
                         : "hover:bg-muted text-muted-foreground"
                     }`}
@@ -380,7 +379,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
               <p className="text-xs text-muted-foreground">
                 Uploading as{" "}
                 <span className="font-medium text-foreground">
-                  {(video as any).publishAs === "video" ? "regular Video" : "Short"}
+                  {video.publishAs === "video" ? "regular Video" : "Short"}
                 </span>
                 {" · "}
                 {PRIVACY_LABELS[(video.privacyStatus ?? "public") as PrivacyStatus]}
@@ -472,7 +471,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
             <input
               type="datetime-local"
               value={scheduleTime}
-              min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)}
+              min={new Date(now + 60_000).toISOString().slice(0, 16)}
               onChange={(e) => setScheduleTime(e.target.value)}
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
             />
@@ -502,7 +501,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
       </Dialog>
 
       {/* Metadata schedule banner, shown for draft videos with a pending AI metadata job */}
-      {video.status === "draft" && video.metadataScheduledAt && video.metadataScheduledAt > Date.now() && (
+      {video.status === "draft" && video.metadataScheduledAt && video.metadataScheduledAt > now && (
         <div className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
           <Wand2 className="h-4 w-4 shrink-0" />
           <div className="flex-1 min-w-0">
@@ -532,13 +531,13 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
       )}
 
       {/* Content ID copyright warning, duration >60s published as Short risks copyright block */}
-      {(video as any).duration > 60 && (video as any).publishAs !== "video" && (
+      {(video.duration ?? 0) > 60 && video.publishAs !== "video" && (
         <div className="flex items-start gap-3 rounded-lg border border-orange-500/40 bg-orange-500/10 px-4 py-3 text-sm text-orange-700 dark:text-orange-400">
           <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
           <div className="flex-1 space-y-1">
             <p className="font-medium">Possible Content ID block</p>
             <p className="text-xs opacity-90">
-              This video is {(video as any).duration}s, over 60s. Publishing as a Short
+              This video is {video.duration}s, over 60s. Publishing as a Short
               may be blocked if the audio is claimed by a rights holder.{" "}
               <strong>Publish as Video</strong> to avoid this (removes #Shorts from the description,
               which usually grants more lenient copyright rules).
@@ -753,7 +752,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
               {captionsError}
             </p>
           )}
-          {(video as any).thumbnailGeneratedUrl && (
+          {video.thumbnailGeneratedUrl && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
@@ -763,7 +762,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
               </CardHeader>
               <CardContent>
                 <img
-                  src={(video as any).thumbnailGeneratedUrl}
+                  src={video.thumbnailGeneratedUrl}
                   alt="AI-selected thumbnail"
                   className="rounded-md w-full max-w-xs object-cover"
                 />
@@ -773,7 +772,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
               </CardContent>
             </Card>
           )}
-          {(video as any).captionsVtt && (
+          {video.captionsVtt && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
@@ -783,7 +782,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
               </CardHeader>
               <CardContent>
                 <pre className="text-xs bg-muted rounded-md p-3 overflow-x-auto max-h-40 whitespace-pre-wrap font-mono">
-                  {(video as any).captionsVtt}
+                  {video.captionsVtt}
                 </pre>
                 <p className="text-xs text-muted-foreground mt-2">
                   WebVTT format. Copy and upload as a caption track on YouTube.
@@ -792,7 +791,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
             </Card>
           )}
           <MetadataEditor video={video as VideoType} />
-          {(video as any).metadataHistory?.length > 0 && (
+          {(video.metadataHistory?.length ?? 0) > 0 && (
             <Card>
               <CardHeader className="pb-2">
                 <button
@@ -804,7 +803,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                     <History className="h-4 w-4" />
                     Metadata History
                     <span className="text-xs font-normal text-muted-foreground">
-                      ({(video as any).metadataHistory.length} version{(video as any).metadataHistory.length !== 1 ? "s" : ""})
+                      ({video.metadataHistory?.length} version{video.metadataHistory?.length !== 1 ? "s" : ""})
                     </span>
                   </CardTitle>
                   {showMetadataHistory ? (
@@ -816,8 +815,8 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
               </CardHeader>
               {showMetadataHistory && (
                 <CardContent className="space-y-3 pt-0">
-                  {[...(video as any).metadataHistory].reverse().map(
-                    (version: { savedAt: number; aiTitle?: string; aiDescription?: string; aiTags?: string[] }, idx: number) => (
+                  {[...(video.metadataHistory ?? [])].reverse().map(
+                    (version, idx) => (
                       <div key={version.savedAt} className="rounded-md border p-3 space-y-1.5">
                         <p className="text-xs text-muted-foreground">
                           {new Date(version.savedAt).toLocaleString("en-KE", {
@@ -884,7 +883,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                 </div>
                 {videoAnalytics && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    Last updated: {formatDateTimeEAT((videoAnalytics as any).fetchedAt)}
+                    Last updated: {formatDateTimeEAT(videoAnalytics.fetchedAt)}
                   </p>
                 )}
               </CardHeader>
@@ -894,7 +893,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                     <div className="flex items-center gap-2">
                       <Eye className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                       <div>
-                        <div className="font-semibold">{((videoAnalytics as any).views ?? 0).toLocaleString()}</div>
+                        <div className="font-semibold">{(videoAnalytics.views ?? 0).toLocaleString()}</div>
                         <div className="text-xs text-muted-foreground">Views</div>
                       </div>
                     </div>
@@ -903,7 +902,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                       <div>
                         <div className="font-semibold">
                           {(() => {
-                            const mins = (videoAnalytics as any).watchTimeMinutes ?? 0;
+                            const mins = videoAnalytics.watchTimeMinutes ?? 0;
                             return mins >= 60 ? `${(mins / 60).toFixed(1)}h` : `${mins}m`;
                           })()}
                         </div>
@@ -913,14 +912,14 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
                     <div className="flex items-center gap-2">
                       <ThumbsUp className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                       <div>
-                        <div className="font-semibold">{((videoAnalytics as any).likes ?? 0).toLocaleString()}</div>
+                        <div className="font-semibold">{(videoAnalytics.likes ?? 0).toLocaleString()}</div>
                         <div className="text-xs text-muted-foreground">Likes</div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <MessageSquare className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                       <div>
-                        <div className="font-semibold">{((videoAnalytics as any).comments ?? 0).toLocaleString()}</div>
+                        <div className="font-semibold">{(videoAnalytics.comments ?? 0).toLocaleString()}</div>
                         <div className="text-xs text-muted-foreground">Comments</div>
                       </div>
                     </div>

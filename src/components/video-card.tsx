@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { VideoStatusBadge } from "./video-status-badge";
 import type { Video as VideoType } from "@/types/video";
 import { formatDateTimeEAT } from "@/lib/eat";
+import { useNow } from "@/hooks/use-now";
 
 interface VideoCardProps {
   video: VideoType;
@@ -24,6 +25,7 @@ function getCloudinaryThumbnail(url: string): string | null {
 
 export function VideoCard({ video, estimatedPublishAt }: VideoCardProps) {
   const [hovering, setHovering] = useState(false);
+  const now = useNow();
 
   const timeAgo = formatDistanceToNow(video._creationTime, { addSuffix: true });
   const youtubeUrl = video.publishedVideoId
@@ -85,12 +87,12 @@ export function VideoCard({ video, estimatedPublishAt }: VideoCardProps) {
         {video.duration && (
           <div
             className={`absolute bottom-2 right-2 z-20 text-white text-xs px-1.5 py-0.5 rounded flex items-center gap-1 ${
-              video.duration > 60 && (video as any).publishAs !== "video"
+              video.duration > 60 && video.publishAs !== "video"
                 ? "bg-orange-600/90"
                 : "bg-black/80"
             }`}
           >
-            {video.duration > 60 && (video as any).publishAs !== "video" && (
+            {video.duration > 60 && video.publishAs !== "video" && (
               <AlertTriangle className="h-3 w-3 shrink-0" />
             )}
             {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, "0")}
@@ -116,7 +118,7 @@ export function VideoCard({ video, estimatedPublishAt }: VideoCardProps) {
           {formatDateTimeEAT(video.scheduledPublishAt)}
         </div>
       )}
-      {video.status === "draft" && video.metadataScheduledAt && video.metadataScheduledAt > Date.now() && (
+      {video.status === "draft" && video.metadataScheduledAt && video.metadataScheduledAt > now && (
         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 border-t text-xs text-amber-600 dark:text-amber-400 pointer-events-none">
           <Wand2 className="h-3 w-3 shrink-0" />
           AI metadata · {formatDateTimeEAT(video.metadataScheduledAt)}

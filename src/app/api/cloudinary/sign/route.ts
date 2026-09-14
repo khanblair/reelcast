@@ -40,7 +40,7 @@ export async function POST() {
       user.user_metadata?.avatar_url,
     );
     const convexUser = await fetchQuery(api.users.current, {}, { token: convexToken });
-    planKey = (convexUser as any)?.plan ?? "free";
+    planKey = convexUser?.plan ?? "free";
   } catch {
     // Non-fatal: default to free limits if Convex lookup fails
   }

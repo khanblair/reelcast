@@ -11,7 +11,7 @@ import {
   CalendarDays, Sparkles,
 } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
-import { Id } from "../../../../convex/_generated/dataModel";
+import { Id, Doc } from "../../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,7 @@ import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
 import { format, formatDistanceToNow, isFuture, isPast } from "date-fns";
 import { WeekStrip } from "@/components/calendar/week-strip";
+import { useNow } from "@/hooks/use-now";
 
 type PageMode = "auto" | "single" | "metadata";
 type ScheduleFilter = "all" | "upcoming" | "past";
@@ -157,6 +158,8 @@ export default function SchedulePage() {
 
   const loading = scheduledVideos === undefined || allVideos === undefined;
 
+  const now = useNow();
+
   const schedulableVideos = useMemo(
     () => allVideos?.filter((v) => v.status === "ready") ?? [],
     [allVideos]
@@ -165,27 +168,25 @@ export default function SchedulePage() {
   // Drafts without a pending metadata job, safe to schedule
   const draftVideos = useMemo(
     () => {
-      const now = Date.now();
       return allVideos?.filter((v) => {
         if (v.status !== "draft") return false;
         const scheduledAt = v.metadataScheduledAt;
         return !scheduledAt || scheduledAt <= now;
       }) ?? [];
     },
-    [allVideos]
+    [allVideos, now]
   );
 
   // Drafts that already have a future metadata job queued
   const pendingMetadataVideos = useMemo(
     () => {
-      const now = Date.now();
       return allVideos?.filter((v) => {
         if (v.status !== "draft") return false;
         const scheduledAt = v.metadataScheduledAt;
         return scheduledAt !== undefined && scheduledAt > now;
       }) ?? [];
     },
-    [allVideos]
+    [allVideos, now]
   );
 
   // All videos eligible for immediate metadata regeneration (draft + ready)
@@ -195,7 +196,7 @@ export default function SchedulePage() {
   );
 
   const videoMap = useMemo(
-    () => new Map(allVideos?.map((v) => [v._id as string, v]) ?? []),
+    () => new Map<string, Doc<"videos">>(allVideos?.map((v) => [v._id, v]) ?? []),
     [allVideos]
   );
 
@@ -510,7 +511,7 @@ export default function SchedulePage() {
                                   ? <CheckSquare className="h-4 w-4 text-primary shrink-0" />
                                   : <Square className="h-4 w-4 text-muted-foreground shrink-0" />
                                 }
-                                <span className="text-sm truncate flex-1">{(v as any).aiTitle ?? v.title}</span>
+                                <span className="text-sm truncate flex-1">{v.aiTitle ?? v.title}</span>
                                 <span className={`text-xs shrink-0 ${v.status === "ready" ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
                                   {v.status}
                                 </span>
@@ -617,7 +618,7 @@ export default function SchedulePage() {
                               : <Square className="h-4 w-4 text-muted-foreground shrink-0" />
                             }
                             <span className="text-sm truncate flex-1">
-                              {(v as any).aiTitle ?? v.title}
+                              {v.aiTitle ?? v.title}
                             </span>
                             {checked && (
                               <span className="ml-auto text-xs text-primary font-medium">#{pos + 1}</span>
@@ -640,7 +641,7 @@ export default function SchedulePage() {
                             <div key={v._id} className="flex items-center gap-3 px-3 py-2">
                               <Wand2 className="h-3.5 w-3.5 text-amber-500 shrink-0" />
                               <span className="text-sm truncate flex-1 text-muted-foreground">
-                                {(v as any).aiTitle ?? v.title}
+                                {v.aiTitle ?? v.title}
                               </span>
                               <span className="text-xs text-amber-600 dark:text-amber-400 shrink-0">
                                 {formatDistanceToNow(scheduledAt, { addSuffix: true })}
@@ -698,7 +699,7 @@ export default function SchedulePage() {
                           <div key={id} className="flex items-center justify-between gap-3 text-xs">
                             <div className="flex items-center gap-2 min-w-0">
                               <span className="text-muted-foreground font-mono w-4 shrink-0 tabular-nums">{i + 1}.</span>
-                              <span className="truncate">{(v as any)?.aiTitle ?? (v as any)?.title}</span>
+                              <span className="truncate">{v?.aiTitle ?? v?.title}</span>
                             </div>
                             <span className="text-muted-foreground shrink-0">
                               {format(time, "MMM d, h:mm a")}
@@ -754,7 +755,7 @@ export default function SchedulePage() {
                       <option value="">Select a video…</option>
                       {schedulableVideos.map((v) => (
                         <option key={v._id} value={v._id}>
-                          {(v as any).aiTitle ?? v.title}
+                          {v.aiTitle ?? v.title}
                         </option>
                       ))}
                     </select>
@@ -815,8 +816,8 @@ export default function SchedulePage() {
                         </div>
                         <p className="text-xs text-muted-foreground break-words">
                           Up to {userSettings?.autoPublishCount ?? 1} video{(userSettings?.autoPublishCount ?? 1) !== 1 ? "s" : ""}{" "}
-                          {(userSettings as any)?.autoPublishTimeSlots?.length
-                            ? <>at {[...(userSettings as any).autoPublishTimeSlots].sort((a: number, b: number) => a - b).map((h: number) => ALL_HOURS.find((x) => x.hour === h)?.label).join(", ")} EAT</>
+                          {userSettings?.autoPublishTimeSlots?.length
+                            ? <>at {[...userSettings.autoPublishTimeSlots].sort((a, b) => a - b).map((h) => ALL_HOURS.find((x) => x.hour === h)?.label).join(", ")} EAT</>
                             : <>every {INTERVALS.find((i) => i.value === Math.round((userSettings?.autoPublishIntervalMs ?? 0) / 60_000))?.label ?? "interval"}</>
                           }{" "}
                           · <span className="capitalize">{userSettings?.autoPublishPrivacy ?? "public"}</span>
@@ -849,9 +850,9 @@ export default function SchedulePage() {
                         {schedulableVideos.map((v, i) => (
                           <div key={v._id} className="flex items-center gap-3 px-3 py-2.5">
                             <span className="text-xs text-muted-foreground font-mono w-4 shrink-0 tabular-nums">{i + 1}</span>
-                            <span className="text-sm truncate flex-1">{(v as any).aiTitle ?? v.title}</span>
+                            <span className="text-sm truncate flex-1">{v.aiTitle ?? v.title}</span>
                             <Badge variant="outline" className="text-xs shrink-0 capitalize">
-                              {(v as any).privacyStatus ?? userSettings?.autoPublishPrivacy ?? "public"}
+                              {v.privacyStatus ?? userSettings?.autoPublishPrivacy ?? "public"}
                             </Badge>
                           </div>
                         ))}
@@ -1145,7 +1146,7 @@ export default function SchedulePage() {
                       <div className="min-w-0 space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-medium text-sm truncate">
-                            {(video as any).aiTitle ?? video.title}
+                            {video.aiTitle ?? video.title}
                           </span>
                           <Badge
                             variant="outline"
@@ -1164,7 +1165,7 @@ export default function SchedulePage() {
                               {video.privacyStatus}
                             </Badge>
                           )}
-                          {(video as any).cloudinaryDeletedAt && (
+                          {video.cloudinaryDeletedAt && (
                             <Badge
                               variant="outline"
                               className="text-xs bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"

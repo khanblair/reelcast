@@ -35,29 +35,29 @@ export default function AnalyticsPage() {
   const [isFetchingAnalytics, setIsFetchingAnalytics] = useState(false);
 
   const videoTitleMap = useMemo(
-    () => new Map((allVideos ?? []).map((v) => [v._id as string, (v as any).aiTitle ?? v.title])),
+    () => new Map((allVideos ?? []).map((v) => [v._id as string, v.aiTitle ?? v.title] as const)),
     [allVideos]
   );
 
   const totalLikes = useMemo(
-    () => (videoAnalytics ?? []).reduce((s, r) => s + ((r as any).likes ?? 0), 0),
+    () => (videoAnalytics ?? []).reduce((s, r) => s + (r.likes ?? 0), 0),
     [videoAnalytics]
   );
   const totalComments = useMemo(
-    () => (videoAnalytics ?? []).reduce((s, r) => s + ((r as any).comments ?? 0), 0),
+    () => (videoAnalytics ?? []).reduce((s, r) => s + (r.comments ?? 0), 0),
     [videoAnalytics]
   );
   const avgViewDurationSec = useMemo(() => {
     const rows = videoAnalytics ?? [];
     if (rows.length === 0) return 0;
-    return rows.reduce((s, r) => s + ((r as any).avgViewDurationSec ?? 0), 0) / rows.length;
+    return rows.reduce((s, r) => s + (r.avgViewDurationSec ?? 0), 0) / rows.length;
   }, [videoAnalytics]);
   const lastFetchedAt = useMemo(() => {
-    const times = (videoAnalytics ?? []).map((r) => (r as any).fetchedAt as number).filter(Boolean);
+    const times = (videoAnalytics ?? []).map((r) => r.fetchedAt).filter(Boolean);
     return times.length > 0 ? Math.max(...times) : null;
   }, [videoAnalytics]);
   const topVideos = useMemo(
-    () => [...(videoAnalytics ?? [])].sort((a, b) => ((b as any).views ?? 0) - ((a as any).views ?? 0)).slice(0, 10),
+    () => [...(videoAnalytics ?? [])].sort((a, b) => (b.views ?? 0) - (a.views ?? 0)).slice(0, 10),
     [videoAnalytics]
   );
 
@@ -326,19 +326,19 @@ export default function AnalyticsPage() {
                     </thead>
                     <tbody>
                       {topVideos.map((row) => {
-                        const title = videoTitleMap.get(row.videoId) ?? (row as any).youtubeVideoId ?? row.videoId.slice(-8);
+                        const title = videoTitleMap.get(row.videoId) ?? row.youtubeVideoId ?? row.videoId.slice(-8);
                         return (
                           <tr key={row.videoId} className="border-b last:border-0">
                             <td className="py-2 pr-4 max-w-[200px] truncate font-medium" title={title}>{title}</td>
-                            <td className="py-2 pr-4 text-right tabular-nums">{((row as any).views ?? 0).toLocaleString()}</td>
+                            <td className="py-2 pr-4 text-right tabular-nums">{(row.views ?? 0).toLocaleString()}</td>
                             <td className="py-2 pr-4 text-right tabular-nums">
                               {(() => {
-                                const mins = (row as any).watchTimeMinutes ?? 0;
+                                const mins = row.watchTimeMinutes ?? 0;
                                 return mins >= 60 ? `${(mins / 60).toFixed(1)}h` : `${mins}m`;
                               })()}
                             </td>
-                            <td className="py-2 pr-4 text-right tabular-nums">{((row as any).likes ?? 0).toLocaleString()}</td>
-                            <td className="py-2 text-right tabular-nums">{((row as any).comments ?? 0).toLocaleString()}</td>
+                            <td className="py-2 pr-4 text-right tabular-nums">{(row.likes ?? 0).toLocaleString()}</td>
+                            <td className="py-2 text-right tabular-nums">{(row.comments ?? 0).toLocaleString()}</td>
                           </tr>
                         );
                       })}

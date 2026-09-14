@@ -31,6 +31,10 @@ export const get = query({
         youtubeConnected: user.youtubeConnected,
         youtubeChannelName: user.youtubeChannelName,
         aiPreset: undefined,
+        defaultQuality: undefined,
+        defaultAspectRatio: undefined,
+        defaultCaptions: undefined,
+        defaultBackgroundMusic: undefined,
         telegramChatId: undefined,
         discordWebhookUrl: undefined,
         aiAutoGenerate: undefined,
@@ -47,6 +51,8 @@ export const get = query({
         autoPublishPrivacy: undefined as "private" | "public" | "unlisted" | undefined,
         autoPublishSchedulerId: undefined,
         autoPublishNextAt: undefined as number | undefined,
+        autoPublishTimeSlots: undefined as number[] | undefined,
+        autoPublishTimezoneOffset: undefined as number | undefined,
         veoModel: undefined,
         veoResolution: undefined,
         veoAspectRatio: undefined,
@@ -72,6 +78,7 @@ export const get = query({
         aiBrandVoice: undefined,
         aiForbiddenWords: undefined,
         aiCtaPreferences: undefined,
+        humanizeWriting: undefined,
       };
     }
 

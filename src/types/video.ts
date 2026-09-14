@@ -54,6 +54,10 @@ export interface Video {
   publishedAt?: number;
   scheduledPublishAt?: number;
   metadataScheduledAt?: number;
+  metadataSchedulerId?: string;
+  convexSchedulerId?: string;
+  storageMissing?: boolean;
+  storageCheckedAt?: number;
   privacyStatus?: PrivacyStatus;
   publishAs?: "short" | "video";
 }

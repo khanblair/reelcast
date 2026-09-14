@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
-import { Youtube, MessageCircle, CheckCircle, XCircle, Settings, Sparkles } from "lucide-react";
+import { Youtube, MessageCircle, CheckCircle, XCircle, Settings, Sparkles, CreditCard } from "lucide-react";
 import { AISettingsModal } from "@/components/settings/ai-settings-modal";
-import { BillingCard } from "@/components/settings/billing-card";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
@@ -26,7 +26,6 @@ function DiscordIcon({ className }: { className?: string }) {
 
 export default function SettingsPage() {
   const [youtubeBanner, setYoutubeBanner] = useState<{ success: boolean; message: string } | null>(null);
-  const [billingBanner, setBillingBanner] = useState<{ success: boolean; message: string } | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -41,16 +40,6 @@ export default function SettingsPage() {
         ? "Free plan is limited to one YouTube channel. Upgrade to Pro to connect additional channels."
         : `YouTube connection failed (${reason}). Please try again.`;
       setYoutubeBanner({ success: false, message });
-    }
-
-    const billing = params.get("billing");
-    if (billing === "success") {
-      setBillingBanner({
-        success: true,
-        message: "Thanks! Your subscription is being activated — this can take a few seconds to reflect here.",
-      });
-    } else if (billing === "cancelled") {
-      setBillingBanner({ success: false, message: "Checkout was cancelled. No changes were made to your plan." });
     }
   }, []);
 
@@ -197,10 +186,23 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      {billingBanner && <TestResultBanner result={billingBanner} />}
-
       {/* Billing */}
-      <BillingCard />
+      <Link href="/billing" className="block group">
+        <Card className="transition-colors hover:border-primary/40 hover:bg-muted/30">
+          <CardContent className="flex items-center gap-4 py-4 px-5">
+            <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10 ring-1 ring-primary/20 shrink-0">
+              <CreditCard className="h-5 w-5 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm">Billing &amp; Plans</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Manage your subscription, view usage, and compare tiers
+              </p>
+            </div>
+            <span className="text-xs text-primary font-medium group-hover:underline shrink-0">Manage →</span>
+          </CardContent>
+        </Card>
+      </Link>
 
       {/* AI Settings */}
       <button type="button" onClick={() => setAiModalOpen(true)} className="w-full text-left group">

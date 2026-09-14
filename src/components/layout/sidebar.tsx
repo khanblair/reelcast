@@ -21,6 +21,7 @@ import {
   TrendingUp,
   Lightbulb,
   ShieldCheck,
+  CreditCard,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -35,6 +36,7 @@ const NAV_ITEMS = [
   { name: "Ideas",        href: "/ideas",            icon: Lightbulb },
   { name: "History",      href: "/history",          icon: History },
   { name: "Analytics",    href: "/analytics",        icon: BarChart },
+  { name: "Billing",      href: "/billing",          icon: CreditCard },
 ];
 
 export function SidebarNav({ onClick }: { onClick?: () => void }) {

@@ -263,7 +263,7 @@ export default function YouTubeSettingsPage() {
               <p className="text-sm text-muted-foreground">
                 Free plan is limited to one YouTube channel.
               </p>
-              <Button variant="outline" size="sm" onClick={() => router.push("/settings")}>
+              <Button variant="outline" size="sm" onClick={() => router.push("/billing")}>
                 Upgrade to Pro for multiple channels
               </Button>
             </div>

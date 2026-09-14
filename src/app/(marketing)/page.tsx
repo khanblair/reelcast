@@ -668,7 +668,7 @@ export default async function LandingPage() {
                 ))}
               </ul>
               {user ? (
-                <Link href="/settings">
+                <Link href="/billing">
                   <Button className="w-full">Upgrade to Pro</Button>
                 </Link>
               ) : (

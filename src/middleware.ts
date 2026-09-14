@@ -12,6 +12,7 @@ const PROTECTED_ROUTES = [
   "/video",
   "/ai-config",
   "/profile",
+  "/billing",
 ];
 
 function isProtected(pathname: string) {

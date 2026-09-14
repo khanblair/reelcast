@@ -447,7 +447,7 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
                 <span>
                   You have reached your AI message limit for this month.{" "}
                   <Link
-                    href={"/settings" as Route}
+                    href={"/billing" as Route}
                     className="underline underline-offset-2 font-medium"
                     onClick={onClose}
                   >

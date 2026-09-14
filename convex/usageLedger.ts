@@ -156,7 +156,43 @@ export const getCurrentMonth = query({
   },
 });
 
-// Public: checks whether the current user is within the plan limit for a field.
+// Public: returns usage + limits for every metered field for the current
+// user's current month, in one call. Powers the /billing page's usage
+// section without requiring four separate checkLimit round-trips.
+export const getUsageSummary = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await getCurrentUserOrThrow(ctx);
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_supabase_id", (q) => q.eq("supabaseId", identity.subject))
+      .unique();
+    if (!user) throw new Error("User not found in DB");
+
+    const month = getMonthString();
+    const row = await ctx.db
+      .query("usageLedger")
+      .withIndex("by_user_month", (q) =>
+        q.eq("userId", user._id).eq("month", month)
+      )
+      .unique();
+
+    const limits = getPlanLimits(user.plan);
+    const fields: UsageField[] = ["videosUploaded", "metadataGenerated", "veoGenerated", "aiMessagesUsed"];
+
+    return {
+      plan: user.plan ?? "free",
+      month,
+      usage: Object.fromEntries(
+        fields.map((field) => [
+          field,
+          { used: (row?.[field] ?? 0) as number, limit: limits[field] },
+        ])
+      ) as Record<UsageField, { used: number; limit: number }>,
+    };
+  },
+});
+
 export const checkLimit = query({
   args: {
     field: v.union(

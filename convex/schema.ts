@@ -22,28 +22,22 @@ export default defineSchema({
     )),
     isAdmin: v.optional(v.boolean()),
     plan: v.optional(v.union(v.literal("free"), v.literal("pro"), v.literal("elite"))),
-    // Lemon Squeezy billing
-    lemonSqueezyCustomerId: v.optional(v.string()),
-    lemonSqueezySubscriptionId: v.optional(v.string()),
-    lemonSqueezyVariantId: v.optional(v.string()),
+    // PayPal subscription state
     subscriptionStatus: v.optional(v.union(
-      v.literal("on_trial"),
+      v.literal("approval_pending"),
       v.literal("active"),
-      v.literal("paused"),
-      v.literal("past_due"),
-      v.literal("unpaid"),
+      v.literal("suspended"),
       v.literal("cancelled"),
       v.literal("expired"),
     )),
     subscriptionRenewsAt: v.optional(v.number()),
-    subscriptionEndsAt: v.optional(v.number()),
+    paypalSubscriptionId: v.optional(v.string()),
   })
     .index("by_supabase_id", ["supabaseId"])
     .index("by_clerk_id", ["clerkId"])
     .index("by_email", ["email"])
     .index("by_youtube_channel_id", ["youtubeChannelId"])
-    .index("by_lemonsqueezy_customer_id", ["lemonSqueezyCustomerId"])
-    .index("by_lemonsqueezy_subscription_id", ["lemonSqueezySubscriptionId"]),
+    .index("by_paypal_subscription_id", ["paypalSubscriptionId"]),
 
   videos: defineTable({
     userId: v.id("users"),
@@ -314,16 +308,13 @@ export default defineSchema({
   platformSettings: defineTable({
     deepseekApiKey: v.optional(v.string()),
     geminiApiKey: v.optional(v.string()),
+    paypalClientId: v.optional(v.string()),
+    paypalClientSecret: v.optional(v.string()),
+    paypalEnvironment: v.optional(v.union(v.literal("sandbox"), v.literal("live"))),
+    paypalProductId: v.optional(v.string()),
+    paypalPlanId: v.optional(v.string()),
+    paypalWebhookId: v.optional(v.string()),
   }),
-
-  // Lemon Squeezy webhook event log — idempotency guard + audit trail
-  billingEvents: defineTable({
-    eventId: v.string(),        // Lemon Squeezy webhook meta.event_name + object id, de-duped key
-    eventName: v.string(),      // e.g. "subscription_created"
-    userId: v.optional(v.id("users")),
-    subscriptionId: v.optional(v.string()),
-    processedAt: v.number(),
-  }).index("by_event_id", ["eventId"]),
 
   // Contact form submissions from the marketing site
   contactSubmissions: defineTable({
@@ -333,4 +324,22 @@ export default defineSchema({
     message: v.string(),
     status: v.union(v.literal("new"), v.literal("read")),
   }).index("by_status", ["status"]),
+
+  // PayPal subscriptions — one row per createSubscription call. Tracks the
+  // subscription through approval + webhook-driven status updates.
+  paypalSubscriptions: defineTable({
+    userId: v.id("users"),
+    subscriptionId: v.string(),        // PayPal's subscription id (sub_...)
+    status: v.union(
+      v.literal("approval_pending"),
+      v.literal("active"),
+      v.literal("suspended"),
+      v.literal("cancelled"),
+      v.literal("expired"),
+    ),
+    lastEventType: v.optional(v.string()),
+    lastCheckedAt: v.optional(v.number()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_subscription_id", ["subscriptionId"]),
 });

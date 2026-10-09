@@ -1,0 +1,2 @@
+Made ReelCast. It takes your raw footage, writes the title and tags with AI, and publishes to YouTube on your schedule.
+Even while you sleep.

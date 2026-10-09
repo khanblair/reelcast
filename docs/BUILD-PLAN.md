@@ -14,7 +14,8 @@ reelcast/
 │   ├── hooks/
 │   ├── lib/
 │   └── types/
-├── convex/            # Backend
+├── drizzle/           # SQL migrations (drizzle-kit)
+├── scripts/           # One-off scripts (e.g. db-cron.ts)
 ├── public/            # Static assets
 ├── next.config.ts
 ├── tailwind.config.ts
@@ -49,14 +50,17 @@ The foundation. Everything else depends on this phase being correct.
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
     "check": "bun run typecheck && bun run lint",
-    "convex:dev": "convex dev"
+    "db:generate": "bunx --bun drizzle-kit generate",
+    "db:migrate": "bunx --bun drizzle-kit migrate",
+    "test": "bun --env-file=.env.local test --timeout 60000"
   }
 }
 ```
 
 ### 0.3 Additional dependencies
 ```bash
-bun add @clerk/nextjs convex react-dom
+bun add @supabase/supabase-js @supabase/ssr drizzle-orm postgres @tanstack/react-query react-dom
+bun add -d drizzle-kit
 bun add -d @typescript-eslint/eslint-plugin @typescript-eslint/parser
 bun add -d prettier eslint-config-prettier
 bun add clsx tailwind-merge lucide-react
@@ -125,7 +129,7 @@ Scale (using Tailwind's default + YouTube proportions):
 
 ### 1.4 Root layout (`src/app/layout.tsx`)
 - Import Google Fonts (Inter + Roboto)
-- Apply `ConvexProvider` and `ClerkProvider`
+- Apply the TanStack Query provider and the Supabase auth-state provider (`src/components/providers.tsx`)
 - Set metadata (title, description, icons, PWA manifest)
 - Apply dark class on `<html>` (YouTube is dark-first)
 
@@ -184,7 +188,7 @@ Build all 15 shadcn/ui-style primitives:
 ### 3.1 App shell (`src/app/(app)/layout.tsx`)
 - Auth guard (redirect to `/sign-in` if unauthenticated)
 - Sidebar + Topbar layout
-- Convex + Clerk providers already in root layout
+- Query + auth providers already in root layout
 
 ### 3.2 Sidebar (`src/components/layout/sidebar.tsx`)
 - Logo
@@ -207,23 +211,24 @@ Build all 15 shadcn/ui-style primitives:
 
 ---
 
-## Phase 4 — Convex Schema & Core Backend
+## Phase 4 — Postgres Schema & Core Backend
 
-### 4.1 Database schema (`convex/schema.ts`)
-Tables: `users`, `videos`, `jobs`, `settings`
+### 4.1 Database schema (`src/db/schema.ts`, migrations in `drizzle/`)
+Tables: `users`, `videos`, `jobs`, `settings`, plus tasks, notifications, analytics and billing tables
 
-### 4.2 Auth helpers (`convex/lib/auth.ts`)
+### 4.2 Auth helpers (`src/server/auth.ts`)
 - Get authenticated user ID from context
 - Validate resource ownership
 
 ### 4.3 User management
-- `convex/users.ts` — CRUD for user records
-- Clerk webhook handler (`src/app/api/webhooks/clerk/route.ts`)
+- `src/server/modules/users.ts` — current user
+- The user row is created on first request (`ensureUser` in `src/server/auth.ts`); no auth webhook needed
 
 ### 4.4 Core queries & mutations
-- `convex/videos.ts` — Video CRUD, status transitions
-- `convex/jobs.ts` — Job queue queries, status mutations
-- `convex/settings.ts` — User settings get/set
+- `src/server/modules/videos.ts` — Video CRUD, status transitions
+- `src/server/modules/jobs.ts` — Job queue queries, retry
+- `src/server/modules/settings.ts` — User settings get/set
+- Browser calls go through `POST /api/rpc` (`src/server/rpc/`)
 
 ---
 
@@ -233,7 +238,7 @@ Tables: `users`, `videos`, `jobs`, `settings`
 - Hero, features, CTA
 
 ### 5.2 Auth pages
-- Sign in / Sign up with Clerk components
+- Sign in / Sign up with Supabase Auth (email and Google)
 
 ### 5.3 Dashboard (`src/app/(app)/dashboard/page.tsx`)
 - Recent drafts grid
@@ -268,10 +273,10 @@ Tables: `users`, `videos`, `jobs`, `settings`
 - `metadata-editor.tsx`, `generation-trigger.tsx`
 
 ### 6.3 Generation pipeline
-- `convex/actions/generation.ts` — AI generation action
-- `convex/actions/metadata.ts` — AI metadata generation
-- `convex/lib/ai.ts` — AI engine wrapper
-- `convex/scheduled/runGeneration.ts`
+- `src/server/jobs/handlers/generation.ts` — generation job handler
+- `src/server/modules/actions/metadata.ts` — AI metadata generation
+- `src/server/lib/ai.ts` — AI engine wrapper
+- `src/server/lib/generation/generationJob.ts`
 
 ### 6.4 Custom hooks
 - `use-upload.ts`, `use-video-status.ts`
@@ -281,13 +286,13 @@ Tables: `users`, `videos`, `jobs`, `settings`
 ## Phase 7 — Publishing & Scheduling
 
 ### 7.1 Publishing
-- `convex/actions/publish.ts` — YouTube publish action
-- `convex/lib/youtube.ts` — YouTube API client
+- `src/server/lib/publish/run.ts` — YouTube publish job (resumable upload)
+- `src/server/lib/youtube.ts` — YouTube API client
 - `src/app/api/youtube/callback/route.ts` — OAuth callback
 - `publish-controls.tsx`, `schedule-picker.tsx`
 
 ### 7.2 Scheduling
-- `convex/scheduled/runPublish.ts`
+- `src/server/jobs/handlers/publish.ts` — runs via the job runner (`/api/cron/tick`)
 - `src/app/(app)/schedule/page.tsx`
 - `job-calendar.tsx`, `job-queue-list.tsx`
 - `use-job-queue.ts`
@@ -297,12 +302,11 @@ Tables: `users`, `videos`, `jobs`, `settings`
 ## Phase 8 — Storage, Notifications & Settings
 
 ### 8.1 Storage
-- `convex/actions/storage.ts` — Presigned URL generation
-- `convex/lib/r2.ts` — R2 client wrapper
+- `src/app/api/cloudinary/sign/route.ts` — signed Cloudinary uploads
+- `src/server/lib/cloudinary.ts` — Cloudinary helpers
 
 ### 8.2 Telegram notifications
-- `convex/actions/telegram.ts`
-- `convex/lib/telegram.ts`
+- `src/server/lib/notify.ts` — Telegram / Discord / email fan-out
 - `src/components/settings/telegram-connect-card.tsx`
 
 ### 8.3 Settings pages
@@ -313,7 +317,7 @@ Tables: `users`, `videos`, `jobs`, `settings`
 ## Phase 9 — Analytics & History
 
 ### 9.1 Analytics
-- `convex/actions/analytics.ts`
+- `src/server/modules/actions/youtubeAnalytics.ts`
 - `src/app/(app)/analytics/page.tsx`
 - `metrics-overview.tsx`, `video-metrics-row.tsx`, `performance-chart.tsx`
 - `use-analytics.ts`
@@ -329,24 +333,22 @@ Tables: `users`, `videos`, `jobs`, `settings`
 ### Root `.env.example`
 
 ```env
-# ── Clerk ──────────────────────────────────────────────
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_xxx
-CLERK_SECRET_KEY=sk_test_xxx
-NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
-NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
-CLERK_WEBHOOK_SECRET=whsec_xxx
+# ── Supabase (auth) ────────────────────────────────────
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 
-# ── Convex ─────────────────────────────────────────────
-CONVEX_DEPLOYMENT=dev:your-deployment-name
-NEXT_PUBLIC_CONVEX_URL=https://your-deployment.convex.cloud
-NEXT_PUBLIC_CONVEX_SITE_URL=https://your-deployment.convex.site
+# ── Supabase Postgres ──────────────────────────────────
+DATABASE_URL=postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:6543/postgres
+DATABASE_URL_DIRECT=postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
 
-# ── Cloudflare R2 ──────────────────────────────────────
-R2_ACCOUNT_ID=your_account_id
-R2_ACCESS_KEY_ID=your_access_key
-R2_SECRET_ACCESS_KEY=your_secret_key
-R2_BUCKET_NAME=reelcast-videos
-R2_PUBLIC_URL=https://cdn.reelcast.app
+# ── App secrets ────────────────────────────────────────
+APP_ENCRYPTION_KEY=base64-32-bytes   # openssl rand -base64 32
+CRON_SECRET=hex-32-bytes             # openssl rand -hex 32
+
+# ── Cloudinary ─────────────────────────────────────────
+NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
 
 # ── YouTube / Google OAuth ─────────────────────────────
 GOOGLE_CLIENT_ID=xxx.apps.googleusercontent.com

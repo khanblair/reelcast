@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
+import { getSessionUser } from "@/server/auth";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const YOUTUBE_SCOPES = [
@@ -21,6 +22,17 @@ export async function GET(request: Request) {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId) {
     return new Response("Missing GOOGLE_CLIENT_ID", { status: 500 });
+  }
+
+  // Only signed-in users can start the flow (the callback needs the session to attach the channel).
+  let user: Awaited<ReturnType<typeof getSessionUser>> = null;
+  try {
+    user = await getSessionUser();
+  } catch {
+    user = null;
+  }
+  if (!user) {
+    return NextResponse.redirect(`${getAppOrigin(request)}/sign-in?redirect_url=/settings`, 302);
   }
 
   const redirectUri = `${getAppOrigin(request)}/api/youtube/callback`;

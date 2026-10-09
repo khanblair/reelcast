@@ -2,17 +2,17 @@
 
 ## What We're Building
 
-ReelCast is a cloud-native web application that takes a content creator from raw footage to a live YouTube video with as little manual effort as possible. The core premise is simple: a user uploads a raw video, the platform runs it through an AI engine that enhances and finalises it, generates all the YouTube metadata (title, description, tags), and then publishes the finished video directly to their connected YouTube channel — all in the background, on their schedule.
+ReelCast is a cloud-native web application that takes a content creator from raw footage — or just an idea — to a live YouTube video with as little manual effort as possible. A creator either uploads a video or describes one in a text prompt (generated with Google Veo). AI writes the YouTube metadata (title, description, tags, captions, thumbnails), and the platform publishes the finished video directly to the creator's connected YouTube channel — all in the background, on their schedule.
 
-This document serves as the authoritative reference for what the product is, how it works, what each part of the system is responsible for, and how everything connects. It should be the first thing anyone reads before touching the codebase.
+This document serves as the authoritative reference for what the product is, how it works, what each part of the system is responsible for, and how everything connects. It should be the first thing anyone reads before touching the codebase. For the full feature-by-feature specification see `docs/SPEC.md`; for planned work see `docs/PRODUCT_ROADMAP.md`.
 
 ---
 
 ## The Problem Being Solved
 
-Content creators spend a disproportionate amount of time on two things that should be invisible: post-production and distribution. Editing raw footage into a polished video, writing metadata, scheduling uploads, and manually pushing files to YouTube are all repetitive, time-consuming tasks that don't require creative judgment — they just require time.
+Content creators spend a disproportionate amount of time on two things that should be invisible: producing metadata and distributing the result. Writing titles, descriptions and tags, scheduling uploads, and manually pushing files to YouTube are repetitive, time-consuming tasks that don't require creative judgment — they just require time.
 
-ReelCast compresses all of that into a single automated pipeline. The creator's only job is to upload the raw material and set their preferences. Everything else — enhancement, rendering, metadata generation, and publishing — happens without them.
+ReelCast compresses all of that into a single automated pipeline. The creator's job is to supply the video (or the idea for one) and set their preferences. Everything else — metadata generation, scheduling, queueing, uploading and notifying — happens without them.
 
 ---
 
@@ -20,17 +20,23 @@ ReelCast compresses all of that into a single automated pipeline. The creator's 
 
 Before getting into features and flows, these are the foundational concepts the entire product is built around:
 
-**Draft** — Any video that has been uploaded but not yet processed or published. Drafts sit in a holding state until the user triggers generation, either immediately or on a schedule. Nothing happens to an uploaded video automatically.
+**Draft** — Any video that has been uploaded (or generated) but not yet published. Drafts sit in the library until the user publishes them or schedules them.
 
-**Generation** — The AI processing step. A generation job takes a draft video, runs it through the configured AI engine, and produces a finalised, publish-ready video file along with AI-suggested metadata (title, description, tags). Generation runs entirely in the cloud.
+**Generation** — Two kinds of AI work share this name. *Video generation* turns a text prompt into a video with Google Veo. *Metadata generation* has Gemini analyse an uploaded video and propose its title, description and tags (and, on request, captions and a thumbnail).
 
-**Publish** — The act of transferring the finalised video directly to the user's connected YouTube channel via the YouTube Data API. The user never downloads the file or touches YouTube manually.
+**Publish** — Transferring the finished video directly to the user's connected YouTube channel via the YouTube Data API. The user never downloads the file or touches YouTube manually.
 
-**Job** — Any background task in the system: a generation job or a publish job. Jobs can be triggered immediately or scheduled for a future time. Each job has a status that updates in real time.
+**Job** — A user-visible background task: a *generation job* or a *publish job*. A video can have at most one active job of each type at a time. A job's status moves `pending → processing → completed` (or `failed`, with an error the user can see and retry from History).
 
-**Connected Channel** — A user's YouTube channel, linked to the platform via OAuth during onboarding. The platform stores the OAuth token securely and uses it on the user's behalf to perform uploads. The user can disconnect and reconnect their channel at any time from settings.
+**Task** — An internal background step that users don't see directly: auto-publish batches, scheduled metadata generation, digest sending, analytics ingestion. Jobs and tasks run on the same Postgres-backed queue.
 
-**Connected Telegram** — A user's Telegram account, linked via a bot token flow. Once connected, the platform sends the user Telegram notifications for key job events (generation complete, publish success, publish failure).
+**Connected Channel** — A user's YouTube channel, linked via Google OAuth. The platform stores the OAuth tokens encrypted and uses them on the user's behalf to upload. A channel can be linked to only one ReelCast account. The free plan allows one channel; the user can disconnect and reconnect from Settings at any time.
+
+**Notifications** — In-app notifications plus optional delivery to Telegram, a Discord webhook, and email (the user's own Resend key) for key events: generation complete, publish success, publish failure, storage warnings, and a weekly digest.
+
+**Plan** — Free, Pro or Elite. A plan sets monthly usage limits and the maximum upload size. Pro is bought through Pesapal; Elite is assigned by an admin unless an Elite price has been configured. An admin can also grant any plan directly.
+
+**BYOK** — "Bring your own key". Users can supply their own Resend key (for email notifications) in Settings. Everything else — Gemini and Veo, DeepSeek — runs on platform-level keys that an admin sets in Admin → Settings. (The server also accepts a personal DeepSeek key, but there is no screen for it yet.)
 
 ---
 
@@ -38,31 +44,27 @@ Before getting into features and flows, these are the foundational concepts the 
 
 ### Onboarding
 
-A new user signs up via Clerk. During onboarding they are prompted to connect two things: their YouTube channel via Google OAuth, and optionally their Telegram account for notifications. Both can also be done later from Settings. The YouTube channel connection is required before any publish job can be triggered.
+A new user signs up through Supabase Auth (email/password or Google). The app creates their profile the first time they make a request. They are prompted to connect their YouTube channel via Google OAuth, and optionally Telegram, Discord or email notifications. All of it can also be done later from Settings. A connected YouTube channel is required before anything can be published.
 
-### Uploading a Video
+### Path A — Upload a video
 
-The user navigates to the Upload page and selects a raw video file from their device. The file is uploaded directly to Cloudflare R2 via a presigned URL — it never passes through the application server. Once the upload completes, a draft record is created in Convex with the file reference and the upload is visible in the Drafts library.
+The user opens the Upload page and picks a video file. The browser asks the server for a signed upload and then sends the file **directly to Cloudinary** — it never passes through the application server. The maximum size depends on the plan (100 MB on Free, 500 MB on Pro, 2 GB on Elite). A draft record is created with the Cloudinary URL, and, if auto-generate is enabled in the user's AI settings, Gemini analyses the video and fills in the title, description and tags.
 
-### Configuring a Video
+### Path B — Generate a video from a prompt
 
-From the draft's detail page, the user can configure how the AI should process the video. This includes selecting a style preset, enhancement level, whether to generate captions, background music preferences, output quality, and any other generation parameters. These settings default to whatever the user has saved as their global defaults in Settings but can be overridden per video.
-
-### Triggering Generation
-
-The user can trigger generation immediately or schedule it for a specific date and time. When triggered, a generation job is created and queued in Convex. The job picks up the raw file from R2, sends it to the AI engine, and when processing is complete, stores the finalised video back in R2. The video's status updates in real time on the frontend via Convex's live query subscriptions. When generation completes, the AI engine also returns a suggested title, description, and set of tags which are saved against the video and pre-populated in the publish form.
+On the Generate page the user writes a prompt and chooses the Veo model, resolution, aspect ratio, duration and options. Pressing Generate creates a generation job. When the background runner starts it, one unit of the user's monthly Veo allowance is consumed and the request is submitted to Veo (the unit is given back if the submission fails). The runner then checks on the operation every 15 seconds for up to about 10 minutes, copies the finished video into Cloudinary immediately (Google deletes Veo output after two days), and marks the video ready. If generation fails, the video is marked failed and the user is notified.
 
 ### Reviewing AI Metadata
 
-Before publishing, the user sees the AI-generated title, description, and tags on the video detail page. These are fully editable — the user can accept them as-is, modify them, or replace them entirely. Whatever is saved at publish time is what gets sent to YouTube.
+Before publishing, the user sees the AI-generated title, description and tags on the video detail page. They are fully editable — the user can accept them as-is, change them by hand (with live counters for YouTube's limits: 100 characters for the title, 5,000 bytes for the description, 500 characters across all tags), or regenerate them. Whatever is stored on the video at publish time is what gets sent to YouTube. Every value that an edit or a regeneration replaces is kept in a history (the last 10 versions). A video that is already publishing or published is locked.
 
 ### Publishing to YouTube
 
-Once a video has been generated, the user can publish it immediately or schedule it for a specific time. Scheduling uses Convex's native scheduled functions — no external cron service is needed. When the publish job runs, a Convex action calls the YouTube Data API using the user's stored OAuth token, uploads the finalised video from R2, and applies the confirmed metadata. The user never interacts with YouTube directly. On completion (or failure), a Telegram notification is sent if the user has connected their Telegram account.
+Once a video is ready, the user can publish it immediately ("Publish now") or schedule it for a specific time. Publishing is a background job: it streams the file from Cloudinary to YouTube using YouTube's resumable upload protocol, in 16 MiB chunks spread across as many runs as it needs, so even a 2 GB file fits inside the hosting platform's function time limit. The YouTube video ID is saved the moment YouTube returns it, before anything else happens, so a crash can never cause a second upload. Afterwards the Cloudinary copy is removed and the user is notified. On failure the job retries with backoff; the user can retry manually from History.
 
-### Chained Scheduling
+### Scheduling and Auto-Publish
 
-The user can set up a fully automated pipeline: schedule generation for a specific time, and set the video to publish automatically as soon as generation completes. This means a user can queue an entire week's content in one session and walk away.
+A scheduled video is picked up by a sweep that runs every minute and turns due videos into publish jobs. Beyond one-off schedules, the user can turn on **auto-publish**: ReelCast publishes the next ready videos from the queue at a chosen interval, or at fixed time slots in the user's time zone, in the order set on the Queue page. The Schedule and Content Calendar pages show everything that is coming up, and suggest good posting times from the user's own analytics.
 
 ---
 
@@ -70,43 +72,55 @@ The user can set up a fully automated pipeline: schedule generation for a specif
 
 ### Authentication & User Management
 
-Handled entirely by Clerk. Users can sign up with email or OAuth providers. Clerk manages sessions, tokens, and user identity. The Convex database stores additional user data (connected channel info, Telegram connection, AI settings preferences) keyed to the Clerk user ID.
+Supabase Auth handles sign-up, sessions and Google sign-in. ReelCast stores a profile row per user keyed by the Supabase user ID (email, name, plan, admin flag). No passwords are stored in the application database.
 
 ### Video Uploads & Draft Library
 
-Raw video files are uploaded client-side directly to Cloudflare R2 using presigned URLs generated by a Convex action. This keeps large file transfers off the application server entirely. Once uploaded, the video appears in the user's Drafts library with a status of `draft`. The library shows all videos and their current pipeline status at a glance.
+Files go from the browser straight to Cloudinary using signed upload parameters. The Drafts library lists every video with its pipeline status at a glance. The pipeline a video moves through is: `draft → queued → generating → ready → scheduled → publishing → published` (or `failed`).
 
-### AI Video Generation
+### AI Video Generation (Veo)
 
-The AI engine processes the raw video in the cloud and returns a finalised video file. The specific AI provider is configurable and abstracted behind a service interface so it can be swapped without affecting the rest of the pipeline. Generation is handled as a Convex action, with the job status written back to the database in real time. The engine also returns AI-generated metadata alongside the processed video.
+Text-to-video with Google Veo, run as a background generation job. Generation settings (model, resolution, aspect ratio, duration, audio, prompt enhancement, person generation) default to the user's saved AI settings and can be overridden per video. Available on Pro (5 per month) and Elite (unlimited).
 
 ### AI-Generated Metadata
 
-When a generation job completes, the AI engine returns a suggested YouTube title, description, and tag set based on the content of the video. These are stored against the video record and pre-filled in the publish form. The user reviews and edits them before confirming the publish. Metadata generation is not a separate step — it happens as part of every generation job automatically.
+Gemini produces a title, description and tags for uploaded videos, and can also generate captions and a thumbnail on demand. Tone, custom guidelines and a "humanize writing" option shape the output. Settings → AI also stores language, description length, brand voice, niche, target audience, forbidden words and call-to-action preferences; brand voice, niche and audience currently inform the AI assistant, while the metadata generator does not apply language, length, forbidden-word or CTA preferences yet. Scheduled metadata generation lets a user queue it for a later time.
 
 ### YouTube Publishing
 
-Publishing is a Convex background action that calls the YouTube Data API v3 on behalf of the user. It retrieves the finalised video file from R2, uploads it to YouTube, and applies the confirmed metadata. The entire process is server-side. YouTube OAuth tokens are stored securely in Convex, scoped to upload permissions only. Users can disconnect and reconnect their YouTube channel from the Settings page, which revokes and re-issues the stored token.
+A background job calls the YouTube Data API v3 on the user's behalf using stored, encrypted OAuth tokens that are refreshed automatically. Health checks run periodically and warn the user if a token has been revoked.
 
-### Scheduling System
+### Scheduling, Queue & Auto-Publish
 
-Both generation jobs and publish jobs can be scheduled for a future date and time using Convex's built-in scheduled functions. The two schedules are independent — a user can schedule generation for Tuesday at 9am and publishing for Wednesday at 6pm, or chain them so publishing fires automatically when generation completes. A calendar/queue view in the app shows all upcoming scheduled jobs across all videos.
+Per-video scheduling, a calendar view, a reorderable publish queue and auto-publish (interval or time slots). Everything is server-side and survives deploys and restarts.
 
 ### Activity & History
 
-A dedicated History page logs every job that has run: generation jobs and publish jobs, with their outcome (success or failure), timestamps, and any error details. Failed jobs can be retried or rescheduled directly from this page. The status pipeline a video moves through is: `Draft → Generating → Ready → Scheduled → Publishing → Published` (or `Failed` at any step after Draft).
+A History page logs every generation and publish job with its outcome, timestamps and error details. Failed jobs can be retried from there.
 
 ### Analytics
 
-The Analytics page pulls performance data from the YouTube Analytics API for videos published through the platform. Metrics shown include views, watch time, likes, comments, and subscriber change per video. Data is fetched on-demand and displayed per video or aggregated across the user's channel. This gives creators a feedback loop — they can see how their published content is performing without leaving the platform.
+YouTube performance data per video and aggregated across the channel: views, watch time, likes, comments and subscriber change. Users can refresh on demand, and a daily background ingestion keeps per-day numbers up to date. (Click-through rate and impressions are not collected today.)
 
-### AI Generation Settings
+### AI Assistant
 
-Users can configure global default AI settings from the Settings page. These defaults apply to every new upload automatically. On a per-video basis, any setting can be overridden before triggering generation. Settings include output quality level, style preset, caption generation toggle, background music preferences, and output aspect ratio.
+A chat assistant (DeepSeek, on the platform's key) that knows the user's recent videos, schedule and analytics. Included from the Pro plan: 200 messages per month on Pro and 1,000 on Elite.
 
-### Telegram Notifications
+### Idea Vault & Content Intelligence
 
-Users can connect their Telegram account from the Settings page. The connection flow uses a Telegram bot: the user starts a conversation with the bot, which returns a link code they paste into the platform. Once connected, the platform sends Telegram messages for the following events: generation job completed, publish job succeeded, publish job failed (with error summary). Notifications can be toggled on or off per event type from Settings.
+The Ideas page stores content ideas through their lifecycle (concept → in production → published). Content Intelligence searches YouTube for trending topics, keyword opportunities and gaps against the user's channel.
+
+### Notifications
+
+In-app notifications, plus Telegram, Discord and email delivery, with per-event toggles and customisable message templates. A weekly digest goes out on Sundays.
+
+### Plans & Billing
+
+Free, Pro and Elite, with limits enforced atomically on the server. Paid plans are purchased through **Pesapal** (Elite only when an Elite price is configured) (M-Pesa, Airtel Money and cards). Each charge is a one-off order; ReelCast tracks the billing period itself, reminds the user before renewal, and gives a three-day grace period before a lapsed plan is downgraded. Plans granted by an admin are never removed by a lapsed payment.
+
+### Admin Panel
+
+An admin-only console with its own sidebar and routes, separate from the user app. Sections: **Overview** (what needs attention now), **People** (users, contact messages), **Content** (videos, jobs), **Money** (billing overview, subscriptions, payments, a queue of payments that need review, plan usage) and **System** (YouTube quota, storage, health, platform settings with API keys and Pesapal credentials). Every admin action is checked on the server.
 
 ---
 
@@ -115,16 +129,24 @@ Users can connect their Telegram account from the Settings page. The connection 
 | Route | Purpose |
 |---|---|
 | `/` | Landing page — product overview and sign-up entry point |
-| `/sign-in` | Clerk-powered sign-in |
-| `/sign-up` | Clerk-powered sign-up and onboarding |
+| `/sign-in`, `/sign-up` | Supabase Auth sign-in and sign-up |
 | `/dashboard` | Overview: recent drafts, active jobs, quick upload, pending schedules |
-| `/upload` | Video upload interface with drag-and-drop support |
-| `/drafts` | Full draft library with pipeline status for each video |
-| `/video/[id]` | Video detail: AI config, metadata editor, generation controls, publish controls |
-| `/schedule` | Calendar/queue view of all upcoming scheduled jobs |
-| `/history` | Full activity log of all past generation and publish jobs |
-| `/analytics` | YouTube performance data for published videos |
-| `/settings` | AI defaults, YouTube channel connection, Telegram connection, account preferences |
+| `/upload` | Video upload with drag-and-drop and AI metadata |
+| `/generate` | Prompt-to-video generation with Veo |
+| `/drafts` | Draft library with pipeline status for each video |
+| `/video/[id]` | Video detail: metadata editor, thumbnail/captions, publish and schedule controls |
+| `/queue` | Reorderable publish queue and auto-publish status |
+| `/schedule` | Scheduling, suggested times and auto-publish setup |
+| `/content-calendar` | Calendar view of scheduled and published videos |
+| `/history` | Log of all generation and publish jobs, with retry |
+| `/analytics` | YouTube performance data |
+| `/ideas` | Idea vault |
+| `/intelligence` | Content intelligence: trends, keywords, gaps |
+| `/settings` (+ `/ai`, `/general`, `/notifications`, `/telegram`, `/youtube`) | Account, YouTube connection, AI defaults, notification channels |
+| `/ai-config`, `/profile` | AI defaults and profile |
+| `/billing` | Plan, usage, payments, upgrade/cancel (Pesapal) |
+| `/admin/*` | Admin console with its own sidebar: overview, users, messages, videos, jobs, billing (subscriptions, payments, needs review), usage, system (quota, storage, health), settings |
+| `/contact`, `/privacy`, `/terms` | Marketing and legal pages |
 
 ---
 
@@ -132,38 +154,47 @@ Users can connect their Telegram account from the Settings page. The connection 
 
 | Layer | Technology | Purpose |
 |---|---|---|
-| Frontend | Next.js (PWA) | Web application, progressively installable on desktop and mobile |
-| Backend & Database | Convex | Real-time database, serverless functions, background jobs, scheduled functions |
-| Authentication | Clerk | User auth, session management, Google OAuth for YouTube connection |
-| Storage & CDN | Cloudflare R2 + CDN | Raw and processed video file storage, edge delivery, presigned upload URLs |
-| AI Engine | TBD — abstracted | Cloud video processing, enhancement, and metadata generation |
-| Publishing | YouTube Data API v3 | Video upload and metadata submission to the user's YouTube channel |
-| Analytics | YouTube Analytics API | Fetching per-video and channel-level performance metrics |
-| Notifications | Telegram Bot API | Delivery of job event notifications to connected user Telegram accounts |
+| Frontend | Next.js 16 (App Router), React 19, Tailwind CSS 4, TanStack Query | Web application, installable as a PWA |
+| API layer | Typed RPC over `POST /api/rpc` (`src/server/rpc`) | One entry point for all browser → server calls, validated with zod |
+| Database | Supabase Postgres + Drizzle ORM | All application data; migrations in `drizzle/` |
+| Authentication | Supabase Auth | Sign-up, sessions, Google sign-in |
+| Background jobs | Postgres job queue + Supabase `pg_cron`/`pg_net` | Publishing, generation, schedules, sweeps (no external scheduler) |
+| File storage & CDN | Cloudinary | Uploaded and generated videos, thumbnails |
+| AI | Google Gemini and Veo (`@google/genai`), DeepSeek | Metadata, captions, thumbnails, video generation, assistant |
+| Publishing & analytics | YouTube Data API v3, YouTube Analytics API | Upload, health checks, performance data |
+| Billing | Pesapal API 3.0 | Subscriptions for Pro/Elite |
+| Notifications | Telegram Bot API, Discord webhooks, Resend | Event delivery |
+| Product analytics | PostHog (optional) | Anonymous usage analytics, off unless configured |
+| Tooling | bun, TypeScript, ESLint, `bun test` | |
 
 ---
 
 ## Infrastructure & Background Processing
 
-**File uploads** happen client-to-R2 via presigned URLs. The Convex backend generates the presigned URL, the browser uploads directly to R2, and only the R2 object key is stored in the database. No video data touches the application server.
+**Browser to server.** Pages call server functions through a single endpoint, `POST /api/rpc`. Each function is defined once under `src/server/modules/`, validates its input, runs with the signed-in user's identity, and returns only safe, minimal data. The browser has no live subscription: writes refresh the affected data immediately, and job and queue views poll every few seconds.
 
-**Generation jobs** are Convex actions, queued and executed within the Convex runtime. They retrieve the raw file from R2, call the AI engine, and write the processed output back to R2. The job status is updated live in the database so the frontend reflects progress in real time without polling.
+**File uploads** go from the browser to Cloudinary using signed parameters from `/api/cloudinary/sign`; only the resulting URL is stored in the database. No video data touches the application server for uploads. Publishing streams the file from Cloudinary to YouTube.
 
-**Publish jobs** are also Convex actions. They pull the processed file from R2 and call the YouTube Data API with the user's OAuth token. The token is stored in Convex and never exposed to the client.
+**Background work** runs on a Postgres queue (`jobs` for user-visible work, `tasks` for internal steps, `job_schedules` for periodic sweeps). A single runner, `runTick()`, claims due work with `FOR UPDATE SKIP LOCKED` so many callers can run it safely at once. In production, Supabase `pg_cron` calls `/api/cron/tick` every minute (installed once with `scripts/db-cron.ts`); in development an in-process timer calls it every five seconds, so `next dev` is the only process you need. Handlers are written to be idempotent, because delivery is at-least-once; long operations such as Veo polling and YouTube uploads resume across runs instead of holding a function open.
 
-**Scheduled jobs** use Convex's native `ctx.scheduler.runAt()` to fire generation and publish actions at a user-defined time. No external cron service, no third-party scheduler — scheduling is handled natively within the Convex backend.
+**Periodic sweeps** include: due scheduled publishes (every minute), reconciliation of stuck publishes, OAuth health checks, the weekly digest, billing renewals/expiry/reconciliation, and daily analytics ingestion.
 
-**Telegram notifications** are sent by Convex actions at the end of generation and publish jobs. The action calls the Telegram Bot API with the user's stored chat ID and a pre-formatted message. Notification delivery does not block the job — it runs as a follow-up step after the primary job resolves.
+**Notifications** are sent as a follow-up step after the primary job resolves. A failure to notify never fails the job.
+
+**Billing** is driven by Pesapal order notifications (IPN) and the customer return redirect. Neither is trusted on its own: each one re-checks the order status with Pesapal, and a payment is applied exactly once even if both arrive at the same time.
 
 ---
 
 ## Security
 
-- YouTube OAuth tokens are stored in Convex with user-level isolation and are never returned to the client
-- All video files live in private Cloudflare R2 buckets; access requires a short-lived presigned URL generated server-side
-- Clerk handles all authentication — the application database stores no passwords
-- Telegram chat IDs are stored per user and used only for outbound notifications; the bot does not respond to inbound messages after the initial connection flow
-- All Convex mutations and actions that operate on user data validate the calling user's identity against the resource owner before executing
+- YouTube OAuth tokens, user API keys, platform API keys and payment credentials are encrypted at rest (AES-256-GCM) and are never sent to the browser
+- The database is closed to the public API: every table has row-level security enabled with no policies and no grants, so only the server's own connection can read or write
+- Every server function validates its input and is scoped to the signed-in user; admin functions require the admin flag, which is always read from the database
+- `/api/rpc` accepts same-origin JSON requests only; the cron endpoint requires a secret; Pesapal notifications are verified by re-querying Pesapal
+- Supabase Auth handles all authentication — the application database stores no passwords
+- File URLs are limited to the app's own Cloudinary account, and Discord webhooks are limited to Discord's hosts, to block server-side request forgery
+- Telegram chat IDs are stored per user and used only for outbound notifications
+- Uploaded files are deleted from Cloudinary after a successful publish
 
 ---
 
@@ -171,213 +202,125 @@ Users can connect their Telegram account from the Settings page. The connection 
 
 The YouTube Data API v3 operates on a daily quota system (10,000 units per project by default). A single video upload costs 1,600 units, meaning the default quota supports approximately 6 uploads per day across all users. For a multi-user platform this is a hard constraint that must be planned for.
 
-The platform addresses this in two ways. First, all publish jobs are queued and rate-limited within Convex — jobs are dispatched sequentially with awareness of remaining daily quota, not fired concurrently. Second, a quota increase request must be submitted to Google via the YouTube API Services Audit and Quota Extension Form before launch. This requires a working demo of the application, a published Privacy Policy, a published Terms of Service, and a detailed description of the use case. Google's review typically takes 3–5 business days and approval is not guaranteed, so this process should be initiated as early as possible in the build.
+The platform records each user's daily quota usage and shows it to admins, and publishing is queued rather than fired concurrently. In addition, a quota increase request must be submitted to Google via the YouTube API Services Audit and Quota Extension Form before launch. This requires a working demo of the application, a published Privacy Policy, a published Terms of Service, and a detailed description of the use case. Google's review typically takes 3–5 business days and approval is not guaranteed, so this process should be initiated as early as possible.
 
-The YouTube Analytics API has its own separate quota and is read-only. Analytics calls are made on-demand (not on a schedule) to keep usage minimal.
+The YouTube Analytics API has its own separate quota and is read-only. Analytics are fetched on demand and by a bounded daily ingestion to keep usage low. The OAuth connection must include the `yt-analytics.readonly` scope for analytics to work.
 
 ---
 
 ## Folder Structure
 
-The project is split into two root directories: `app` for the Next.js frontend and `convex` for all backend logic. This separation is enforced by Convex's own conventions and makes the boundary between client and server code explicit and hard to accidentally blur.
+Everything lives in one Next.js project. The browser-facing code is under `src/app`, `src/components` and `src/lib`; everything that runs only on the server (database, business logic, background jobs, billing) is under `src/server` and `src/db`, and is reached from the browser exclusively through the RPC layer.
 
 ```
 reelcast/
 │
-├── app/                                        # Next.js application (PWA)
-│   ├── public/
-│   │   ├── icons/                              # PWA icons (192x192, 512x512, maskable)
-│   │   ├── manifest.json                       # PWA web app manifest
-│   │   └── sw.js                               # Service worker (generated by next-pwa)
+├── src/
+│   ├── app/                                    # Next.js App Router
+│   │   ├── (auth)/                             # Route group — sign-in / sign-up (minimal layout)
+│   │   │   ├── sign-in/page.tsx
+│   │   │   └── sign-up/page.tsx
+│   │   ├── (marketing)/                        # Route group — landing, contact, privacy, terms
+│   │   ├── (app)/                              # Route group — authenticated app shell (sidebar, topbar)
+│   │   │   ├── dashboard/  upload/  generate/  drafts/  video/[id]/
+│   │   │   ├── queue/  schedule/  content-calendar/  history/
+│   │   │   ├── analytics/  ideas/  intelligence/  profile/  ai-config/
+│   │   │   ├── settings/                       # general, ai, notifications, telegram, youtube
+│   │   │   └── billing/                        # Plan, usage, payments (Pesapal)
+│   │   ├── (admin)/admin/                      # Route group — admin console with its own layout, sidebar and top bar
+│   │   │   ├── page.tsx                        # Overview: what needs attention
+│   │   │   ├── users/  contact/                # People (users + user detail, messages)
+│   │   │   ├── videos/  jobs/                  # Content
+│   │   │   ├── billing/                        # Money: overview, subscriptions/, payments/, review/
+│   │   │   ├── usage/
+│   │   │   ├── system/                         # quota/, storage/, health/
+│   │   │   └── settings/                       # Platform API keys, Pesapal credentials
+│   │   ├── auth/callback/route.ts              # Supabase OAuth code exchange
+│   │   └── api/
+│   │       ├── rpc/route.ts                    # Single endpoint for all browser → server calls
+│   │       ├── cron/tick/route.ts              # Job runner entry point (pg_cron / any scheduler, needs CRON_SECRET)
+│   │       ├── cloudinary/sign/route.ts        # Signed direct-to-Cloudinary upload parameters
+│   │       ├── youtube/{connect,callback}/     # YouTube OAuth flow
+│   │       ├── webhooks/pesapal/ipn/route.ts   # Pesapal payment notifications (verified by re-query)
+│   │       └── billing/callback/route.ts       # Customer return from Pesapal checkout
 │   │
-│   ├── src/
-│   │   ├── app/                                # Next.js App Router
-│   │   │   ├── (auth)/                         # Route group — unauthenticated pages
-│   │   │   │   ├── sign-in/
-│   │   │   │   │   └── page.tsx
-│   │   │   │   ├── sign-up/
-│   │   │   │   │   └── page.tsx
-│   │   │   │   └── layout.tsx                  # Minimal layout for auth pages
-│   │   │   │
-│   │   │   ├── (marketing)/                    # Route group — public landing page
-│   │   │   │   ├── page.tsx                    # Landing page (/)
-│   │   │   │   └── layout.tsx
-│   │   │   │
-│   │   │   ├── (app)/                          # Route group — authenticated app shell
-│   │   │   │   ├── layout.tsx                  # App shell layout (sidebar, nav, auth guard)
-│   │   │   │   ├── dashboard/
-│   │   │   │   │   └── page.tsx
-│   │   │   │   ├── upload/
-│   │   │   │   │   └── page.tsx
-│   │   │   │   ├── drafts/
-│   │   │   │   │   └── page.tsx
-│   │   │   │   ├── video/
-│   │   │   │   │   └── [id]/
-│   │   │   │   │       └── page.tsx            # Video detail — config, metadata, controls
-│   │   │   │   ├── schedule/
-│   │   │   │   │   └── page.tsx
-│   │   │   │   ├── history/
-│   │   │   │   │   └── page.tsx
-│   │   │   │   ├── analytics/
-│   │   │   │   │   └── page.tsx
-│   │   │   │   └── settings/
-│   │   │   │       ├── page.tsx                # Settings index (redirects to /general)
-│   │   │   │       ├── general/
-│   │   │   │       │   └── page.tsx
-│   │   │   │       ├── ai/
-│   │   │   │       │   └── page.tsx            # AI generation defaults
-│   │   │   │       ├── youtube/
-│   │   │   │       │   └── page.tsx            # YouTube channel connection
-│   │   │   │       ├── telegram/
-│   │   │   │       │   └── page.tsx            # Telegram account connection
-│   │   │   │       └── notifications/
-│   │   │   │           └── page.tsx            # Notification event toggles
-│   │   │   │
-│   │   │   ├── api/                            # Next.js API routes
-│   │   │   │   ├── webhooks/
-│   │   │   │   │   └── clerk/
-│   │   │   │   │       └── route.ts            # Clerk webhook handler (user sync)
-│   │   │   │   └── youtube/
-│   │   │   │       └── callback/
-│   │   │   │           └── route.ts            # YouTube OAuth callback handler
-│   │   │   │
-│   │   │   ├── layout.tsx                      # Root layout (providers, fonts, metadata)
-│   │   │   ├── not-found.tsx
-│   │   │   └── error.tsx
-│   │   │
-│   │   ├── components/
-│   │   │   ├── ui/                             # Base design system components (shadcn/ui)
-│   │   │   │   ├── button.tsx
-│   │   │   │   ├── badge.tsx
-│   │   │   │   ├── card.tsx
-│   │   │   │   ├── dialog.tsx
-│   │   │   │   ├── dropdown-menu.tsx
-│   │   │   │   ├── input.tsx
-│   │   │   │   ├── label.tsx
-│   │   │   │   ├── progress.tsx
-│   │   │   │   ├── select.tsx
-│   │   │   │   ├── skeleton.tsx
-│   │   │   │   ├── switch.tsx
-│   │   │   │   ├── table.tsx
-│   │   │   │   ├── tabs.tsx
-│   │   │   │   ├── textarea.tsx
-│   │   │   │   └── tooltip.tsx
-│   │   │   │
-│   │   │   ├── layout/                         # Structural layout components
-│   │   │   │   ├── sidebar.tsx
-│   │   │   │   ├── topbar.tsx
-│   │   │   │   └── page-header.tsx
-│   │   │   │
-│   │   │   ├── video/                          # Video-specific components
-│   │   │   │   ├── video-card.tsx              # Draft card with status badge
-│   │   │   │   ├── video-status-badge.tsx      # Pipeline status pill
-│   │   │   │   ├── video-uploader.tsx          # Drag-and-drop upload widget
-│   │   │   │   ├── upload-progress.tsx         # Upload progress bar
-│   │   │   │   ├── ai-config-form.tsx          # Per-video AI settings override form
-│   │   │   │   ├── metadata-editor.tsx         # Editable title/description/tags form
-│   │   │   │   └── generation-trigger.tsx      # Immediate vs scheduled generation control
-│   │   │   │
-│   │   │   ├── publish/                        # Publishing-specific components
-│   │   │   │   ├── publish-controls.tsx        # Publish now vs schedule control
-│   │   │   │   └── schedule-picker.tsx         # Date/time picker for scheduling
-│   │   │   │
-│   │   │   ├── schedule/                       # Schedule page components
-│   │   │   │   ├── job-calendar.tsx            # Calendar view of scheduled jobs
-│   │   │   │   └── job-queue-list.tsx          # List view of upcoming jobs
-│   │   │   │
-│   │   │   ├── analytics/                      # Analytics page components
-│   │   │   │   ├── metrics-overview.tsx        # Channel-level summary cards
-│   │   │   │   ├── video-metrics-row.tsx       # Per-video metrics row
-│   │   │   │   └── performance-chart.tsx       # Views/watch time chart
-│   │   │   │
-│   │   │   ├── history/                        # History page components
-│   │   │   │   ├── job-log-row.tsx             # Single job log entry
-│   │   │   │   └── retry-button.tsx            # Retry/reschedule failed job
-│   │   │   │
-│   │   │   ├── settings/                       # Settings section components
-│   │   │   │   ├── ai-defaults-form.tsx
-│   │   │   │   ├── youtube-connect-card.tsx
-│   │   │   │   └── telegram-connect-card.tsx
-│   │   │   │
-│   │   │   └── shared/                         # General-purpose shared components
-│   │   │       ├── empty-state.tsx
-│   │   │       ├── error-boundary.tsx
-│   │   │       ├── loading-spinner.tsx
-│   │   │       └── confirm-dialog.tsx
-│   │   │
-│   │   ├── hooks/                              # Custom React hooks
-│   │   │   ├── use-upload.ts                   # Presigned URL fetch + direct R2 upload
-│   │   │   ├── use-video-status.ts             # Real-time video pipeline status
-│   │   │   ├── use-job-queue.ts                # Scheduled jobs live subscription
-│   │   │   └── use-analytics.ts               # YouTube Analytics data fetching
-│   │   │
-│   │   ├── lib/                                # Shared utility and config
-│   │   │   ├── convex.ts                       # ConvexProvider + ConvexWithAuth client setup
-│   │   │   ├── clerk.ts                        # Clerk client config
-│   │   │   ├── utils.ts                        # General utility functions (cn, formatDate, etc.)
-│   │   │   ├── constants.ts                    # App-wide constants (status enums, limits)
-│   │   │   └── validators.ts                   # Zod schemas for forms
-│   │   │
-│   │   └── types/                              # TypeScript type definitions
-│   │       ├── video.ts                        # Video and draft types
-│   │       ├── job.ts                          # Generation and publish job types
-│   │       ├── analytics.ts                    # YouTube Analytics response types
-│   │       └── settings.ts                     # User settings and AI config types
+│   ├── components/                             # UI, grouped by domain
+│   │   ├── ui/                                 # Base primitives (button, card, dialog, table, ...)
+│   │   ├── layout/  shared/                    # Sidebar, topbar, notifications popover, empty states, ...
+│   │   ├── admin/                              # shell/ (sidebar, top bar, page frame) and billing/ (admin money screens)
+│   │   ├── ai/  analytics/  billing/  calendar/  generation/  history/  publish/  schedule/  settings/
+│   │   ├── providers.tsx                       # Query client, theme, Supabase auth state
+│   │   └── analytics-provider.tsx              # Optional PostHog (off unless NEXT_PUBLIC_POSTHOG_KEY is set)
 │   │
-│   ├── next.config.ts                          # Next.js config (PWA, R2 image domains)
-│   ├── tailwind.config.ts
-│   ├── tsconfig.json
-│   ├── .env.local                              # Local environment variables (never committed)
-│   └── .env.example                            # Environment variable template
+│   ├── lib/
+│   │   ├── rpc/                                # client.ts: `api`, useQuery/useMutation/useAction; types.ts
+│   │   ├── supabase/                           # Browser and server Supabase clients
+│   │   └── constants.ts  utils.ts  validators.ts  eat.ts
+│   │
+│   ├── hooks/                                  # Small shared hooks (use-now, use-countdown)
+│   ├── types/                                  # Shared UI types
+│   │
+│   ├── db/                                     # Server only
+│   │   ├── schema.ts                           # All tables (Drizzle) — the data model
+│   │   └── client.ts                           # Postgres connection (transaction pooler)
+│   │
+│   ├── server/                                 # Server only — never imported by client components
+│   │   ├── auth.ts                             # Session → user row (ensureUser, requireUser, requireAdmin)
+│   │   ├── crypto.ts                           # AES-256-GCM for secrets at rest
+│   │   ├── rpc/                                # define.ts, dispatch.ts, registry.ts, errors.ts, wire.ts
+│   │   ├── modules/                            # The browser-callable API, one file per domain
+│   │   │   ├── videos.ts  jobs.ts  queue.ts  scheduling.ts  generations.ts  ideas.ts
+│   │   │   ├── settings.ts  users.ts  youtubeChannels.ts  notifications.ts  contact.ts
+│   │   │   ├── aiSessions.ts  aiMessages.ts  analytics.ts  videoAnalytics.ts  usageLedger.ts  billing.ts
+│   │   │   ├── actions/                        # Calls to external APIs (publishNow, metadata, generateThumbnail, ...)
+│   │   │   └── admin/                          # Admin-only functions (all require is_admin)
+│   │   ├── jobs/                               # Background work
+│   │   │   ├── queue.ts                        # enqueue / claim / retry / defer / recover
+│   │   │   ├── tick.ts                         # runTick(): sweeps, then drain jobs and tasks
+│   │   │   ├── handlers.ts  handlers/          # One handler file per domain (publish, generation, billing, analytics, system)
+│   │   │   └── kick.ts                         # Ask the runner to run now after enqueueing
+│   │   ├── billing/                            # Provider-agnostic core + pesapal/ adapter
+│   │   └── lib/                                # Domain logic and integrations
+│   │       ├── publish/  generation/  accounts/  analytics/  content/  ai/  youtube/
+│   │       └── ai.ts  cloudinary.ts  youtube.ts  notify.ts  email.ts  usage.ts  dto.ts  platformKeys.ts  ...
+│   │
+│   ├── middleware.ts                           # Redirects signed-out visitors away from app pages
+│   └── instrumentation.ts                      # Dev only: runs the job tick in-process every 5s
 │
-├── convex/                                     # Convex backend (co-located with app)
-│   ├── schema.ts                               # Database schema — all table definitions
-│   │
-│   ├── users.ts                                # User record queries and mutations
-│   ├── videos.ts                               # Video CRUD — queries, mutations
-│   ├── jobs.ts                                 # Job queue queries and status mutations
-│   ├── settings.ts                             # User AI settings queries and mutations
-│   │
-│   ├── actions/                                # Convex actions (can call external APIs)
-│   │   ├── storage.ts                          # Generate presigned R2 upload/download URLs
-│   │   ├── generation.ts                       # AI generation job — calls AI engine
-│   │   ├── publish.ts                          # YouTube publish job — calls YouTube API
-│   │   ├── metadata.ts                         # AI metadata generation (title/desc/tags)
-│   │   ├── analytics.ts                        # Fetch YouTube Analytics API data
-│   │   └── telegram.ts                         # Send Telegram notification via Bot API
-│   │
-│   ├── scheduled/                              # Scheduled function entry points
-│   │   ├── runGeneration.ts                    # Scheduled generation job dispatcher
-│   │   └── runPublish.ts                       # Scheduled publish job dispatcher
-│   │
-│   ├── lib/                                    # Convex-side shared utilities
-│   │   ├── youtube.ts                          # YouTube API client wrapper
-│   │   ├── r2.ts                               # Cloudflare R2 client wrapper
-│   │   ├── ai.ts                               # AI engine client wrapper (abstracted)
-│   │   ├── telegram.ts                         # Telegram Bot API client wrapper
-│   │   └── auth.ts                             # Auth helper — validate caller identity
-│   │
-│   └── _generated/                             # Auto-generated by Convex CLI (do not edit)
-│       ├── api.d.ts
-│       ├── dataModel.d.ts
-│       └── server.d.ts
-│
-├── .gitignore
-├── .env.example                                # Root-level env template
-├── package.json
-└── README.md                                   # This document
+├── drizzle/                                    # SQL migrations (generated + hand-written security migrations)
+├── drizzle.config.ts
+├── scripts/db-cron.ts                          # One-time production setup of the pg_cron schedule
+├── public/                                     # PWA manifest, service worker, icons, images
+├── docs/                                       # Specification, roadmap, build plan, Veo integration notes
+├── bunfig.toml                                 # Scopes `bun test` to src/
+├── .env.example                                # Every environment variable, documented
+└── package.json                                # Scripts: dev, build, check, db:generate, db:migrate, test
 ```
 
-### Key Structural Decisions
+### Day-to-day commands
 
-**Route groups `(auth)`, `(marketing)`, `(app)`** — Next.js route groups let pages share layouts without affecting the URL. The app shell layout (sidebar, topbar, auth guard) is applied only to routes inside `(app)`. Auth pages and the landing page get their own minimal layouts. This avoids conditional layout logic in a single root layout.
+```bash
+bun install
+cp .env.example .env.local     # fill in the values
+bun run db:migrate             # apply SQL migrations to your Supabase database
+bun run dev                    # the only process you need (job runner included)
+bun run check                  # typecheck + lint
+bun run test <file>            # bun test, e.g. src/server/rpc/rpc.test.ts
+bun run build
+```
 
-**`convex/lib/`** — All third-party API clients (YouTube, R2, AI engine, Telegram) live here as thin wrappers. Convex actions import from these wrappers rather than calling SDKs directly. This makes the AI provider swappable without touching action logic.
+## Key Structural Decisions
 
-**`convex/actions/` vs `convex/scheduled/`** — Actions contain the actual logic. Scheduled functions are lightweight entry points that simply invoke the corresponding action at the right time. This keeps scheduling concerns separate from execution logic.
+**Route groups `(auth)`, `(marketing)`, `(app)`** — Next.js route groups let pages share layouts without affecting the URL. The app shell (sidebar, topbar, auth guard) is applied only to routes inside `(app)`. Auth pages and the landing page get their own minimal layouts.
 
-**`src/components/` organisation by domain** — Components are grouped by feature domain (`video/`, `publish/`, `analytics/`) rather than by type (all modals together, all forms together). This makes it easy to find everything related to a feature in one place as the codebase grows.
+**`src/server/modules/` mirrors the API** — Every browser-callable function lives in one file per domain (`videos.ts`, `settings.ts`, …), with `actions/` for functions that call external APIs and `admin/` for admin-only ones. The registry in `src/server/rpc/registry.ts` is the complete list of what the browser may call; anything not registered is internal.
 
-**`src/hooks/`** — All Convex `useQuery` and `useMutation` calls are wrapped in custom hooks rather than called directly in page components. Pages stay clean and declarative; data-fetching logic is testable and reusable.
+**`src/server/lib/` holds the logic and the integrations** — Third-party clients (YouTube, Cloudinary, Gemini/Veo, Resend, Telegram) and domain logic (publishing, generation, accounts, analytics) live here, so modules stay thin and the code can be unit-tested without HTTP.
 
-**`.env.example`** — A committed template listing every required environment variable with placeholder values and a comment explaining each one. The actual `.env.local` is gitignored. Anyone cloning the repo knows exactly what keys to provision without reading the codebase.
+**`src/server/jobs/` is the only place background work is scheduled** — The queue, the runner and one handler file per domain. Nothing else schedules work.
+
+**The database layer is private** — `src/db/` is imported only by server code. Browser code gets data through the RPC layer and typed hooks (`src/lib/rpc/client.ts`), never directly from the database.
+
+**`src/components/` is organised by domain** — Components are grouped by feature (`publish/`, `generation/`, `billing/`, `admin/`) rather than by type, so everything related to a feature is in one place.
+
+**`.env.example`** — A template listing every environment variable with a comment explaining each one. The real `.env.local` is gitignored, so anyone cloning the repo knows exactly what to provision.

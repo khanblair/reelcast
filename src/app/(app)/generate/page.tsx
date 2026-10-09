@@ -2,9 +2,7 @@
 
 import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useQuery, useAction } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
-import { Id } from "../../../../convex/_generated/dataModel";
+import { api, useMutation, useQuery, useAction, type Id } from "@/lib/rpc/client";
 import { Sparkles, Loader2, Video, ArrowRight, Wand2, CheckSquare, Square, CheckCircle, AlertCircle } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -61,7 +59,7 @@ export default function GeneratePage() {
 
   const [metaSearch, setMetaSearch] = useState("");
   const [metaSelected, setMetaSelected] = useState<Set<string>>(new Set());
-  const [metaResults, setMetaResults] = useState<Map<string, { title: string } | { error: string }>>(new Map());
+  const [metaResults, setMetaResults] = useState<Map<string, { title: string; queued?: boolean } | { error: string }>>(new Map());
   const [metaProgress, setMetaProgress] = useState<{ done: number; total: number } | null>(null);
   const [metaRunning, setMetaRunning] = useState(false);
   const [readySelected, setReadySelected] = useState<Set<string>>(new Set());
@@ -129,13 +127,13 @@ export default function GeneratePage() {
     setMetaProgress({ done: 0, total: ids.length });
     setMetaResults(new Map());
 
-    const resultsAccumulated = new Map<string, { title: string } | { error: string }>();
+    const resultsAccumulated = new Map<string, { title: string; queued?: boolean } | { error: string }>();
 
     for (let i = 0; i < ids.length; i++) {
       const id = ids[i];
       try {
         const result = await generateForUpload({ videoId: id as Id<"videos"> });
-        resultsAccumulated.set(id, { title: result.title });
+        resultsAccumulated.set(id, { title: result.title, queued: result.queued });
         setMetaResults(new Map(resultsAccumulated));
       } catch (e) {
         resultsAccumulated.set(id, { error: e instanceof Error ? e.message : "Failed" });
@@ -144,9 +142,9 @@ export default function GeneratePage() {
       setMetaProgress({ done: i + 1, total: ids.length });
     }
 
-    // Auto-select successful ones for "mark as ready"
+    // Auto-select successful ones for "mark as ready" (not the ones still generating in the background)
     setReadySelected(new Set(
-      ids.filter(id => { const r = resultsAccumulated.get(id); return r !== undefined && "title" in r; })
+      ids.filter(id => { const r = resultsAccumulated.get(id); return r !== undefined && "title" in r && !r.queued; })
     ));
     setMetaRunning(false);
   };
@@ -156,7 +154,13 @@ export default function GeneratePage() {
     setMarkingReady(true);
     try {
       for (const id of readySelected) {
-        await updateStatus({ id: id as Id<"videos">, status: "ready" });
+        try {
+          await updateStatus({ id: id as Id<"videos">, status: "ready" });
+        } catch (e) {
+          // One video that can't be marked ready (e.g. it has no file yet, or it was
+          // scheduled meanwhile) must not stop the rest.
+          console.warn(`Could not mark ${id} ready:`, e);
+        }
       }
       setReadySelected(new Set());
       setMetaSelected(new Set());
@@ -465,6 +469,9 @@ export default function GeneratePage() {
                             <span className="text-muted-foreground truncate">{label}</span>
                             {" → "}
                             <span className="font-medium">&quot;{result.title}&quot;</span>
+                            {result.queued && (
+                              <span className="text-muted-foreground"> · generating in the background, check back shortly</span>
+                            )}
                           </span>
                         </button>
                       </div>

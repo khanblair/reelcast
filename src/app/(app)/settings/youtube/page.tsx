@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useQuery, useMutation, useAction } from "convex/react";
+import { useState } from "react";
+import { api, useQuery, useMutation, useAction } from "@/lib/rpc/client";
 import { useRouter } from "next/navigation";
-import { api } from "../../../../../convex/_generated/api";
 import {
   Youtube, CheckCircle, AlertCircle, XCircle, Loader2, RefreshCw, Unplug, Plus, Star, ArrowLeft
 } from "lucide-react";
@@ -36,7 +35,6 @@ export default function YouTubeSettingsPage() {
   const currentUser = useQuery(api.users.current);
   const removeChannel = useMutation(api.youtubeChannels.remove);
   const setPrimary = useMutation(api.youtubeChannels.setPrimary);
-  const migrateFromLegacy = useMutation(api.youtubeChannels.migrateFromLegacy);
   const checkHealth = useAction(api.actions.oauthHealthCheck.checkMyOAuthHealth);
 
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -44,15 +42,6 @@ export default function YouTubeSettingsPage() {
   const [settingPrimaryId, setSettingPrimaryId] = useState<string | null>(null);
   const [healthStatus, setHealthStatus] = useState<"idle" | "loading" | "done">("idle");
   const [healthResult, setHealthResult] = useState<{ status: OAuthStatus } | null>(null);
-
-  // Auto-migrate legacy single-channel users into the youtubeChannels table.
-  // Runs once when channels resolves to an empty array (meaning no records yet).
-  useEffect(() => {
-    if (channels !== undefined && channels.length === 0) {
-      migrateFromLegacy().catch(() => {});
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channels === undefined]);
 
   if (channels === undefined) {
     return (

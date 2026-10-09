@@ -1,26 +1,40 @@
 "use client";
 
-import { ConvexReactClient, ConvexProviderWithAuth } from "convex/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider as NextThemesProvider } from "next-themes";
-import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { SyncUserWithConvex } from "./sync-user-with-convex";
 
-const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+type AuthState = { isLoading: boolean; isAuthenticated: boolean };
+const AuthContext = createContext<AuthState>({ isLoading: true, isAuthenticated: false });
 
-function useSupabaseAuth() {
-  const [isAuthenticated, setAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+/** Replaces `useConvexAuth()`. */
+export function useAuthState() {
+  return useContext(AuthContext);
+}
+
+export function Providers({ children }: Readonly<{ children: ReactNode }>) {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: { staleTime: 10_000, refetchOnWindowFocus: true },
+        },
+      }),
+  );
+  const [auth, setAuth] = useState<AuthState>({ isLoading: true, isAuthenticated: false });
   const supabase = useMemo(() => createClient(), []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      setAuthenticated(!!data.session);
-      setIsLoading(false);
+      setAuth({ isLoading: false, isAuthenticated: !!data.session });
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
-      setAuthenticated(!!session);
-      setIsLoading(false);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      setAuth({ isLoading: false, isAuthenticated: !!session });
+      // Never show one account's cached data to the next account.
+      if (event === "SIGNED_OUT" || event === "SIGNED_IN") queryClient.clear();
     });
 
     // When the browser restores a page from bfcache (back/forward navigation),
@@ -35,32 +49,15 @@ function useSupabaseAuth() {
       subscription.unsubscribe();
       window.removeEventListener("pageshow", handlePageShow);
     };
-  }, [supabase]);
+  }, [supabase, queryClient]);
 
-  const fetchAccessToken = useCallback(async ({ forceRefreshToken }: { forceRefreshToken: boolean }) => {
-    if (forceRefreshToken) await supabase.auth.refreshSession();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return null;
-    // Exchange Supabase session for our own RS256-signed JWT that Convex can validate
-    const res = await fetch("/api/auth/token");
-    if (!res.ok) return null;
-    const { token } = await res.json();
-    return token as string;
-  }, [supabase]);
-
-  return useMemo(
-    () => ({ isLoading, isAuthenticated, fetchAccessToken }),
-    [isLoading, isAuthenticated, fetchAccessToken]
-  );
-}
-
-export function Providers({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <ConvexProviderWithAuth client={convex} useAuth={useSupabaseAuth}>
-      <NextThemesProvider attribute="class" defaultTheme="dark" enableSystem>
-        <SyncUserWithConvex />
-        {children}
-      </NextThemesProvider>
-    </ConvexProviderWithAuth>
+    <QueryClientProvider client={queryClient}>
+      <AuthContext.Provider value={auth}>
+        <NextThemesProvider attribute="class" defaultTheme="dark" enableSystem>
+          {children}
+        </NextThemesProvider>
+      </AuthContext.Provider>
+    </QueryClientProvider>
   );
 }

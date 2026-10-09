@@ -4,8 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import type { Route } from "next";
 import { usePathname } from "next/navigation";
-import { useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api";
+import { api, useQuery } from "@/lib/rpc/client";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,

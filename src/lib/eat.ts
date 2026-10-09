@@ -52,8 +52,8 @@ export function formatCountdown(remainingMs: number): string {
 
 // Next wall-clock auto-publish slot strictly after `afterMs`, given hour-of-day
 // slots (0-23) in a fixed timezone offset. Single source of truth for all
-// frontend auto-publish time projections — mirrors nextSlotMs in
-// convex/actions/autoPublish.ts, the backend scheduler's authoritative version.
+// frontend auto-publish time projections — mirrors the slot calculation of the
+// backend auto-publish task, which is the authoritative version.
 export function nextAutoPublishSlot(slots: number[], afterMs: number, tzOffsetHours = 3): number {
   const TZ_MS = tzOffsetHours * 3_600_000;
   const shifted = new Date(afterMs + TZ_MS);

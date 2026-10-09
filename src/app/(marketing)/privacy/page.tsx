@@ -50,7 +50,7 @@ export default function PrivacyPage() {
                 We collect information that you provide directly to us, including:
               </p>
               <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-4">
-                <li>Account information (name, email address) via Clerk authentication</li>
+                <li>Account information (name, email address) via Supabase authentication</li>
                 <li>YouTube channel connection data (access tokens, channel names)</li>
                 <li>Video files and metadata you upload for processing</li>
                 <li>AI-generated content preferences and settings</li>
@@ -76,7 +76,7 @@ export default function PrivacyPage() {
             <section className="space-y-3 pt-6">
               <h2 className="text-2xl font-semibold">4. Data Storage and Security</h2>
               <p className="text-muted-foreground leading-relaxed">
-                Your data is stored securely using Convex&apos;s infrastructure and Cloudinary for video storage. We implement industry-standard security measures including encryption in transit and at rest. YouTube access tokens are stored securely and refreshed automatically.
+                Your data is stored securely using Supabase&apos;s infrastructure and Cloudinary for video storage. We implement industry-standard security measures including encryption in transit and at rest. YouTube access tokens are stored securely and refreshed automatically.
               </p>
             </section>
 
@@ -86,10 +86,10 @@ export default function PrivacyPage() {
                 We use third-party services to operate ReelCast, including:
               </p>
               <ul className="list-disc list-inside text-muted-foreground space-y-1 ml-4">
-                <li><strong>Clerk</strong>: Authentication and user management</li>
+                <li><strong>Supabase</strong>: Authentication, database, and backend infrastructure</li>
                 <li><strong>Google / YouTube</strong>: Video publishing and channel data</li>
-                <li><strong>Convex</strong>: Database and backend infrastructure</li>
                 <li><strong>Cloudinary</strong>: Video and image storage</li>
+                <li><strong>Pesapal</strong>: Payment processing</li>
               </ul>
             </section>
 

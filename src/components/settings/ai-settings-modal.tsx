@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
+import { api, useQuery, useMutation } from "@/lib/rpc/client";
 import { X, Sparkles, Save, Loader2, Wand2, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -97,7 +96,7 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
         aiTone,
         aiLanguage,
         aiDescriptionLength,
-        aiGuidelines: aiGuidelines.trim() || undefined,
+        aiGuidelines: aiGuidelines.trim(),
         veoModel,
         veoResolution,
         veoAspectRatio,

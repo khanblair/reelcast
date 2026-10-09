@@ -4,9 +4,8 @@ import { useState, useMemo } from "react";
 import { useCountdown } from "@/hooks/use-countdown";
 import { useNow } from "@/hooks/use-now";
 import Link from "next/link";
-import { useQuery } from "convex/react";
 import { Upload, Film, Zap, Youtube, HardDrive, Sparkles, Wand2, CalendarClock, ArrowRight } from "lucide-react";
-import { api } from "../../../../convex/_generated/api";
+import { api, useQuery } from "@/lib/rpc/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -123,15 +122,7 @@ export default function DashboardPage() {
   const autoCountdownMs = useCountdown(userSettings?.autoPublishNextAt);
   const now = useNow();
 
-  const rangeStart     = getRangeStart(period);
-  const filteredVideos = useMemo(
-    () => (videos ?? []).filter(v => v._creationTime >= rangeStart),
-    [videos, rangeStart]
-  );
-  const filteredJobs = useMemo(
-    () => (jobs ?? []).filter(j => j._creationTime >= rangeStart),
-    [jobs, rangeStart]
-  );
+  const rangeStart = getRangeStart(period);
   // Published count: filter by publishedAt, not _creationTime, videos are often
   // created days before they go live, so creationTime-based filtering gives 0.
   const publishedCount = useMemo(() => {

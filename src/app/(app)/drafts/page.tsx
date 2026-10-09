@@ -2,9 +2,8 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { useQuery, useMutation, useAction } from "convex/react";
 import { Film, Plus, Search, SortAsc, CheckCircle2, Loader2, AlertTriangle, Timer } from "lucide-react";
-import { api } from "../../../../convex/_generated/api";
+import { api, useQuery, useMutation, useAction } from "@/lib/rpc/client";
 import { Button } from "@/components/ui/button";
 import { VideoCard } from "@/components/video-card";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";

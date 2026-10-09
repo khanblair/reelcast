@@ -7,7 +7,7 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   prettier,
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "convex/_generated/**"]),
+  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "brag-output/**"]),
 ]);
 
 export default eslintConfig;

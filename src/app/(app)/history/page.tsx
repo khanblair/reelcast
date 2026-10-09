@@ -2,10 +2,8 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { useQuery, useMutation } from "convex/react";
 import { History, RefreshCw, ExternalLink, CheckCircle, Clock, XCircle, Loader2, Wand2, CalendarClock } from "lucide-react";
-import { api } from "../../../../convex/_generated/api";
-import { Id, Doc } from "../../../../convex/_generated/dataModel";
+import { api, useQuery, useMutation, type Id, type Doc } from "@/lib/rpc/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -91,7 +89,7 @@ export default function HistoryPage() {
     try {
       await retryJob({ id: jobId });
     } catch (e) {
-      const message = e instanceof Error ? e.message.replace(/^Uncaught Error: /, "") : "Retry failed.";
+      const message = e instanceof Error ? e.message : "Retry failed.";
       setRetryErrors((prev) => ({ ...prev, [jobId]: message }));
     } finally {
       setRetryingId(null);

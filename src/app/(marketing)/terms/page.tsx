@@ -54,7 +54,7 @@ export default function TermsPage() {
             <section className="space-y-3 pt-6">
               <h2 className="text-2xl font-semibold">3. User Accounts</h2>
               <p className="text-muted-foreground leading-relaxed">
-                To use certain features of the Service, you must create an account using Clerk authentication. You are responsible for maintaining the confidentiality of your account credentials and for all activities that occur under your account. You agree to notify us immediately of any unauthorized use.
+                To use certain features of the Service, you must create an account using our authentication provider (Supabase). You are responsible for maintaining the confidentiality of your account credentials and for all activities that occur under your account. You agree to notify us immediately of any unauthorized use.
               </p>
             </section>
 

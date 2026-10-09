@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation, useAction } from "convex/react";
+import { api, useQuery, useMutation, useAction } from "@/lib/rpc/client";
 import { useRouter } from "next/navigation";
-import { api } from "../../../../../convex/_generated/api";
 import { MessageCircle, Save, Loader2, CheckCircle, XCircle, ArrowLeft } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,6 +13,7 @@ export default function TelegramSettingsPage() {
   const router = useRouter();
   const settings = useQuery(api.settings.get);
   const update = useMutation(api.settings.update);
+  const disconnectTelegram = useMutation(api.settings.disconnectTelegram);
   const testTelegram = useAction(api.actions.testConnections.testTelegram);
 
   const [chatIdInput, setChatIdInput] = useState("");
@@ -53,7 +53,8 @@ export default function TelegramSettingsPage() {
   const handleDisconnect = async () => {
     setDisconnecting(true);
     try {
-      await update({ telegramChatId: undefined });
+      // (update({ telegramChatId: undefined }) was a no-op: undefined means "leave unchanged".)
+      await disconnectTelegram();
     } finally {
       setDisconnecting(false);
     }

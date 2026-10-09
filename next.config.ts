@@ -18,12 +18,16 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },
+  // The admin console moved these pages under /admin/system. Temporary (not cached) so the URLs can still change.
+  async redirects() {
+    return [
+      { source: "/admin/quota", destination: "/admin/system/quota", permanent: false },
+      { source: "/admin/storage", destination: "/admin/system/storage", permanent: false },
+      { source: "/admin/health", destination: "/admin/system/health", permanent: false },
+    ];
+  },
   images: {
     remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "**.r2.dev",
-      },
       {
         protocol: "https",
         hostname: "i.ytimg.com",

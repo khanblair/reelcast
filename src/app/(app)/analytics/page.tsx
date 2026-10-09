@@ -1,14 +1,13 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useQuery, useAction } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
+import { api, useQuery, useAction } from "@/lib/rpc/client";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from "recharts";
-import { HardDrive, PlaySquare, Clock, Video, Eye, ThumbsUp, MessageSquare, Timer, RefreshCw, Youtube, Loader2 } from "lucide-react";
+import { HardDrive, PlaySquare, Clock, Video, Eye, ThumbsUp, MessageSquare, Timer, RefreshCw, Youtube, Loader2, MousePointerClick } from "lucide-react";
 import { formatDateTimeEAT } from "@/lib/eat";
 
 function formatBytes(bytes: number) {
@@ -31,8 +30,10 @@ export default function AnalyticsPage() {
   const channelSummary = useQuery(api.videoAnalytics.getChannelSummary);
   const videoAnalytics = useQuery(api.videoAnalytics.listForUser, {});
   const allVideos      = useQuery(api.videos.list);
+  const series         = useQuery(api.videoAnalytics.getTimeSeriesForUser, {});
   const fetchAnalytics = useAction(api.actions.youtubeAnalytics.fetchForUser);
   const [isFetchingAnalytics, setIsFetchingAnalytics] = useState(false);
+  const [fetchNote, setFetchNote] = useState<{ text: string; isError: boolean } | null>(null);
 
   const videoTitleMap = useMemo(
     () => new Map((allVideos ?? []).map((v) => [v._id as string, v.aiTitle ?? v.title] as const)),
@@ -63,10 +64,15 @@ export default function AnalyticsPage() {
 
   const handleFetchAnalytics = async () => {
     setIsFetchingAnalytics(true);
+    setFetchNote(null);
     try {
-      await fetchAnalytics();
+      const run = await fetchAnalytics();
+      if (run.truncated) {
+        setFetchNote({ text: `Refreshed the ${run.processed} most recent of ${run.total} published videos.`, isError: false });
+      }
     } catch (e) {
       console.error("Analytics fetch failed:", e);
+      setFetchNote({ text: e instanceof Error ? e.message : "Analytics refresh failed.", isError: true });
     } finally {
       setIsFetchingAnalytics(false);
     }
@@ -226,6 +232,55 @@ export default function AnalyticsPage() {
           </Button>
         </div>
 
+        {fetchNote && (
+          <p className={`text-sm ${fetchNote.isError ? "text-destructive" : "text-muted-foreground"}`}>{fetchNote.text}</p>
+        )}
+
+        {/* Time series: real per-day stats when the daily sync has data, else snapshot totals. */}
+        {series && series.source !== "none" && (
+          <Card>
+            <CardHeader>
+              <CardTitle>{series.source === "daily" ? "Views per Day" : "Total Views Over Time"}</CardTitle>
+              <CardDescription>
+                {series.source === "daily"
+                  ? `Last ${series.days} days from YouTube Analytics. The most recent 2-3 days can still be revised.`
+                  : "Lifetime views as of each refresh. A per-day breakdown appears after the first daily sync."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pl-2">
+              <div className="h-[200px] sm:h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={series.points} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.1} vertical={false} />
+                    <XAxis
+                      dataKey="day"
+                      stroke="#888888"
+                      fontSize={12}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(d: string) => d.slice(5)}
+                    />
+                    <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: 'hsl(var(--background))', borderColor: 'hsl(var(--border))' }}
+                      itemStyle={{ color: 'hsl(var(--foreground))' }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="views"
+                      name="Views"
+                      stroke="hsl(var(--primary))"
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 6 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {videoAnalytics === undefined ? (
           <div className="flex items-center justify-center py-12">
             <LoadingSpinner />
@@ -294,6 +349,18 @@ export default function AnalyticsPage() {
                   <div className="text-2xl font-bold">{formatDuration(avgViewDurationSec)}</div>
                 </CardContent>
               </Card>
+
+              {channelSummary?.avgCtr != null && (
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Avg Click-Through Rate</CardTitle>
+                    <MousePointerClick className="h-4 w-4 text-muted-foreground" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{(channelSummary.avgCtr * 100).toFixed(1)}%</div>
+                  </CardContent>
+                </Card>
+              )}
 
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

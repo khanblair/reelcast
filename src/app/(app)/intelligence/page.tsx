@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useAction } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
+import { api, useAction } from "@/lib/rpc/client";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { TrendingUp, Search, Lightbulb, Info } from "lucide-react";
 
 // ---------------------------------------------------------------------------
-// Types matching actual Convex action return shapes
+// Types matching the action return shapes (src/server/modules/actions/contentIntelligence.ts)
 // ---------------------------------------------------------------------------
 
 type TrendingVideo = {

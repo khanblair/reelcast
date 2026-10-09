@@ -1,10 +1,8 @@
 "use client";
 
-import { useQuery } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
+import { api, useQuery } from "@/lib/rpc/client";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import Image from "next/image";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,14 +55,13 @@ export default function ProfilePage() {
   const stats = useQuery(api.analytics.getDashboardStats);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  const router = useRouter();
 
   const handleSignOut = useCallback(async () => {
     setSigningOut(true);
     const supabase = createClient();
     await supabase.auth.signOut();
     window.location.href = "/sign-in";
-  }, [router]);
+  }, []);
 
   if (user === undefined) {
     return (

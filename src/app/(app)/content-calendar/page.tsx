@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
+import { api, useQuery } from "@/lib/rpc/client";
 import { CalendarDays, ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -619,7 +618,6 @@ function DayPanel({
 
 function DetailModal({
   detailEvent,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   detailVideo,
   onClose,
 }: {

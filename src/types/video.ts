@@ -35,6 +35,7 @@ export interface Video {
   aiTitle?: string;
   aiDescription?: string;
   aiTags?: string[];
+  /** Newest first (last 10), from video_metadata_versions. */
   metadataHistory?: Array<{
     savedAt: number;
     aiTitle?: string;
@@ -54,8 +55,6 @@ export interface Video {
   publishedAt?: number;
   scheduledPublishAt?: number;
   metadataScheduledAt?: number;
-  metadataSchedulerId?: string;
-  convexSchedulerId?: string;
   storageMissing?: boolean;
   storageCheckedAt?: number;
   privacyStatus?: PrivacyStatus;

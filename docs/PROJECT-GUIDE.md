@@ -120,7 +120,7 @@ Free, Pro and Elite, with limits enforced atomically on the server. Paid plans a
 
 ### Admin Panel
 
-An admin-only area for users, videos, jobs, quota, storage, health, usage, contact messages and platform settings (platform API keys, Pesapal credentials). Every admin action is checked on the server.
+An admin-only console with its own sidebar and routes, separate from the user app. Sections: **Overview** (what needs attention now), **People** (users, contact messages), **Content** (videos, jobs), **Money** (billing overview, subscriptions, payments, a queue of payments that need review, plan usage) and **System** (YouTube quota, storage, health, platform settings with API keys and Pesapal credentials). Every admin action is checked on the server.
 
 ---
 
@@ -145,7 +145,7 @@ An admin-only area for users, videos, jobs, quota, storage, health, usage, conta
 | `/settings` (+ `/ai`, `/general`, `/notifications`, `/telegram`, `/youtube`) | Account, YouTube connection, AI defaults, notification channels |
 | `/ai-config`, `/profile` | AI defaults and profile |
 | `/billing` | Plan, usage, payments, upgrade/cancel (Pesapal) |
-| `/admin/*` | Admin panel (users, videos, jobs, quota, storage, health, usage, contact, settings) |
+| `/admin/*` | Admin console with its own sidebar: overview, users, messages, videos, jobs, billing (subscriptions, payments, needs review), usage, system (quota, storage, health), settings |
 | `/contact`, `/privacy`, `/terms` | Marketing and legal pages |
 
 ---
@@ -226,8 +226,15 @@ reelcast/
 │   │   │   ├── queue/  schedule/  content-calendar/  history/
 │   │   │   ├── analytics/  ideas/  intelligence/  profile/  ai-config/
 │   │   │   ├── settings/                       # general, ai, notifications, telegram, youtube
-│   │   │   ├── billing/                        # Plan, usage, payments (Pesapal)
-│   │   │   └── admin/                          # users, videos, jobs, quota, storage, health, usage, contact, settings
+│   │   │   └── billing/                        # Plan, usage, payments (Pesapal)
+│   │   ├── (admin)/admin/                      # Route group — admin console with its own layout, sidebar and top bar
+│   │   │   ├── page.tsx                        # Overview: what needs attention
+│   │   │   ├── users/  contact/                # People (users + user detail, messages)
+│   │   │   ├── videos/  jobs/                  # Content
+│   │   │   ├── billing/                        # Money: overview, subscriptions/, payments/, review/
+│   │   │   ├── usage/
+│   │   │   ├── system/                         # quota/, storage/, health/
+│   │   │   └── settings/                       # Platform API keys, Pesapal credentials
 │   │   ├── auth/callback/route.ts              # Supabase OAuth code exchange
 │   │   └── api/
 │   │       ├── rpc/route.ts                    # Single endpoint for all browser → server calls
@@ -240,7 +247,8 @@ reelcast/
 │   ├── components/                             # UI, grouped by domain
 │   │   ├── ui/                                 # Base primitives (button, card, dialog, table, ...)
 │   │   ├── layout/  shared/                    # Sidebar, topbar, notifications popover, empty states, ...
-│   │   ├── admin/  ai/  analytics/  billing/  calendar/  generation/  history/  publish/  schedule/  settings/
+│   │   ├── admin/                              # shell/ (sidebar, top bar, page frame) and billing/ (admin money screens)
+│   │   ├── ai/  analytics/  billing/  calendar/  generation/  history/  publish/  schedule/  settings/
 │   │   ├── providers.tsx                       # Query client, theme, Supabase auth state
 │   │   └── analytics-provider.tsx              # Optional PostHog (off unless NEXT_PUBLIC_POSTHOG_KEY is set)
 │   │

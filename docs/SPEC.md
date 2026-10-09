@@ -84,7 +84,8 @@ Reelcast is an AI-powered YouTube publishing platform for content creators. It c
 
 The Next.js app uses three route groups:
 
-- `(app)` — authenticated user area: dashboard, upload, generate, library (`/drafts`), queue, schedule, content calendar, intelligence, ideas, history, analytics, billing, profile, settings, video detail (`/video/[id]`), and `/admin`
+- `(app)` — authenticated user area: dashboard, upload, generate, library (`/drafts`), queue, schedule, content calendar, intelligence, ideas, history, analytics, billing, profile, settings and video detail (`/video/[id]`)
+- `(admin)` — the admin console under `/admin/*`, with its own layout, sidebar and top bar (not wrapped by the user app shell)
 - `(auth)` — `/sign-in` and `/sign-up` (email/password and Google). The OAuth return lands on `/auth/callback`.
 - `(marketing)` — public landing page (with a pricing teaser), contact, privacy and terms
 
@@ -173,7 +174,7 @@ There is no real-time push. After any mutation or action succeeds, the client in
 
 Authentication is handled by **Supabase Auth**: email/password and Google OAuth. Sessions are cookie based (`@supabase/ssr`). On every request the server verifies the session JWT (`src/server/auth.ts`) and resolves the app user row; the first time a valid session is seen, `ensureUser` creates the `users` row (`users.id` is the Supabase auth user id). There is no separate token exchange, no custom JWT and no webhook for user sync. Deleting an auth user cascades to all of their data.
 
-Admin status is always read from `users.is_admin` in the database, never from the token. The `/admin` layout additionally checks it on the server before any admin UI is sent.
+Admin status is always read from `users.is_admin` in the database, never from the token. The admin layout (`src/app/(admin)/admin/layout.tsx`) additionally checks it on the server before any admin UI is sent.
 
 ### YouTube OAuth
 
@@ -504,11 +505,13 @@ Separate page for Telegram-specific configuration including bot setup instructio
 
 **Route:** `/admin`
 
-Accessible only to users with `is_admin = true`. Every admin RPC function is declared `auth: "admin"` and re-checks the flag in the database on each call, and the `/admin` layout also gates on the server before any admin UI is sent. The admin tab bar links to each sub-page.
+Accessible only to users with `is_admin = true`. Every admin RPC function is declared `auth: "admin"` and re-checks the flag in the database on each call, and the admin layout also gates on the server before any admin UI is sent.
+
+**Console layout:** the admin is its own area (route group `(admin)`) with a 240px sidebar of grouped sections, a top bar with a breadcrumb, theme toggle and account menu, and a skip-to-content link. Below 1024px the sidebar collapses to an icon rail; below 768px it opens as an off-canvas menu. The sections are **Overview** · **People** (Users, Messages) · **Content** (Videos, Jobs) · **Money** (Billing, Subscriptions, Payments, Needs review, Usage) · **System** (Quota, Storage, Health, Settings). The Needs review item shows a live count. Pages that moved: `/admin/quota`, `/admin/storage` and `/admin/health` now live under `/admin/system/` and the old URLs redirect.
 
 ### Overview (`/admin`)
 
-Platform stat cards (total users, YouTube connected, total videos, published videos, jobs today, auto-publish active, total storage, 24-hour publish success rate), shortcut cards, the 10 most recent failed jobs, and a **broadcast notification** form that sends an in-app notification to every user.
+A **Needs attention** strip (failed jobs in the last 24 hours, payments that need review, past-due subscriptions; a calm line when there is nothing), one hero metric (24-hour publish success rate) with supporting platform numbers (total users and how many connected YouTube, total and published videos, jobs today, auto-publish active, total storage), the most recent failed jobs, and a **broadcast notification** form that sends an in-app notification to every user.
 
 ### Users (`/admin/users`)
 
@@ -521,7 +524,7 @@ Table of all registered users with:
 
 ### User detail (`/admin/users/[userId]`)
 
-Account info, **plan** (grant Free / Pro / Elite by hand — a granted plan is recorded with `plan_source = "admin"` and is never removed by a subscription lapse), **admin access** toggle (self-demotion and removing the last remaining admin are refused), the user's videos (latest 200 plus the total count) and their 20 most recent jobs. Secrets are never shown; only "has key" flags.
+Account info, a **billing** card (the user's subscription and last payments), **plan** (grant Free / Pro / Elite by hand — a granted plan is recorded with `plan_source = "admin"` and is never removed by a subscription lapse), **admin access** toggle (self-demotion and removing the last remaining admin are refused), the user's videos (latest 200 plus the total count) and their 20 most recent jobs. Secrets are never shown; only "has key" flags.
 
 ### Videos (`/admin/videos`)
 
@@ -530,6 +533,15 @@ Table of the 200 most recent videos across all users with:
 - Status filter pills: All / Draft / Ready / Scheduled / Published / Failed
 - 20 per page with pagination
 - Columns: title, user, status, size, published / scheduled time, and a delete action (hard delete with a confirmation; the Cloudinary files are removed best effort)
+
+### Billing (`/admin/billing`)
+
+Money is read-only here: the console shows what Pesapal reported and helps an admin decide, but refunds are done in the Pesapal dashboard (the confirmation code is shown with a copy button for that). All data comes from `admin.billing.*` (`src/server/modules/admin/billing.ts`).
+
+- **Overview (`/admin/billing`):** active subscriptions as the hero number, then past due, awaiting payment, revenue for the last 30 days per currency (only payments that were completed *and* applied to a plan), and payments needing review. Below: the top of the review queue and the latest payments, plus a note about orders sent to Pesapal in the last 7 days that have not completed.
+- **Subscriptions (`/admin/billing/subscriptions`):** every subscription with its customer, plan, status, current period end, grace period, scheduled cancellation or plan change, and how the plan was granted (subscription vs admin). Filter by status (also via `?status=`), search by email, 25 per page.
+- **Payments (`/admin/billing/payments`):** every payment attempt, newest first. Filter all / completed / pending / failed / reversed, search by email. Opening a row shows its references (merchant reference, Pesapal tracking id, confirmation code), amounts, how it was applied, and the trail of notifications Pesapal sent with any processing error (raw payloads are never shown).
+- **Needs review (`/admin/billing/review`):** the queue of payments a human must handle. A payment lands here when its amount or currency did not match the order (plan not changed), when an upgrade was paid after the billing period had already moved on (not applied), or when Pesapal reversed it (subscription cancelled). Each item explains what happened and what to do, with the confirmation code to look up in Pesapal. **Mark as reviewed** records who reviewed it, when, and an optional note (max 500 characters); a payment can be reviewed once. "Show reviewed" lists the history.
 
 ### Jobs (`/admin/jobs`)
 
@@ -540,15 +552,15 @@ Background job monitoring with two tabs:
 
 Columns: type, video title, user, status, error message, timing
 
-### Quota (`/admin/quota`)
+### Quota (`/admin/system/quota`)
 
 Today's YouTube API quota usage: units consumed per user (heaviest first) and the platform total against the YouTube Data API daily limit (10,000 units).
 
-### Storage (`/admin/storage`)
+### Storage (`/admin/system/storage`)
 
 Total stored video size (the sum of recorded file sizes) and a per-user breakdown (video count, bytes, plan).
 
-### Health (`/admin/health`)
+### Health (`/admin/system/health`)
 
 - **Storage health:** healthy / missing / unchecked counts for all `ready` and `scheduled` videos, the list of videos with a missing Cloudinary file, and a "Check All Users" button (time-boxed to about 25 seconds per click; click again to continue)
 - **YouTube token health:** connected channels by OAuth status, listed with channel, user, primary/secondary role and status, and a "Recheck All" button (also time-boxed)
@@ -561,7 +573,7 @@ Monthly usage metering across all users with:
 - At-limit filter: shows only users who have reached a capped monthly limit
 - Table columns: user, plan, uploads, metadata, Veo and AI messages (each as used / limit)
 
-### Contact (`/admin/contact`)
+### Messages (`/admin/contact`)
 
 Submissions from the public contact form (new / read), with mark-as-read and delete.
 
@@ -589,7 +601,6 @@ Platform-level API key and billing configuration. Three cards:
 
 Keys are stored encrypted in the `platform_settings` singleton table. Key values are never sent to the browser — only boolean "is set" flags and masked hints. Server-side code retrieves and decrypts the values for use by AI and billing code.
 
-The admin tab bar also lists a "Billing" tab, but there is no `/admin/billing` page yet.
 
 ---
 

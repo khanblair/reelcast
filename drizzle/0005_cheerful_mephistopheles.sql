@@ -1,0 +1,1 @@
+CREATE INDEX "videos_user_scheduled_idx" ON "videos" USING btree ("user_id","created_at" DESC NULLS LAST) WHERE scheduled_publish_at is not null;

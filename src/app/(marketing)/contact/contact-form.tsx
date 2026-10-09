@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation } from "convex/react";
+import { api, useMutation } from "@/lib/rpc/client";
 import { Loader2, CheckCircle2, AlertCircle } from "lucide-react";
-import { api } from "../../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 

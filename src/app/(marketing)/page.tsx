@@ -3,6 +3,9 @@ import Image from "next/image";
 import type { Route } from "next";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
+import { formatMoney } from "@/components/billing/plans";
+import { PLAN_LIMITS } from "@/lib/plan-limits";
+import { getCurrency, getPlanPrices } from "@/server/billing/plans";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Sparkles,
@@ -30,6 +33,10 @@ import {
 } from "lucide-react";
 
 export default async function LandingPage() {
+  // Pricing copy reads the same limits and price the app enforces and charges.
+  const freeLimits = PLAN_LIMITS.free;
+  const proLimits = PLAN_LIMITS.pro;
+  const proPrice = formatMoney(getPlanPrices().pro ?? 0, getCurrency());
   const supabase = await createClient();
   const {
     data: { user },
@@ -620,8 +627,8 @@ export default async function LandingPage() {
               <p className="text-sm text-muted-foreground mb-8">Forever free, no card required</p>
               <ul className="space-y-3 mb-8">
                 {[
-                  "5 video uploads / month",
-                  "AI metadata generation",
+                  `${freeLimits.videosUploaded} video uploads / month`,
+                  `${freeLimits.metadataGenerated} AI metadata generations / month`,
                   "YouTube publishing",
                   "Basic scheduling",
                   "Content calendar",
@@ -649,15 +656,15 @@ export default async function LandingPage() {
                 <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-primary text-white">Popular</span>
               </div>
               <p className="text-sm font-semibold text-primary mb-1">Pro</p>
-              <p className="text-4xl font-extrabold mb-1">$29<span className="text-lg font-medium text-muted-foreground">/mo</span></p>
+              <p className="text-4xl font-extrabold mb-1">{proPrice}<span className="text-lg font-medium text-muted-foreground">/mo</span></p>
               <p className="text-sm text-muted-foreground mb-8">For serious creators</p>
               <ul className="space-y-3 mb-8">
                 {[
                   "Unlimited video uploads",
-                  "AI video generation (Veo)",
+                  `${proLimits.veoGenerated} AI videos (Veo) / month`,
                   "Auto-publish queue",
                   "Full analytics dashboard",
-                  "AI chat assistant",
+                  `AI chat assistant (${proLimits.aiMessagesUsed} messages / month)`,
                   "Idea Vault + notifications",
                   "Discord, Telegram & email alerts",
                 ].map((f) => (
@@ -673,7 +680,7 @@ export default async function LandingPage() {
                 </Link>
               ) : (
                 <Link href={"/sign-up" as Route}>
-                  <Button className="w-full">Start Free Trial</Button>
+                  <Button className="w-full">Get Started</Button>
                 </Link>
               )}
             </div>

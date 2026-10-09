@@ -1,0 +1,3 @@
+[test]
+# `bun test` only looks under src/ (scratch/upload_test.ts would hit Cloudinary).
+root = "./src"

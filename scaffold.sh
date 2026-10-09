@@ -70,10 +70,8 @@ touch app/src/app/\(app\)/settings/telegram/page.tsx
 touch app/src/app/\(app\)/settings/notifications/page.tsx
 
 # ── app/src/app/api ─────────────────────────────────────────
-mkdir -p app/src/app/api/webhooks/clerk
 mkdir -p app/src/app/api/youtube/callback
 
-touch app/src/app/api/webhooks/clerk/route.ts
 touch app/src/app/api/youtube/callback/route.ts
 
 # ── app/src/app root files ──────────────────────────────────
@@ -146,8 +144,6 @@ touch app/src/hooks/use-analytics.ts
 
 # ── app/src/lib ───────────────────────────────────────────
 mkdir -p app/src/lib
-touch app/src/lib/convex.ts
-touch app/src/lib/clerk.ts
 touch app/src/lib/utils.ts
 touch app/src/lib/constants.ts
 touch app/src/lib/validators.ts
@@ -165,47 +161,3 @@ touch app/tailwind.config.ts
 touch app/tsconfig.json
 touch app/.env.local
 touch app/.env.example
-
-# ── convex/ ─────────────────────────────────────────────────
-mkdir -p convex/actions
-mkdir -p convex/scheduled
-mkdir -p convex/lib
-mkdir -p convex/_generated
-
-touch convex/schema.ts
-touch convex/users.ts
-touch convex/videos.ts
-touch convex/jobs.ts
-touch convex/settings.ts
-
-# ── convex/actions ──────────────────────────────────────────
-touch convex/actions/storage.ts
-touch convex/actions/generation.ts
-touch convex/actions/publish.ts
-touch convex/actions/metadata.ts
-touch convex/actions/analytics.ts
-touch convex/actions/telegram.ts
-
-# ── convex/scheduled ────────────────────────────────────────
-touch convex/scheduled/runGeneration.ts
-touch convex/scheduled/runPublish.ts
-
-# ── convex/lib ─────────────────────────────────────────────
-touch convex/lib/youtube.ts
-touch convex/lib/r2.ts
-touch convex/lib/ai.ts
-touch convex/lib/telegram.ts
-touch convex/lib/auth.ts
-
-# ── convex/_generated ───────────────────────────────────────
-touch convex/_generated/api.d.ts
-touch convex/_generated/dataModel.d.ts
-touch convex/_generated/server.d.ts
-
-echo "✅  Done! Project scaffolded at ./${PROJECT}"
-echo ""
-echo "Next steps:"
-echo "  1. cd ${PROJECT}/app && npm install"
-echo "  2. cp .env.example .env.local and fill in your keys"
-echo "  3. npx convex dev to start the Convex backend"
-echo ""

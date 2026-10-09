@@ -50,7 +50,6 @@ self.addEventListener("fetch", (event) => {
   if (
     url.pathname.startsWith("/_next/") ||
     url.pathname.startsWith("/api/") ||
-    url.pathname.includes("/convex/") ||
     url.pathname.includes("/__")
   ) {
     return;

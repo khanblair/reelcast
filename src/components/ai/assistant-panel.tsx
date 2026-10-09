@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useQuery, useAction, useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import type { Id } from "../../../convex/_generated/dataModel";
+import { api, useQuery, useAction, useMutation } from "@/lib/rpc/client";
+import type { Id } from "@/lib/rpc/client";
 import {
   Send,
   Bot,

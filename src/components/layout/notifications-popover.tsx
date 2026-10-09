@@ -1,8 +1,6 @@
 "use client";
 
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { Id } from "../../../convex/_generated/dataModel";
+import { api, useQuery, useMutation } from "@/lib/rpc/client";
 import { Bell, Trash2, Loader2, Info, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -16,10 +14,10 @@ export function NotificationsPopover() {
   const markAllAsRead = useMutation(api.notifications.markAllAsRead);
   const clearAll = useMutation(api.notifications.clearAll);
 
-  const unreadCount = notifications?.filter((n: { isRead: boolean }) => !n.isRead).length || 0;
+  const unreadCount = notifications?.filter((n) => !n.isRead).length || 0;
 
-  const handleMarkAsRead = async (id: Id<"notifications">) => {
-    await markAsRead({ notificationId: id as Id<"notifications"> });
+  const handleMarkAsRead = async (id: string) => {
+    await markAsRead({ notificationId: id });
   };
 
   const getIcon = (type: string) => {
@@ -63,7 +61,7 @@ export function NotificationsPopover() {
             </div>
           ) : (
             <div className="flex flex-col">
-              {notifications.map((notification: { _id: Id<"notifications">; type: string; isRead: boolean; title: string; message: string; _creationTime: number }) => (
+              {notifications.map((notification) => (
                 <div 
                   key={notification._id}
                   className={cn(

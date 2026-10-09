@@ -1,7 +1,6 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
 import { Menu, User, LogOut, BotMessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
@@ -11,8 +10,7 @@ import { SidebarNav } from "./sidebar";
 import { NotificationsPopover } from "./notifications-popover";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AssistantPanel } from "@/components/ai/assistant-panel";
-import { useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api";
+import { api, useQuery } from "@/lib/rpc/client";
 import Image from "next/image";
 import Link from "next/link";
 import type { Route } from "next";
@@ -51,7 +49,6 @@ export function Topbar() {
   const [assistantOpen, setAssistantOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const router = useRouter();
   const user = useQuery(api.users.current);
 
   // Close dropdown on outside click
@@ -79,7 +76,7 @@ export function Topbar() {
     const supabase = createClient();
     await supabase.auth.signOut();
     window.location.href = "/sign-in";
-  }, [router]);
+  }, []);
 
   return (
     <>

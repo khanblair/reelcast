@@ -13,6 +13,12 @@ const PROTECTED_ROUTES = [
   "/ai-config",
   "/profile",
   "/billing",
+  "/admin",
+  "/queue",
+  "/generate",
+  "/ideas",
+  "/intelligence",
+  "/content-calendar",
 ];
 
 function isProtected(pathname: string) {
@@ -58,7 +64,9 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    "/(api|trpc)(.*)",
+    // /api/rpc, /api/cron and /api/webhooks authenticate themselves (session / secret / provider
+    // verification), so skip the extra Supabase round trip for them.
+    "/((?!_next|api/rpc|api/cron|api/webhooks|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    "/(api|trpc)((?!/(?:rpc|cron|webhooks)(?:/|$)).*)",
   ],
 };

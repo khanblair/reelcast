@@ -1,15 +1,25 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
-import { mintConvexJwt } from "@/lib/convex-jwt";
-import { fetchMutation } from "convex/nextjs";
-import { api } from "../../../../../convex/_generated/api";
+import { db } from "@/db/client";
+import { getSessionUser } from "@/server/auth";
+import { saveYoutubeConnection } from "@/server/lib/accounts/channels";
+import { RpcError } from "@/server/rpc/errors";
+
+const STATE_COOKIE = "yt_oauth_state";
+const GOOGLE_TIMEOUT_MS = 15_000;
 
 function getAppOrigin(request: Request) {
   if (process.env.NEXT_PUBLIC_APP_URL) {
     return process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
   }
   return new URL(request.url).origin;
+}
+
+/** Redirect and retire the one-time CSRF state cookie. */
+function redirect(url: string) {
+  const res = NextResponse.redirect(url, 302);
+  res.cookies.set(STATE_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 0, path: "/" });
+  return res;
 }
 
 export async function GET(request: Request) {
@@ -21,23 +31,34 @@ export async function GET(request: Request) {
 
   // Validate CSRF state
   const cookieStore = await cookies();
-  const stateCookie = cookieStore.get("yt_oauth_state")?.value;
+  const stateCookie = cookieStore.get(STATE_COOKIE)?.value;
   if (!stateParam || !stateCookie || stateParam !== stateCookie) {
-    return NextResponse.redirect(`${origin}/settings?youtube=error&reason=state_mismatch`, 302);
+    return redirect(`${origin}/settings?youtube=error&reason=state_mismatch`);
   }
 
   if (error) {
-    return NextResponse.redirect(`${origin}/settings?youtube=error&reason=${encodeURIComponent(error)}`, 302);
+    return redirect(`${origin}/settings?youtube=error&reason=${encodeURIComponent(error)}`);
   }
 
   if (!code) {
-    return NextResponse.redirect(`${origin}/settings?youtube=error&reason=missing_code`, 302);
+    return redirect(`${origin}/settings?youtube=error&reason=missing_code`);
   }
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
-    return NextResponse.redirect(`${origin}/settings?youtube=error&reason=server_config`, 302);
+    return redirect(`${origin}/settings?youtube=error&reason=server_config`);
+  }
+
+  // The session must still be valid before we spend the one-time authorization code.
+  let user: Awaited<ReturnType<typeof getSessionUser>> = null;
+  try {
+    user = await getSessionUser();
+  } catch {
+    user = null;
+  }
+  if (!user) {
+    return redirect(`${origin}/sign-in?redirect_url=/settings`);
   }
 
   const redirectUri = `${origin}/api/youtube/callback`;
@@ -52,15 +73,18 @@ export async function GET(request: Request) {
       redirect_uri: redirectUri,
       grant_type: "authorization_code",
     }),
-  });
+    signal: AbortSignal.timeout(GOOGLE_TIMEOUT_MS),
+  }).catch(() => null);
 
-  if (!tokenResponse.ok) {
-    const errorText = await tokenResponse.text();
-    console.error("YouTube token exchange failed:", errorText);
-    return NextResponse.redirect(`${origin}/settings?youtube=error&reason=token_exchange`, 302);
+  if (!tokenResponse || !tokenResponse.ok) {
+    console.error("YouTube token exchange failed:", tokenResponse ? tokenResponse.status : "network error");
+    return redirect(`${origin}/settings?youtube=error&reason=token_exchange`);
   }
 
-  const tokens = await tokenResponse.json();
+  const tokens = (await tokenResponse.json()) as { access_token?: string; refresh_token?: string; expires_in?: number };
+  if (!tokens.access_token) {
+    return redirect(`${origin}/settings?youtube=error&reason=token_exchange`);
+  }
 
   // Fetch connected channel name + ID
   let channelName: string | undefined;
@@ -68,7 +92,7 @@ export async function GET(request: Request) {
   try {
     const channelRes = await fetch(
       "https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true",
-      { headers: { Authorization: `Bearer ${tokens.access_token}` } }
+      { headers: { Authorization: `Bearer ${tokens.access_token}` }, signal: AbortSignal.timeout(GOOGLE_TIMEOUT_MS) }
     );
     if (channelRes.ok) {
       const channelData = await channelRes.json();
@@ -76,48 +100,33 @@ export async function GET(request: Request) {
       channelId = channelData.items?.[0]?.id as string | undefined;
     }
   } catch {
-    // Non-fatal, still save the tokens
+    // handled below: without a channel id there is nothing to store
   }
 
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.redirect(`${origin}/sign-in?redirect_url=/settings`, 302);
+  // Every stored connection is tied to a channel id (unique across accounts). Convex could keep
+  // channel-less tokens on the user row; here that would be an unusable, unrevocable orphan.
+  if (!channelId) {
+    return redirect(`${origin}/settings?youtube=error&reason=no_channel`);
   }
-
-  // Mint a proper Convex RS256 JWT (the Supabase access_token uses a different
-  // issuer and would be rejected by our Convex auth config)
-  const convexToken = mintConvexJwt(
-    user.id,
-    user.email,
-    user.user_metadata?.full_name ?? user.email,
-    user.user_metadata?.avatar_url,
-  );
 
   try {
-    await fetchMutation(
-      api.users.saveYoutubeTokens,
-      {
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
-        expiresIn: tokens.expires_in,
-        channelName,
-        channelId,
-      },
-      { token: convexToken }
-    );
+    await saveYoutubeConnection(db, user.id, {
+      channelId,
+      channelName,
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      expiresIn: tokens.expires_in ?? 3600,
+    });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "";
-    if (message.includes("CHANNEL_ALREADY_CLAIMED")) {
-      return NextResponse.redirect(`${origin}/settings?youtube=error&reason=channel_already_claimed`, 302);
+    if (err instanceof RpcError && err.code === "CONFLICT") {
+      return redirect(`${origin}/settings?youtube=error&reason=channel_already_claimed`);
     }
-    if (message.includes("CHANNEL_LIMIT_FREE_PLAN")) {
-      return NextResponse.redirect(`${origin}/settings?youtube=error&reason=channel_limit`, 302);
+    if (err instanceof RpcError && err.code === "PLAN_LIMIT_EXCEEDED") {
+      return redirect(`${origin}/settings?youtube=error&reason=channel_limit`);
     }
-    console.error("Failed to save YouTube tokens to Convex:", err);
-    return NextResponse.redirect(`${origin}/settings?youtube=error&reason=save_failed`, 302);
+    console.error("Failed to save YouTube connection:", err instanceof Error ? err.message : err);
+    return redirect(`${origin}/settings?youtube=error&reason=save_failed`);
   }
 
-  return NextResponse.redirect(`${origin}/settings?youtube=connected`, 302);
+  return redirect(`${origin}/settings?youtube=connected`);
 }

@@ -46,6 +46,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
 };
 
+import AnalyticsProvider from "@/components/analytics-provider";
 import { Providers } from "@/components/providers";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -57,7 +58,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
-        <Providers>{children}</Providers>
+        <Providers>
+          <AnalyticsProvider>{children}</AnalyticsProvider>
+        </Providers>
         <script
           dangerouslySetInnerHTML={{
             __html: `

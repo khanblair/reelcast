@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { mintConvexJwt } from "@/lib/convex-jwt";
-import { fetchQuery } from "convex/nextjs";
-import { api } from "../../../../../convex/_generated/api";
 import { v2 as cloudinary } from "cloudinary";
+import { getSessionUser } from "@/server/auth";
+import { PLAN_UPLOAD_LIMIT_BYTES } from "@/server/lib/usage";
 
 cloudinary.config({
   cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
@@ -11,16 +9,13 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Upload size limits in bytes per plan
-const PLAN_SIZE_LIMITS: Record<string, number> = {
-  free: 100 * 1024 * 1024,    // 100 MB
-  pro: 500 * 1024 * 1024,     // 500 MB
-  elite: 2 * 1024 * 1024 * 1024, // 2 GB
-};
-
 export async function POST() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  let user: Awaited<ReturnType<typeof getSessionUser>> = null;
+  try {
+    user = await getSessionUser();
+  } catch {
+    user = null;
+  }
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -30,22 +25,8 @@ export async function POST() {
     return NextResponse.json({ error: "Server misconfiguration" }, { status: 500 });
   }
 
-  // Fetch user plan from Convex to enforce upload size limit
-  let planKey = "free";
-  try {
-    const convexToken = mintConvexJwt(
-      user.id,
-      user.email,
-      user.user_metadata?.full_name ?? user.email,
-      user.user_metadata?.avatar_url,
-    );
-    const convexUser = await fetchQuery(api.users.current, {}, { token: convexToken });
-    planKey = convexUser?.plan ?? "free";
-  } catch {
-    // Non-fatal: default to free limits if Convex lookup fails
-  }
-
-  const maxFileSize = PLAN_SIZE_LIMITS[planKey] ?? PLAN_SIZE_LIMITS.free;
+  // Upload size limit comes from the user's plan (users.plan, set only by billing code or an admin).
+  const maxFileSize = PLAN_UPLOAD_LIMIT_BYTES[user.plan] ?? PLAN_UPLOAD_LIMIT_BYTES.free;
 
   try {
     const timestamp = Math.round(Date.now() / 1000);

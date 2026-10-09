@@ -18,7 +18,7 @@ type Overview = {
 };
 type Payment = {
   _id: string; email: string; amount: number; currency: string; statusCode?: number; statusText?: string;
-  flag?: string; flagLabel?: string; guidance?: string; reviewedAt?: number; reviewNote?: string; confirmationCode?: string;
+  flag?: string; flagLabel?: string; guidance?: string; reviewedAt?: number; reviewedByEmail?: string; reviewNote?: string; confirmationCode?: string;
   redirectUrl?: unknown;
 };
 
@@ -194,6 +194,8 @@ describe("admin.billing.listNeedsReview and markReviewed", () => {
       const reviewed = withReviewed.find((r) => r._id === m.id)!;
       expect(reviewed.reviewedAt).toBeGreaterThan(0);
       expect(reviewed.reviewNote).toBe("Refunded in Pesapal");
+      expect(reviewed.reviewedByEmail).toBe(admin.email); // who reviewed it
+      expect(withReviewed.find((r) => r._id !== m.id)!.reviewedByEmail).toBeUndefined();
     });
   });
 
@@ -247,7 +249,7 @@ describe("admin.billing.getPayment and forUser", () => {
       expect(r.events.length).toBe(2);
       expect(r.events.map((e) => e.notificationType).sort()).toEqual(["CALLBACKURL", "IPNCHANGE"]);
       expect(JSON.stringify(r)).not.toContain("raw-body");
-      await expect(callRpc("admin.billing.getPayment", { id: randomUUID() }, { user: admin, tx })).rejects.toMatchObject({ code: "NOT_FOUND" });
+      expect(await callRpc("admin.billing.getPayment", { id: randomUUID() }, { user: admin, tx })).toBeNull(); // not an error
     });
   });
 

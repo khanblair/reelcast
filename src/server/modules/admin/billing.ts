@@ -2,6 +2,7 @@
 // All functions are admin-only (`auth: "admin"`). Money is never moved from here: flagged payments are
 // refunded in the Pesapal dashboard (the confirmation code is shown for that) and then marked reviewed.
 import { and, desc, eq, ilike, inArray, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { paymentEvents, paymentOrders, subscriptions, SUBSCRIPTION_STATUSES, users } from "@/db/schema";
 import { mutation, query } from "../../rpc/define";
@@ -50,7 +51,7 @@ const paging = {
 };
 
 /** What an admin sees about a payment. No checkout links, no raw provider payloads. */
-function paymentDto(o: PaymentRow, u: { email: string; name: string | null }) {
+function paymentDto(o: PaymentRow, u: { email: string; name: string | null; reviewerEmail: string | null }) {
   const flag = flagOf(o);
   return {
     id: o.id,
@@ -73,15 +74,20 @@ function paymentDto(o: PaymentRow, u: { email: string; name: string | null }) {
     flagLabel: flag ? FLAGS[flag].label : null,
     guidance: flag ? FLAGS[flag].guidance : null,
     reviewedAt: o.reviewedAt,
+    reviewedByEmail: u.reviewerEmail,
     reviewNote: o.reviewNote,
     createdAt: o.createdAt,
   };
 }
 
+const reviewer = alias(users, "reviewer");
+
+/** A payment with its customer and (when reviewed) the admin who reviewed it. */
 const paymentUserJoin = {
   order: paymentOrders,
   email: users.email,
   name: users.name,
+  reviewerEmail: reviewer.email,
 };
 
 // ─── overview ────────────────────────────────────────────────────────────────
@@ -197,6 +203,7 @@ export const listPayments = query({
         .select(paymentUserJoin)
         .from(paymentOrders)
         .innerJoin(users, eq(users.id, paymentOrders.userId))
+        .leftJoin(reviewer, eq(reviewer.id, paymentOrders.reviewedBy))
         .where(where)
         .orderBy(desc(paymentOrders.createdAt))
         .limit(args.limit)
@@ -220,6 +227,7 @@ export const listNeedsReview = query({
         .select(paymentUserJoin)
         .from(paymentOrders)
         .innerJoin(users, eq(users.id, paymentOrders.userId))
+        .leftJoin(reviewer, eq(reviewer.id, paymentOrders.reviewedBy))
         .where(where)
         .orderBy(desc(paymentOrders.createdAt))
         .limit(args.limit)
@@ -259,9 +267,10 @@ export const getPayment = query({
       .select(paymentUserJoin)
       .from(paymentOrders)
       .innerJoin(users, eq(users.id, paymentOrders.userId))
+      .leftJoin(reviewer, eq(reviewer.id, paymentOrders.reviewedBy))
       .where(eq(paymentOrders.id, args.id))
       .limit(1);
-    if (!row) throw notFound("Payment not found");
+    if (!row) return null; // the UI shows "not found"; an error would go to the error boundary
 
     // Notification trail (what Pesapal told us and what we did), without the raw payloads.
     const keys = [row.order.orderTrackingId, row.order.merchantRef].filter((k): k is string => !!k);
@@ -310,6 +319,7 @@ export const forUser = query({
         .select(paymentUserJoin)
         .from(paymentOrders)
         .innerJoin(users, eq(users.id, paymentOrders.userId))
+        .leftJoin(reviewer, eq(reviewer.id, paymentOrders.reviewedBy))
         .where(eq(paymentOrders.userId, args.userId))
         .orderBy(desc(paymentOrders.createdAt))
         .limit(10),

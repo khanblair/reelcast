@@ -41,6 +41,8 @@ export const LIVE: Record<string, number> = {
   "billing.getStatus": 10000,
   "admin.jobs.listRecent": 10000,
   "admin.jobs.listFailed": 15000,
+  "admin.billing.overview": 30000,
+  "admin.billing.listNeedsReview": 30000,
   "admin.stats.getStats": 30000,
   "admin.quota.getQuotaOverview": 30000,
 };

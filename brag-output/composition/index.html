@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en" data-resolution="portrait">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <title>ReelCast — Ship while you sleep</title>
+    <script src="assets/gsap.min.js"></script>
+    <style>
+      :root {
+        --bg: #0f0f0f;
+        --card: #1a1a1a;
+        --sec: #272727;
+        --bd: #333333;
+        --fg: #f1f1f1;
+        --mut: #aaaaaa;
+        --red: #ff0335;
+        --green: #2ba640;
+        --amber: #f59e0b;
+        --bass: 0;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); }
+      #root {
+        position: relative; width: 100%; height: 100%; overflow: hidden;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: var(--fg); background: var(--bg);
+      }
+      .clip { position: absolute; inset: 0; }
+      .sheet { position: absolute; inset: 0; background: var(--bg); overflow: hidden; }
+      .h1 { font-weight: 900; letter-spacing: -0.04em; line-height: 0.96; display: block; width: max-content; }
+      .red { color: var(--red); }
+      .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+      svg.i { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+      /* audio-reactive ambient glow (bass drives opacity + scale; radial only, no linear gradients) */
+      .glow {
+        position: absolute; left: -110px; width: 1300px; height: 1300px; border-radius: 50%; pointer-events: none;
+        background: radial-gradient(circle, rgba(255,3,53,.46) 0%, rgba(255,3,53,.20) 34%, rgba(255,3,53,0) 68%);
+        opacity: calc(.30 + var(--bass) * .26);
+        transform: scale(calc(1 + var(--bass) * .08));
+      }
+      .g1 { top: 640px; } .g2 { top: 760px; } .g3 { top: 720px; } .g4 { top: -260px; } .g5 { top: 300px; left: -210px; width: 1500px; height: 1500px; }
+
+      /* ---------- Scene 1: hook ---------- */
+      .vf { position: absolute; width: 110px; height: 110px; border: 0 solid rgba(241,241,241,.55); }
+      .vf.tl { left: 56px; top: 56px; border-left-width: 7px; border-top-width: 7px; border-top-left-radius: 24px; }
+      .vf.tr { right: 56px; top: 56px; border-right-width: 7px; border-top-width: 7px; border-top-right-radius: 24px; }
+      .vf.bl { left: 56px; bottom: 56px; border-left-width: 7px; border-bottom-width: 7px; border-bottom-left-radius: 24px; }
+      .vf.br { right: 56px; bottom: 56px; border-right-width: 7px; border-bottom-width: 7px; border-bottom-right-radius: 24px; }
+      .rec { position: absolute; left: 104px; top: 150px; display: flex; align-items: center; gap: 18px; font-size: 34px; font-weight: 700; letter-spacing: .14em; }
+      .rec .dot { width: 28px; height: 28px; border-radius: 50%; background: var(--red); box-shadow: 0 0 24px rgba(255,3,53,.85); }
+      .hook { position: absolute; left: 72px; top: 250px; }
+      .hook .h1 { font-size: 206px; transform-origin: 0 100%; }
+      .filecard {
+        position: absolute; left: 72px; top: 780px; width: 936px; height: 210px; border-radius: 40px; overflow: hidden;
+        background: var(--card); border: 3px solid var(--bd); box-shadow: 0 30px 80px rgba(0,0,0,.6);
+        display: flex; align-items: center; gap: 32px; padding: 0 44px;
+      }
+      .tile { width: 104px; height: 104px; border-radius: 28px; display: flex; align-items: center; justify-content: center; flex: none; background: rgba(255,3,53,.16); }
+      .tile svg { width: 56px; height: 56px; stroke: var(--red); }
+      .filecard .tile { width: 128px; height: 128px; border-radius: 30px; }
+      .filecard .tile svg { width: 68px; height: 68px; }
+      .filecard .meta { flex: 1; min-width: 0; }
+      .filecard .name { font-size: 46px; font-weight: 700; letter-spacing: -.02em; white-space: nowrap; }
+      .filecard .sub { font-size: 30px; color: var(--mut); margin-top: 8px; }
+      .pctwrap { position: relative; width: 190px; height: 56px; flex: none; }
+      .pctwrap > span { position: absolute; right: 0; top: 0; font-size: 42px; font-weight: 700; white-space: nowrap; }
+      #pct { color: var(--mut); }
+      #upl { color: #4ade80; display: flex; align-items: center; gap: 10px; }
+      #upl svg { width: 40px; height: 40px; stroke: #4ade80; stroke-width: 3.5; }
+      .pbar { position: absolute; left: 0; right: 0; bottom: 0; height: 12px; background: #2a2a2a; }
+      .pfill { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; background: var(--red); transform-origin: 0 50%; }
+      .dropzone {
+        position: absolute; left: 72px; top: 1080px; width: 936px; height: 420px; border-radius: 52px;
+        border: 5px dashed rgba(255,3,53,.7); background: rgba(255,3,53,.06);
+        display: flex; align-items: center; justify-content: center;
+      }
+      .dz { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
+      .dz svg { width: 120px; height: 120px; stroke: var(--red); }
+      .dz .t { font-size: 56px; font-weight: 700; letter-spacing: -.02em; }
+      .dz .s { font-size: 34px; color: var(--mut); }
+      #curwrap { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+      #cursor { position: absolute; left: -9px; top: -6px; width: 72px; height: 72px; filter: drop-shadow(0 6px 10px rgba(0,0,0,.65)); }
+      #ripple { position: absolute; left: -60px; top: -60px; width: 120px; height: 120px; border-radius: 50%; border: 5px solid var(--red); opacity: 0; }
+
+      /* ---------- shared UI card ---------- */
+      .cap { position: absolute; left: 72px; top: 150px; }
+      .cap .h1 { font-size: 112px; }
+      .ui { position: absolute; left: 72px; top: 470px; width: 936px; background: var(--card); border: 3px solid var(--bd); border-radius: 52px; padding: 48px; box-shadow: 0 40px 100px rgba(0,0,0,.65); }
+      .ui-head { display: flex; align-items: center; gap: 26px; height: 112px; }
+      .ui-title { font-size: 48px; font-weight: 700; letter-spacing: -.02em; }
+      .ui-sub { position: relative; height: 40px; margin-top: 6px; font-size: 30px; color: var(--mut); }
+      .ui-sub span { position: absolute; left: 0; top: 0; white-space: nowrap; }
+      .pillbox { margin-left: auto; position: relative; width: 250px; height: 72px; flex: none; }
+      .pill { position: absolute; right: 0; top: 0; height: 72px; padding: 0 30px; border-radius: 999px; display: flex; align-items: center; gap: 12px; font-size: 32px; font-weight: 700; white-space: nowrap; }
+      .pill svg { width: 34px; height: 34px; stroke: currentColor; stroke-width: 3; }
+      .pill.amber { background: rgba(245,158,11,.16); color: var(--amber); }
+      .pill.green { background: rgba(43,166,64,.20); color: #4ade80; }
+      .pill.blue  { background: rgba(59,130,246,.20); color: #8bb9ff; }
+      .pill.s { height: 60px; font-size: 28px; padding: 0 24px; }
+      .pill.s svg { width: 28px; height: 28px; }
+
+      /* ---------- Scene 2 ---------- */
+      .field { margin-top: 40px; }
+      .lbl { font-size: 28px; color: var(--mut); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 16px; }
+      .box { position: relative; background: var(--bg); border: 3px solid var(--bd); border-radius: 30px; padding: 30px 34px; min-height: 262px; }
+      .title-text { font-size: 54px; font-weight: 700; letter-spacing: -.025em; line-height: 1.18; }
+      .caret { display: inline-block; width: 6px; height: 56px; background: var(--red); margin-left: 6px; vertical-align: -8px; }
+      .skel { position: absolute; left: 34px; right: 34px; top: 40px; }
+      .skel i { display: block; height: 34px; border-radius: 12px; background: #2a2a2a; margin-bottom: 24px; }
+      .chips { display: flex; flex-wrap: wrap; gap: 18px; }
+      .chip { padding: 16px 30px; border-radius: 999px; background: var(--sec); border: 2px solid var(--bd); font-size: 34px; }
+      .btns { display: flex; gap: 22px; margin-top: 44px; }
+      .btn { flex: 1; height: 104px; border-radius: 26px; display: flex; align-items: center; justify-content: center; gap: 16px; font-size: 38px; font-weight: 700; }
+      .btn.primary { background: var(--red); color: #fff; }
+      .btn.ghost { border: 3px solid var(--bd); color: var(--fg); }
+      .btn svg { width: 40px; height: 40px; stroke: #fff; fill: #fff; }
+
+      /* ---------- Scene 3 ---------- */
+      .cdlabel { margin-top: 30px; font-size: 28px; color: var(--mut); font-weight: 700; letter-spacing: .16em; }
+      .cd { font-size: 158px; font-weight: 700; letter-spacing: -.04em; line-height: 1.05; margin-top: 30px; width: max-content; }
+      .slots { display: flex; gap: 18px; margin-top: 34px; }
+      .slot { padding: 14px 30px; border-radius: 999px; background: var(--sec); border: 2px solid var(--bd); font-size: 36px; font-weight: 700; color: var(--mut); }
+      .slot.on { background: var(--red); border-color: var(--red); color: #fff; }
+      .qhead { display: flex; align-items: center; justify-content: space-between; margin-top: 44px; height: 52px; font-size: 30px; font-weight: 700; color: var(--mut); letter-spacing: .08em; text-transform: uppercase; }
+      .qcount { position: relative; width: 210px; height: 52px; }
+      .qcount span { position: absolute; right: 0; top: 0; height: 52px; display: flex; align-items: center; padding: 0 22px; border-radius: 999px; background: var(--sec); font-size: 28px; letter-spacing: .02em; text-transform: none; white-space: nowrap; }
+      .rows { margin-top: 18px; display: flex; flex-direction: column; gap: 16px; }
+      .row { position: relative; height: 120px; border-radius: 26px; background: var(--bg); border: 3px solid var(--bd); display: flex; align-items: center; gap: 20px; padding: 0 24px; }
+      .row .th { width: 84px; height: 56px; border-radius: 14px; background: var(--sec); display: flex; align-items: center; justify-content: center; flex: none; }
+      .row .th svg { width: 26px; height: 26px; fill: var(--mut); stroke: var(--mut); }
+      .row .tt { flex: 1; min-width: 0; font-size: 32px; font-weight: 700; line-height: 1.18; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+      .row .st { position: relative; width: 236px; height: 60px; flex: none; }
+      .st .pill { right: 0; }
+      #moon { position: absolute; right: 96px; top: 150px; width: 190px; height: 190px; }
+      #moonhalo { position: absolute; right: -14px; top: 40px; width: 460px; height: 460px; border-radius: 50%; background: radial-gradient(circle, rgba(241,241,241,.16) 0%, rgba(241,241,241,0) 66%); }
+      .z { position: absolute; width: 60px; height: 60px; stroke: #f1f1f1; stroke-width: 7; fill: none; stroke-linecap: round; stroke-linejoin: round; opacity: 0; }
+      #z1 { left: 722px; top: 330px; } #z2 { left: 690px; top: 340px; width: 46px; height: 46px; } #z3 { left: 660px; top: 350px; width: 36px; height: 36px; }
+      #flare { position: absolute; left: -110px; top: 480px; width: 1300px; height: 1300px; border-radius: 50%; background: radial-gradient(circle, rgba(255,3,53,.5) 0%, rgba(255,3,53,0) 62%); opacity: 0; pointer-events: none; }
+
+      /* ---------- Scene 4: lock screen ---------- */
+      .star { position: absolute; border-radius: 50%; background: #f1f1f1; }
+      .sleep { position: absolute; left: 0; right: 0; top: 170px; margin: 0 auto; width: max-content; display: flex; align-items: center; gap: 16px; padding: 16px 34px; border-radius: 999px; background: var(--sec); font-size: 34px; font-weight: 700; }
+      .sleep svg { width: 36px; height: 36px; fill: var(--fg); stroke: none; }
+      .clock { position: absolute; left: 0; right: 0; top: 260px; text-align: center; font-size: 340px; font-weight: 900; letter-spacing: -.05em; line-height: 1; }
+      #notifwrap { position: absolute; left: 72px; top: 800px; width: 936px; }
+      .notif { position: relative; background: #202020; border: 3px solid var(--bd); border-radius: 48px; padding: 40px 44px 44px; box-shadow: 0 40px 100px rgba(0,0,0,.7); }
+      .notif.back { position: absolute; left: 40px; right: 40px; top: -28px; height: 120px; background: #181818; border-radius: 44px; padding: 0; box-shadow: none; }
+      .n-head { display: flex; align-items: center; gap: 24px; }
+      .n-ico { width: 92px; height: 92px; border-radius: 24px; }
+      .n-app { font-size: 38px; font-weight: 700; }
+      .n-time { margin-left: auto; font-size: 32px; color: var(--mut); }
+      .n-body { font-size: 46px; line-height: 1.28; margin-top: 26px; }
+      .n-body b { font-weight: 700; }
+      .n-link { font-size: 34px; color: var(--mut); margin-top: 16px; }
+      .n-check { position: absolute; right: 34px; top: -48px; width: 104px; height: 104px; border-radius: 50%; background: var(--green); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 8px #0f0f0f; }
+      .n-check svg { width: 60px; height: 60px; stroke: #fff; stroke-width: 4; }
+      .cap2 { position: absolute; left: 72px; top: 1330px; }
+      .cap2 .h1 { font-size: 136px; }
+
+      /* ---------- Scene 5: outro ---------- */
+      .lock { position: absolute; left: 0; right: 0; top: 470px; display: flex; flex-direction: column; align-items: center; text-align: center; }
+      #logo { width: 260px; height: 260px; filter: drop-shadow(0 20px 60px rgba(255,3,53,.5)); }
+      .wm { font-size: 176px; margin-top: 34px; }
+      .rule { width: 220px; height: 8px; border-radius: 4px; background: var(--red); margin: 36px 0; transform-origin: 50% 50%; }
+      .tg { font-size: 80px; font-weight: 900; letter-spacing: -.035em; line-height: 1.04; display: block; width: max-content; }
+      .sub2 { font-size: 42px; color: var(--mut); margin-top: 38px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="22.12" data-width="1080" data-height="1920">
+
+      <!-- ============ Scene 1: hook ============ -->
+      <section id="s1" class="clip" data-start="0" data-duration="4.05" data-track-index="1">
+        <div class="sheet" id="s1sheet" data-layout-allow-occlusion>
+          <div class="glow g1" data-layout-ignore></div>
+          <div id="vf"><div class="vf tl"></div><div class="vf tr"></div><div class="vf bl"></div><div class="vf br"></div></div>
+          <div class="rec" id="rec"><span class="dot" id="recdot"></span><span class="mono">REC</span></div>
+          <div class="hook">
+            <div class="h1" id="hk1" data-layout-allow-overlap>You hit</div>
+            <div class="h1 red" id="hk2" data-layout-allow-overlap>record.</div>
+          </div>
+          <div class="dropzone" id="dropzone">
+            <div class="dz">
+              <svg class="i" viewBox="0 0 24 24"><path d="M4 14.9A7 7 0 1 1 15.7 8h1.8a4.5 4.5 0 0 1 2.5 8.2"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg>
+              <div class="t" data-layout-allow-overlap>Upload your footage</div>
+              <div class="s">Drop in your raw video file.</div>
+            </div>
+          </div>
+          <div class="filecard" id="filecard">
+            <div class="tile"><svg class="i" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M7 3v18"/><path d="M3 7.5h4"/><path d="M3 12h18"/><path d="M3 16.5h4"/><path d="M17 3v18"/><path d="M17 7.5h4"/><path d="M17 16.5h4"/></svg></div>
+            <div class="meta"><div class="name">IMG_4471.mov</div><div class="sub mono" data-layout-allow-overlap>812 MB · 0:47</div></div>
+            <div class="pctwrap"><span id="pct" class="mono" data-layout-allow-overlap>0%</span><span id="upl" data-layout-allow-overlap><svg class="i" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Uploaded</span></div>
+            <div class="pbar"><div class="pfill" id="pfill"></div></div>
+          </div>
+          <div id="curwrap">
+            <div id="ripple"></div>
+            <svg id="cursor" viewBox="0 0 24 24"><path d="M3 2 L3 19 L8 14.5 L11.5 21.5 L14 20.4 L10.7 13.6 L17.5 13.2 Z" fill="#ffffff" stroke="#0f0f0f" stroke-width="1.3" stroke-linejoin="round"/></svg>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ Scene 2: AI writes the metadata ============ -->
+      <section id="s2" class="clip" data-start="3.7" data-duration="4.96" data-track-index="2">
+        <div class="sheet" id="s2sheet" data-layout-allow-occlusion>
+          <div class="glow g2" data-layout-ignore></div>
+          <div class="cap"><div class="h1" id="s2c1" data-layout-allow-overlap>AI writes</div><div class="h1" id="s2c2" data-layout-allow-overlap>the <span class="red">metadata.</span></div></div>
+          <div class="ui" id="mdcard">
+            <div class="ui-head">
+              <div class="tile"><svg class="i" viewBox="0 0 24 24"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg></div>
+              <div><div class="ui-title">AI Metadata</div><div class="ui-sub"><span id="sub1" data-layout-allow-overlap>Analyzing your video…</span><span id="sub2" data-layout-allow-overlap>Generated in 4.2s</span></div></div>
+              <div class="pillbox">
+                <div class="pill amber" id="pgen" data-layout-allow-overlap>Generating</div>
+                <div class="pill green" id="prdy" data-layout-allow-overlap><svg class="i" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>Ready</div>
+              </div>
+            </div>
+            <div class="field">
+              <div class="lbl">Title</div>
+              <div class="box">
+                <div class="skel" id="skel"><i style="width:100%"></i><i style="width:88%"></i><i style="width:52%"></i></div>
+                <div class="title-text"><span id="titletxt"></span><span class="caret" id="caret"></span></div>
+              </div>
+            </div>
+            <div class="field">
+              <div class="lbl">Tags</div>
+              <div class="chips">
+                <span class="chip" id="chip1">youtube thumbnails</span>
+                <span class="chip" id="chip2">increase CTR</span>
+                <span class="chip" id="chip3">thumbnail design</span>
+                <span class="chip" id="chip4">youtube growth</span>
+              </div>
+            </div>
+            <div class="btns" id="btns">
+              <div class="btn primary"><svg class="i" viewBox="0 0 24 24"><polygon points="7,4 20,12 7,20"/></svg>Publish Now</div>
+              <div class="btn ghost">Schedule</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ Scene 3: even while you sleep ============ -->
+      <section id="s3" class="clip" data-start="8.44" data-duration="5.93" data-track-index="3">
+        <div class="sheet" id="s3sheet" data-layout-allow-occlusion>
+          <div class="glow g3" data-layout-ignore></div>
+          <div id="flare" data-layout-ignore></div>
+          <div id="moonhalo" data-layout-ignore></div>
+          <svg id="moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" fill="#f1f1f1"/></svg>
+          <svg class="z" id="z1" viewBox="0 0 24 24"><path d="M5 5h14L5 19h14"/></svg>
+          <svg class="z" id="z2" viewBox="0 0 24 24"><path d="M5 5h14L5 19h14"/></svg>
+          <svg class="z" id="z3" viewBox="0 0 24 24"><path d="M5 5h14L5 19h14"/></svg>
+          <div class="cap">
+            <div id="s3a"><div class="h1" id="s3a1" data-layout-allow-overlap>Set your</div><div class="h1 red" id="s3a2" data-layout-allow-overlap>cadence.</div></div>
+            <div style="position:absolute;left:0;top:0"><div class="h1" id="s3b1" data-layout-allow-overlap>Even while</div><div class="h1 red" id="s3b2" data-layout-allow-overlap>you sleep.</div></div>
+          </div>
+          <div class="ui" id="apcard">
+            <div class="ui-head">
+              <div class="tile"><svg class="i" viewBox="0 0 24 24"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></svg></div>
+              <div><div class="ui-title">Auto-Publish</div></div>
+              <div class="pillbox"><div class="pill green" style="opacity:1">On</div></div>
+            </div>
+            <div class="cdlabel mono">NEXT PUBLISH</div>
+            <div class="cd mono" id="cd">05:59:41</div>
+            <div class="slots"><span class="slot on" id="slot1">03:00</span><span class="slot">12:00</span><span class="slot">20:00</span></div>
+            <div class="qhead"><span>Queue</span><span class="qcount"><span id="cnt1" data-layout-allow-overlap>4 ready</span><span id="cnt2" style="opacity:0" data-layout-allow-overlap>3 ready</span></span></div>
+            <div class="rows">
+              <div class="row" id="row1">
+                <div class="th"><svg class="i" viewBox="0 0 24 24"><polygon points="7,4 20,12 7,20"/></svg></div>
+                <div class="tt">10 YouTube Thumbnail Mistakes</div>
+                <div class="st">
+                  <div class="pill s green" id="r1rdy" data-layout-allow-overlap>ready</div>
+                  <div class="pill s blue" id="r1pub" data-layout-allow-overlap style="opacity:0">publishing</div>
+                  <div class="pill s green" id="r1done" data-layout-allow-overlap style="opacity:0"><svg class="i" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>published</div>
+                </div>
+              </div>
+              <div class="row" id="row2">
+                <div class="th"><svg class="i" viewBox="0 0 24 24"><polygon points="7,4 20,12 7,20"/></svg></div>
+                <div class="tt">The Perfect YouTube Workflow for 2026</div>
+                <div class="st"><div class="pill s green">ready</div></div>
+              </div>
+              <div class="row" id="row3">
+                <div class="th"><svg class="i" viewBox="0 0 24 24"><polygon points="7,4 20,12 7,20"/></svg></div>
+                <div class="tt">10 Tips for Better Thumbnail Design</div>
+                <div class="st"><div class="pill s green">ready</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ Scene 4: proof (lock screen) ============ -->
+      <section id="s4" class="clip" data-start="14.22" data-duration="4.24" data-track-index="4">
+        <div class="sheet" id="s4sheet" style="opacity:0">
+          <div class="glow g4" data-layout-ignore></div>
+          <div class="star" style="left:120px;top:96px;width:8px;height:8px"></div>
+          <div class="star" style="left:940px;top:120px;width:10px;height:10px"></div>
+          <div class="star" style="left:250px;top:610px;width:7px;height:7px"></div>
+          <div class="star" style="left:820px;top:560px;width:9px;height:9px"></div>
+          <div class="star" style="left:64px;top:420px;width:6px;height:6px"></div>
+          <div class="star" style="left:1000px;top:400px;width:7px;height:7px"></div>
+          <div class="star" style="left:560px;top:92px;width:6px;height:6px"></div>
+          <div class="star" style="left:400px;top:700px;width:8px;height:8px"></div>
+          <div class="sleep" id="sleep"><svg viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>Sleep</div>
+          <div class="clock" id="clock">3:00</div>
+          <div id="notifwrap">
+            <div class="notif back" id="nback"></div>
+            <div class="notif" id="notif">
+              <div class="n-head"><img class="n-ico" id="nico" src="assets/logo-notif.png" alt="ReelCast" /><div class="n-app">ReelCast</div><div class="n-time">now</div></div>
+              <div class="n-body">🎬 <b>Published:</b> “10 YouTube Thumbnail Mistakes…” is now live on YouTube!</div>
+              <div class="n-link mono">youtu.be/x7Kp2mQ9aVc</div>
+              <div class="n-check" id="ncheck"><svg class="i" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg></div>
+            </div>
+          </div>
+          <div class="cap2"><div class="h1" id="s4c1" data-layout-allow-overlap>You were</div><div class="h1 red" id="s4c2" data-layout-allow-overlap>asleep.</div></div>
+        </div>
+      </section>
+
+      <!-- ============ Scene 5: outro ============ -->
+      <section id="s5" class="clip" data-start="18.24" data-duration="3.88" data-track-index="5">
+        <div class="sheet" id="s5sheet" style="opacity:0">
+          <div class="glow g5" data-layout-ignore></div>
+          <div class="lock">
+            <img id="logo" src="assets/logo.png" alt="ReelCast" />
+            <div class="h1 wm" id="wm">ReelCast</div>
+            <div class="rule" id="rule"></div>
+            <div class="tg" id="tg1" data-layout-allow-overlap>From raw footage</div>
+            <div class="tg red" id="tg2" data-layout-allow-overlap>to live on YouTube.</div>
+            <div class="sub2" id="sub">Built for creators who ship daily.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ Audio: music bed + motion-matched SFX ============ -->
+    <audio id="bgm" data-start="0" data-duration="22.12" data-track-index="10" data-volume="1" data-automation="{&quot;version&quot;:1,&quot;lanes&quot;:[{&quot;target&quot;:&quot;volume&quot;,&quot;points&quot;:[{&quot;t&quot;:0,&quot;v&quot;:0},{&quot;t&quot;:0.15,&quot;v&quot;:0.06},{&quot;t&quot;:0.35,&quot;v&quot;:0.2},{&quot;t&quot;:0.6,&quot;v&quot;:0.35},{&quot;t&quot;:20.8,&quot;v&quot;:0.35},{&quot;t&quot;:21.2,&quot;v&quot;:0.31},{&quot;t&quot;:21.6,&quot;v&quot;:0.19},{&quot;t&quot;:21.9,&quot;v&quot;:0.07},{&quot;t&quot;:22.12,&quot;v&quot;:0}]}]}" src="assets/music/happy-beats-business-moves-vol-9-by-ende-dot-app.mp3"></audio>
+    <audio id="sfx-hook" data-start="0.12" data-duration="0.19" data-track-index="11" data-volume="0.70" src="assets/sfx/impact/impactSoft_medium_001.ogg"></audio>
+    <audio id="sfx-card" data-start="0.95" data-duration="0.2" data-track-index="12" data-volume="0.55" src="assets/sfx/interface/drop_002.ogg"></audio>
+    <audio id="sfx-grab" data-start="1.95" data-duration="0.05" data-track-index="13" data-volume="0.60" src="assets/sfx/interface/click_003.ogg"></audio>
+    <audio id="sfx-drop" data-start="2.63" data-duration="0.12" data-track-index="14" data-volume="0.60" src="assets/sfx/interface/drop_001.ogg"></audio>
+    <audio id="sfx-done" data-start="3.3" data-duration="0.05" data-track-index="15" data-volume="0.55" src="assets/sfx/interface/click_005.ogg"></audio>
+    <audio id="sfx-ready" data-start="4.23" data-duration="0.13" data-track-index="16" data-volume="0.60" src="assets/sfx/interface/bong_001.ogg"></audio>
+    <audio id="sfx-chip1" data-start="5.28" data-duration="0.19" data-track-index="17" data-volume="0.35" src="assets/sfx/interface/drop_002.ogg"></audio>
+    <audio id="sfx-chip2" data-start="5.8" data-duration="0.19" data-track-index="17" data-volume="0.35" src="assets/sfx/interface/drop_002.ogg"></audio>
+    <audio id="sfx-chip3" data-start="6.34" data-duration="0.19" data-track-index="17" data-volume="0.35" src="assets/sfx/interface/drop_002.ogg"></audio>
+    <audio id="sfx-chip4" data-start="6.86" data-duration="0.19" data-track-index="17" data-volume="0.35" src="assets/sfx/interface/drop_002.ogg"></audio>
+    <audio id="sfx-s3" data-start="8.5" data-duration="0.6" data-track-index="18" data-volume="0.50" src="assets/sfx/casino/card-slide-1.ogg"></audio>
+    <audio id="sfx-row1" data-start="9.5" data-duration="0.19" data-track-index="19" data-volume="0.35" src="assets/sfx/interface/drop_003.ogg"></audio>
+    <audio id="sfx-row2" data-start="10.01" data-duration="0.19" data-track-index="19" data-volume="0.35" src="assets/sfx/interface/drop_003.ogg"></audio>
+    <audio id="sfx-row3" data-start="10.54" data-duration="0.19" data-track-index="19" data-volume="0.35" src="assets/sfx/interface/drop_003.ogg"></audio>
+    <audio id="sfx-zero" data-start="12.62" data-duration="0.14" data-track-index="24" data-volume="0.80" src="assets/sfx/impact/impactSoft_medium_002.ogg"></audio>
+    <audio id="sfx-pub" data-start="13.18" data-duration="0.05" data-track-index="25" data-volume="0.55" src="assets/sfx/interface/click_005.ogg"></audio>
+    <audio id="sfx-nslide" data-start="14.68" data-duration="0.6" data-track-index="26" data-volume="0.50" src="assets/sfx/casino/card-slide-1.ogg"></audio>
+    <audio id="sfx-nbell" data-start="14.86" data-duration="1.48" data-track-index="27" data-volume="0.55" src="assets/sfx/impact/impactBell_heavy_000.ogg"></audio>
+    <audio id="sfx-logo" data-start="18.42" data-duration="0.65" data-track-index="28" data-volume="0.70" src="assets/sfx/impact/impactBell_heavy_003.ogg"></audio>
+    <audio id="tick-01" data-start="4.388" data-duration="0.13" data-track-index="20" data-volume="0.30" src="assets/sfx/keyboard/keypress-003.wav"></audio>
+    <audio id="tick-02" data-start="4.456" data-duration="0.13" data-track-index="21" data-volume="0.30" src="assets/sfx/keyboard/keypress-012.wav"></audio>
+    <audio id="tick-03" data-start="4.524" data-duration="0.13" data-track-index="22" data-volume="0.30" src="assets/sfx/keyboard/keypress-019.wav"></audio>
+    <audio id="tick-04" data-start="4.592" data-duration="0.13" data-track-index="23" data-volume="0.30" src="assets/sfx/keyboard/keypress-027.wav"></audio>
+    <audio id="tick-05" data-start="4.66" data-duration="0.13" data-track-index="20" data-volume="0.30" src="assets/sfx/keyboard/keypress-005.wav"></audio>
+    <audio id="tick-06" data-start="4.728" data-duration="0.13" data-track-index="21" data-volume="0.30" src="assets/sfx/keyboard/keypress-023.wav"></audio>
+    <audio id="tick-07" data-start="4.796" data-duration="0.13" data-track-index="22" data-volume="0.30" src="assets/sfx/keyboard/keypress-008.wav"></audio>
+    <audio id="tick-08" data-start="4.864" data-duration="0.13" data-track-index="23" data-volume="0.30" src="assets/sfx/keyboard/keypress-031.wav"></audio>
+    <audio id="tick-09" data-start="4.932" data-duration="0.13" data-track-index="20" data-volume="0.30" src="assets/sfx/keyboard/keypress-015.wav"></audio>
+    <audio id="tick-10" data-start="5" data-duration="0.13" data-track-index="21" data-volume="0.30" src="assets/sfx/keyboard/keypress-003.wav"></audio>
+    <audio id="tick-11" data-start="5.068" data-duration="0.13" data-track-index="22" data-volume="0.30" src="assets/sfx/keyboard/keypress-012.wav"></audio>
+    <audio id="tick-12" data-start="5.136" data-duration="0.13" data-track-index="23" data-volume="0.30" src="assets/sfx/keyboard/keypress-019.wav"></audio>
+    <audio id="tick-13" data-start="5.204" data-duration="0.13" data-track-index="20" data-volume="0.30" src="assets/sfx/keyboard/keypress-027.wav"></audio>
+    <audio id="tick-14" data-start="5.272" data-duration="0.13" data-track-index="21" data-volume="0.30" src="assets/sfx/keyboard/keypress-005.wav"></audio>
+    <audio id="tick-15" data-start="5.34" data-duration="0.13" data-track-index="22" data-volume="0.30" src="assets/sfx/keyboard/keypress-023.wav"></audio>
+    <audio id="tick-16" data-start="5.408" data-duration="0.13" data-track-index="23" data-volume="0.30" src="assets/sfx/keyboard/keypress-008.wav"></audio>
+    <audio id="tick-17" data-start="5.475" data-duration="0.13" data-track-index="20" data-volume="0.30" src="assets/sfx/keyboard/keypress-031.wav"></audio>
+    <audio id="tick-18" data-start="5.543" data-duration="0.13" data-track-index="21" data-volume="0.30" src="assets/sfx/keyboard/keypress-015.wav"></audio>
+    <audio id="tick-19" data-start="5.611" data-duration="0.13" data-track-index="22" data-volume="0.30" src="assets/sfx/keyboard/keypress-003.wav"></audio>
+    <audio id="tick-20" data-start="5.679" data-duration="0.13" data-track-index="23" data-volume="0.30" src="assets/sfx/keyboard/keypress-012.wav"></audio>
+    <audio id="tick-21" data-start="5.747" data-duration="0.13" data-track-index="20" data-volume="0.30" src="assets/sfx/keyboard/keypress-019.wav"></audio>
+    </div>
+
+    <script>
+      var AUDIO={fps:30,n:665,bass:[0.49,0.35,0.22,0.19,0.18,0.18,0.18,0.18,0.17,0.17,0.17,0.16,0.18,0.17,0.17,0.24,0.6,0.31,0.12,0.15,0.16,0.15,0.16,0.16,0.15,0.15,0.15,0.14,0.14,0.13,0.12,0.21,0.52,0.23,0.09,0.1,0.1,0.11,0.1,0.11,0.11,0.11,0.11,0.12,0.11,0.11,0.11,0.33,0.52,0.18,0.09,0.08,0.09,0.09,0.09,0.09,0.09,0.1,0.09,0.11,0.1,0.07,0.06,0.4,0.38,0.2,0.18,0.18,0.17,0.16,0.16,0.15,0.13,0.12,0.12,0.12,0.11,0.1,0.14,0.58,0.44,0.15,0.08,0.07,0.07,0.06,0.06,0.06,0.05,0.05,0.05,0.05,0.05,0.05,0.17,0.59,0.29,0.06,0.04,0.04,0.04,0.04,0.04,0.04,0.04,0.03,0.04,0.03,0.03,0.03,0.27,0.59,0.21,0.04,0.03,0.04,0.04,0.04,0.05,0.05,0.05,0.05,0.06,0.06,0.05,0.04,0.39,0.51,0.28,0.25,0.22,0.22,0.22,0.22,0.22,0.2,0.19,0.19,0.19,0.18,0.18,0.19,0.46,0.48,0.2,0.13,0.17,0.15,0.16,0.19,0.2,0.17,0.16,0.16,0.15,0.14,0.14,0.15,0.58,0.37,0.13,0.12,0.12,0.12,0.13,0.12,0.13,0.12,0.12,0.11,0.12,0.12,0.12,0.23,0.57,0.26,0.14,0.09,0.1,0.09,0.09,0.08,0.09,0.08,0.08,0.08,0.08,0.06,0.02,0.32,0.7,0.32,0.24,0.24,0.24,0.25,0.25,0.25,0.24,0.22,0.21,0.21,0.21,0.21,0.2,0.48,0.52,0.15,0.15,0.17,0.16,0.17,0.16,0.16,0.16,0.15,0.15,0.15,0.14,0.13,0.14,0.49,0.35,0.11,0.1,0.1,0.1,0.1,0.11,0.11,0.1,0.1,0.1,0.1,0.09,0.09,0.13,0.55,0.3,0.09,0.06,0.06,0.07,0.07,0.07,0.06,0.06,0.06,0.06,0.06,0.05,0.03,0.21,0.63,0.32,0.17,0.15,0.16,0.17,0.16,0.16,0.15,0.15,0.15,0.15,0.15,0.14,0.15,0.37,0.63,0.21,0.13,0.13,0.15,0.14,0.13,0.14,0.13,0.13,0.13,0.14,0.14,0.12,0.14,0.38,0.5,0.15,0.08,0.1,0.1,0.1,0.1,0.11,0.11,0.11,0.11,0.11,0.11,0.12,0.17,0.51,0.35,0.15,0.07,0.08,0.08,0.07,0.07,0.07,0.07,0.08,0.08,0.08,0.08,0.06,0.14,0.72,0.43,0.25,0.25,0.26,0.26,0.25,0.25,0.24,0.23,0.21,0.22,0.21,0.21,0.22,0.28,0.47,0.2,0.18,0.18,0.19,0.19,0.19,0.19,0.19,0.19,0.19,0.19,0.18,0.18,0.17,0.4,0.61,0.26,0.14,0.15,0.16,0.17,0.17,0.17,0.17,0.17,0.17,0.18,0.17,0.17,0.17,0.44,0.4,0.11,0.13,0.14,0.14,0.14,0.14,0.15,0.14,0.14,0.14,0.14,0.13,0.08,0.07,0.65,0.41,0.19,0.19,0.18,0.18,0.18,0.18,0.18,0.16,0.16,0.15,0.14,0.14,0.13,0.22,0.55,0.28,0.15,0.1,0.11,0.1,0.1,0.1,0.1,0.09,0.09,0.09,0.08,0.07,0.07,0.26,0.57,0.25,0.06,0.06,0.06,0.06,0.06,0.06,0.06,0.05,0.06,0.06,0.05,0.05,0.06,0.35,0.5,0.12,0.05,0.04,0.04,0.04,0.04,0.04,0.04,0.03,0.04,0.04,0.03,0.03,0.05,0.45,0.36,0.22,0.3,0.31,0.32,0.34,0.37,0.35,0.29,0.27,0.26,0.26,0.24,0.25,0.2,0.15,0.12,0.11,0.1,0.09,0.08,0.08,0.07,0.06,0.05,0.05,0.04,0.04,0.03,0.03,0.02,0.02,0.02,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.0,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.01,0.02,0.04,0.03,0.02,0.02,0.02,0.02,0.03,0.03,0.46,0.63,0.4,0.37,0.37,0.36,0.35,0.33,0.33,0.32,0.26,0.23,0.25,0.24,0.22,0.22,0.57,0.45,0.32,0.25,0.24,0.25,0.24,0.24,0.23,0.3,0.28,0.26,0.24,0.23,0.22,0.24,0.56,0.49,0.34,0.32,0.32,0.33,0.32,0.31,0.32,0.33,0.29,0.3,0.31,0.28,0.28,0.35,0.56,0.42,0.37,0.35,0.36,0.36,0.34,0.3,0.34,0.35,0.32,0.31,0.32,0.3,0.29,0.33,0.62,0.16,0.2,0.23,0.23,0.23,0.24,0.23,0.38,0.31,0.3,0.29,0.29,0.29,0.27,0.58,0.62,0.18,0.21,0.24,0.24,0.23,0.23,0.24,0.39,0.36,0.35,0.33,0.32,0.31,0.31,0.59,0.37,0.22,0.28,0.3,0.33,0.34,0.31,0.35,0.37,0.31,0.31,0.3,0.29,0.29,0.28,0.63,0.29,0.14,0.17,0.18,0.19,0.19,0.2,0.38,0.39,0.37,0.36,0.36,0.36,0.36,0.39,0.78,0.28,0.23,0.25,0.25,0.26,0.27,0.32,0.26,0.2,0.2,0.2,0.19,0.2,0.19,0.4,0.66,0.28,0.16,0.19,0.18,0.18,0.2,0.29,0.3,0.25,0.26,0.26,0.24,0.24,0.24,0.52,0.59]};
+      var TOTAL = 22.12;
+      var TITLE = "10 YouTube Thumbnail Mistakes Killing Your CTR (Fix These Today)";
+      var ROOT = document.getElementById("root");
+      var TT = document.getElementById("titletxt");
+      var CD = document.getElementById("cd");
+      var PCT = document.getElementById("pct");
+      function pad(n) { return (n < 10 ? "0" : "") + n; }
+      function fmt(s) { s = Math.max(0, Math.round(s)); return pad(Math.floor(s / 3600)) + ":" + pad(Math.floor((s % 3600) / 60)) + ":" + pad(s % 60); }
+
+      var tl = gsap.timeline({ paused: true });
+
+      /* ---- audio-reactive ambient glow: bass drives the red glow (subtle) ---- */
+      tl.to({}, { duration: TOTAL, ease: "none", onUpdate: function () {
+        var f = Math.round(tl.time() * AUDIO.fps); if (f < 0) f = 0; if (f >= AUDIO.n) f = AUDIO.n - 1;
+        ROOT.style.setProperty("--bass", AUDIO.bass[f]);
+      } }, 0);
+
+      /* music bed level (fade-in / fade-out) is a data-automation volume lane on the <audio> element */
+
+      /* =================== Scene 1 — hook (0 → 3.70) =================== */
+      tl.fromTo(".vf", { opacity: 0, scale: 0.9 }, { opacity: 1, scale: 1, duration: 0.5, ease: "power2.out", stagger: 0.06 }, 0);
+      tl.fromTo("#rec", { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.35, ease: "power3.out" }, 0.1);
+      tl.fromTo("#recdot", { opacity: 1 }, { opacity: 0.15, duration: 0.5, ease: "steps(1)", repeat: 5, yoyo: true }, 0.45);
+      tl.fromTo("#hk1", { y: 110, opacity: 0, scale: 1.15 }, { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4.out" }, 0.15);
+      tl.fromTo("#hk2", { y: 110, opacity: 0, scale: 1.15 }, { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4.out" }, 0.5);
+      tl.set("#filecard", { scale: 0.7, opacity: 0, y: 0, rotation: 0 }, 0);
+      tl.fromTo("#filecard", { scale: 0.7, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.4, ease: "back.out(1.8)", immediateRender: false }, 0.7);
+      tl.fromTo("#dropzone", { y: 50, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 0.95);
+
+      /* simulated cursor: grab the file, drag it into the dropzone, drop */
+      tl.set("#curwrap", { x: 980, y: 1640, opacity: 0, scale: 1 }, 0);
+      tl.fromTo("#curwrap", { opacity: 0 }, { opacity: 1, duration: 0.2, ease: "power1.out", immediateRender: false }, 1.35);
+      tl.fromTo("#curwrap", { x: 980, y: 1640 }, { x: 560, y: 880, duration: 0.55, ease: "power2.inOut", immediateRender: false }, 1.4);
+      tl.fromTo("#curwrap", { scale: 1 }, { scale: 0.82, duration: 0.08, ease: "power2.out", immediateRender: false }, 1.95);
+      tl.set("#ripple", { scale: 0.3, opacity: 0 }, 0);
+      tl.fromTo("#ripple", { scale: 0.3, opacity: 0.9 }, { scale: 1.5, opacity: 0, duration: 0.5, ease: "power2.out", immediateRender: false }, 1.95);
+      tl.fromTo("#filecard", { scale: 1 }, { scale: 0.96, duration: 0.1, ease: "power2.out", immediateRender: false }, 1.95);
+      tl.fromTo("#curwrap", { x: 560, y: 880 }, { x: 560, y: 1290, duration: 0.6, ease: "power2.inOut", immediateRender: false }, 2.05);
+      tl.fromTo("#filecard", { y: 0, rotation: 0 }, { y: 410, rotation: -2, duration: 0.6, ease: "power2.inOut", immediateRender: false }, 2.05);
+      /* drop (beat 2.65) */
+      tl.fromTo("#filecard", { scale: 0.96 }, { scale: 0.9, duration: 0.25, ease: "back.out(2)", immediateRender: false }, 2.65);
+      tl.fromTo("#filecard", { rotation: -2 }, { rotation: 0, duration: 0.2, ease: "power2.out", immediateRender: false }, 2.65);
+      tl.fromTo("#curwrap", { scale: 0.82 }, { scale: 1, duration: 0.15, ease: "power2.out", immediateRender: false }, 2.65);
+      tl.fromTo("#ripple", { scale: 0.3, opacity: 0.9 }, { scale: 1.5, opacity: 0, duration: 0.5, ease: "power2.out", immediateRender: false }, 2.65);
+      tl.fromTo(".dz", { opacity: 1 }, { opacity: 0, duration: 0.25, ease: "power1.out" }, 2.65);
+      tl.fromTo("#curwrap", { opacity: 1 }, { opacity: 0, duration: 0.25, ease: "power1.in", immediateRender: false }, 2.9);
+      /* upload progress → done */
+      tl.fromTo("#pfill", { scaleX: 0 }, { scaleX: 1, duration: 0.6, ease: "power1.inOut" }, 2.72);
+      var pp = { v: 0 };
+      tl.fromTo(pp, { v: 0 }, { v: 100, duration: 0.6, ease: "power1.inOut", immediateRender: false, onUpdate: function () { PCT.textContent = Math.round(pp.v) + "%"; } }, 2.72);
+      tl.fromTo("#pfill", { backgroundColor: "#ff0335" }, { backgroundColor: "#2ba640", duration: 0.15, ease: "none", immediateRender: false }, 3.3);
+      tl.fromTo("#pct", { opacity: 1 }, { opacity: 0, duration: 0.1, ease: "none" }, 3.28);
+      tl.fromTo("#upl", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2)" }, 3.3);
+
+      /* =================== Scene 2 — AI writes the metadata (3.70 → 8.44) =================== */
+      tl.fromTo("#s2sheet", { y: 1920 }, { y: 0, duration: 0.5, ease: "power3.out" }, 3.7);
+      tl.fromTo("#s2c1", { y: 80, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power4.out" }, 3.95);
+      tl.fromTo("#s2c2", { y: 80, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power4.out" }, 4.08);
+      tl.fromTo("#mdcard", { y: 140, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 3.92);
+      tl.fromTo("#skel i", { opacity: 0.5 }, { opacity: 1, duration: 0.14, ease: "sine.inOut", repeat: 1, yoyo: true, stagger: 0.05 }, 3.95);
+      /* Ready flip, locked to the 4.23s strong cue */
+      tl.fromTo("#pgen", { opacity: 1, scale: 1 }, { opacity: 0, scale: 0.8, duration: 0.14, ease: "power2.in" }, 4.23);
+      tl.fromTo("#prdy", { opacity: 0, scale: 0.55 }, { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(2.2)" }, 4.23);
+      tl.fromTo("#sub1", { opacity: 1 }, { opacity: 0, duration: 0.14, ease: "power1.in" }, 4.23);
+      tl.fromTo("#sub2", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }, 4.28);
+      tl.fromTo("#skel", { opacity: 1 }, { opacity: 0, duration: 0.15, ease: "power1.in" }, 4.27);
+      /* AI title types itself out */
+      var tp = { n: 0 };
+      tl.fromTo(tp, { n: 0 }, { n: TITLE.length, duration: 1.45, ease: "none", immediateRender: false, onUpdate: function () { TT.textContent = TITLE.slice(0, Math.round(tp.n)); } }, 4.32);
+      tl.fromTo("#caret", { opacity: 1 }, { opacity: 0, duration: 0.34, ease: "steps(1)", repeat: 8, yoyo: true }, 4.3);
+      /* tag chips pop on consecutive beats: 5.28 / 5.80 / 6.34 / 6.86 */
+      [["#chip1", 5.28], ["#chip2", 5.8], ["#chip3", 6.34], ["#chip4", 6.86]].forEach(function (c) {
+        tl.fromTo(c[0], { scale: 0.6, opacity: 0, y: 16 }, { scale: 1, opacity: 1, y: 0, duration: 0.36, ease: "back.out(2)" }, c[1]);
+      });
+      tl.fromTo("#btns", { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power3.out" }, 7.4);
+
+      /* =================== Scene 3 — even while you sleep (8.44 → 14.22) =================== */
+      tl.fromTo("#s3sheet", { x: 1080 }, { x: 0, duration: 0.55, ease: "expo.out" }, 8.44);
+      tl.fromTo("#apcard", { y: 120, opacity: 0 }, { y: 0, opacity: 1, duration: 0.55, ease: "power3.out" }, 8.62);
+      tl.fromTo("#s3a1", { y: 80, opacity: 0 }, { y: 0, opacity: 1, duration: 0.42, ease: "power4.out" }, 8.75);
+      tl.fromTo("#s3a2", { y: 80, opacity: 0 }, { y: 0, opacity: 1, duration: 0.42, ease: "power4.out" }, 8.9);
+      tl.fromTo("#s3a", { opacity: 1, y: 0 }, { opacity: 0, y: -40, duration: 0.25, ease: "power2.in" }, 10.3);
+      tl.fromTo("#s3b1", { y: 80, opacity: 0 }, { y: 0, opacity: 1, duration: 0.42, ease: "power4.out" }, 10.54);
+      tl.fromTo("#s3b2", { y: 80, opacity: 0 }, { y: 0, opacity: 1, duration: 0.42, ease: "power4.out" }, 10.69);
+      [["#row1", 9.5], ["#row2", 10.01], ["#row3", 10.54]].forEach(function (r) {
+        tl.fromTo(r[0], { x: 90, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, r[1]);
+      });
+      tl.fromTo("#slot1", { scale: 1 }, { scale: 1.08, duration: 0.2, ease: "power2.out", yoyo: true, repeat: 1 }, 9.9);
+      /* countdown time-lapse to zero — locked to the 12.65s strong cue */
+      var cp = { s: 21581 };
+      tl.fromTo(cp, { s: 21581 }, { s: 0, duration: 3.6, ease: "power1.in", immediateRender: false, onUpdate: function () { CD.textContent = fmt(cp.s); } }, 9.05);
+      /* moon + floating z z z */
+      tl.fromTo("#moonhalo", { opacity: 0 }, { opacity: 1, duration: 0.8, ease: "power2.out" }, 10.5);
+      tl.fromTo("#moon", { opacity: 0, scale: 0.7, y: 20 }, { opacity: 1, scale: 1, y: 0, duration: 0.6, ease: "back.out(1.5)" }, 10.6);
+      [["#z1", 10.95], ["#z2", 11.3], ["#z3", 11.65]].forEach(function (z) {
+        tl.set(z[0], { opacity: 0, x: 0, y: 0, scale: 0.7 }, 0);
+        tl.fromTo(z[0], { opacity: 0 }, { opacity: 0.95, duration: 0.35, ease: "power1.out", immediateRender: false }, z[1]);
+        tl.fromTo(z[0], { opacity: 0.95 }, { opacity: 0, duration: 0.65, ease: "power1.in", immediateRender: false }, z[1] + 0.5);
+        tl.fromTo(z[0], { y: 0, x: 0, scale: 0.7 }, { y: -130, x: -34, scale: 1.15, duration: 1.15, ease: "power1.out", immediateRender: false }, z[1]);
+      });
+      /* payoff at 12.65: zero → publishing, then published at 13.18 */
+      tl.fromTo("#cd", { color: "#f1f1f1", scale: 1 }, { color: "#ff0335", scale: 1.06, duration: 0.18, ease: "power2.out" }, 12.65);
+      tl.fromTo("#cd", { scale: 1.06 }, { scale: 1, duration: 0.4, ease: "power2.out", immediateRender: false }, 12.85);
+      tl.fromTo("#flare", { opacity: 0.75 }, { opacity: 0, duration: 0.7, ease: "power2.out" }, 12.65);
+      tl.fromTo("#r1rdy", { opacity: 1, scale: 1 }, { opacity: 0, scale: 0.8, duration: 0.12, ease: "power2.in" }, 12.65);
+      tl.fromTo("#r1pub", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(2)" }, 12.68);
+      tl.fromTo("#r1pub", { opacity: 1 }, { opacity: 0, duration: 0.12, ease: "power1.in", immediateRender: false }, 13.18);
+      tl.fromTo("#r1done", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.35, ease: "back.out(2.2)" }, 13.18);
+      tl.fromTo("#row1", { borderColor: "#333333" }, { borderColor: "#2ba640", duration: 0.25, ease: "power1.out" }, 13.18);
+      tl.fromTo("#cnt1", { opacity: 1 }, { opacity: 0, duration: 0.12, ease: "power1.in" }, 13.18);
+      tl.fromTo("#cnt2", { opacity: 0 }, { opacity: 1, duration: 0.2, ease: "power1.out" }, 13.24);
+
+      /* =================== Scene 4 — proof / lock screen (14.22 → 18.44) =================== */
+      tl.fromTo("#s3sheet", { opacity: 1 }, { opacity: 0, duration: 0.3, ease: "power1.in", immediateRender: false }, 14.0);
+      tl.fromTo("#s4sheet", { opacity: 0, scale: 1.05 }, { opacity: 1, scale: 1, duration: 0.5, ease: "power2.out" }, 14.22);
+      tl.fromTo(".star", { opacity: 0.2 }, { opacity: 1, duration: 0.7, ease: "sine.inOut", repeat: 5, yoyo: true, stagger: 0.12 }, 14.3);
+      tl.fromTo("#sleep", { y: -30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 14.4);
+      tl.fromTo("#clock", { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 14.5);
+      tl.fromTo("#nback", { y: -60, opacity: 0 }, { y: 0, opacity: 0.9, duration: 0.4, ease: "power3.out" }, 14.7);
+      tl.fromTo("#notif", { y: -300, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.6, ease: "back.out(1.25)" }, 14.76);
+      tl.fromTo("#ncheck", { scale: 0, rotation: -30 }, { scale: 1, rotation: 0, duration: 0.45, ease: "back.out(2.4)" }, 15.28);
+      tl.fromTo("#s4c1", { y: 80, opacity: 0 }, { y: 0, opacity: 1, duration: 0.42, ease: "power4.out" }, 16.34);
+      tl.fromTo("#s4c2", { y: 80, opacity: 0, scale: 1.15 }, { y: 0, opacity: 1, scale: 1, duration: 0.5, ease: "back.out(1.6)" }, 16.62);
+
+      /* =================== Scene 5 — outro lockup (18.44 → 22.12) =================== */
+      tl.fromTo("#s4sheet", { opacity: 1 }, { opacity: 0, duration: 0.3, ease: "power1.in", immediateRender: false }, 18.05);
+      tl.fromTo("#s5sheet", { opacity: 0 }, { opacity: 1, duration: 0.4, ease: "power1.out" }, 18.24);
+      tl.fromTo("#logo", { scale: 0.4, opacity: 0, rotation: -14 }, { scale: 1, opacity: 1, rotation: 0, duration: 0.6, ease: "back.out(1.8)" }, 18.44);
+      tl.fromTo("#logo", { y: 0 }, { y: -10, duration: 1.6, ease: "sine.inOut", yoyo: true, repeat: 1, immediateRender: false }, 19.0);
+      tl.fromTo("#wm", { y: 70, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "power4.out" }, 18.72);
+      tl.fromTo("#rule", { scaleX: 0 }, { scaleX: 1, duration: 0.5, ease: "power3.out" }, 19.05);
+      tl.fromTo("#tg1", { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power4.out" }, 19.32);
+      tl.fromTo("#tg2", { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power4.out" }, 19.52);
+      tl.fromTo("#sub", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 20.3);
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

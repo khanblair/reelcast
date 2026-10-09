@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { api, useQuery, useMutation } from "@/lib/rpc/client";
 import { useRouter } from "next/navigation";
-import { api } from "../../../../../convex/_generated/api";
 import { Bell, Eye, EyeOff, Save, Loader2, ArrowLeft } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,6 +23,7 @@ export default function NotificationsSettingsPage() {
   const [emailFromInput, setEmailFromInput] = useState("");
   const [savingEmailFrom, setSavingEmailFrom] = useState(false);
   const [savedEmailFrom, setSavedEmailFrom] = useState(false);
+  const [emailFromError, setEmailFromError] = useState<string | null>(null);
 
   if (settings === undefined) {
     return (
@@ -57,10 +57,13 @@ export default function NotificationsSettingsPage() {
     if (!emailFromInput.trim()) return;
     setSavingEmailFrom(true);
     setSavedEmailFrom(false);
+    setEmailFromError(null);
     try {
       await update({ emailFromAddress: emailFromInput.trim() });
       setSavedEmailFrom(true);
       setTimeout(() => setSavedEmailFrom(false), 2000);
+    } catch (e) {
+      setEmailFromError(e instanceof Error ? e.message : "Could not save the from address.");
     } finally {
       setSavingEmailFrom(false);
     }
@@ -189,7 +192,7 @@ export default function NotificationsSettingsPage() {
               <div className="relative flex-1">
                 <Input
                   type={resendKeyVisible ? "text" : "password"}
-                  placeholder={settings?.resendApiKey ? "••••••••••••••••" : "re_..."}
+                  placeholder={settings?.hasResendApiKey ? "••••••••••••••••" : "re_..."}
                   value={resendKeyInput}
                   onChange={(e) => setResendKeyInput(e.target.value)}
                   className="pr-10"
@@ -219,7 +222,7 @@ export default function NotificationsSettingsPage() {
                 )}
               </Button>
             </div>
-            {settings?.resendApiKey && (
+            {settings?.hasResendApiKey && (
               <p className="text-[11px] text-muted-foreground">API key is set. Enter a new value above to replace it.</p>
             )}
           </div>
@@ -251,6 +254,7 @@ export default function NotificationsSettingsPage() {
                 )}
               </Button>
             </div>
+            {emailFromError && <p className="text-[11px] text-destructive">{emailFromError}</p>}
             <p className="text-[11px] text-muted-foreground">
               Must be a verified sender in your Resend account.
             </p>

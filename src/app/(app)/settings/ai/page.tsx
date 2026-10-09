@@ -1,9 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { api, useQuery, useMutation } from "@/lib/rpc/client";
 import { useRouter } from "next/navigation";
-import { api } from "../../../../../convex/_generated/api";
 import { Sparkles, Save, Loader2, ArrowLeft } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -56,7 +55,7 @@ export default function AISettingsPage() {
 
   const settingsSynced = useRef(false);
   useEffect(() => {
-    if (settings === undefined || settingsSynced.current) return;
+    if (!settings || settingsSynced.current) return;
     settingsSynced.current = true;
     setVeoModel((settings.veoModel as VeoModelKey) ?? "veo-2");
     setVeoResolution(settings.veoResolution ?? "720p");
@@ -84,11 +83,12 @@ export default function AISettingsPage() {
     setSavedBrand(false);
     try {
       await updateSettings({
-        aiNiche: aiNiche.trim() || undefined,
-        aiTargetAudience: aiTargetAudience.trim() || undefined,
-        aiBrandVoice: aiBrandVoice.trim() || undefined,
-        aiForbiddenWords: aiForbiddenWords.trim() || undefined,
-        aiCtaPreferences: aiCtaPreferences.trim() || undefined,
+        // "" clears the field (undefined would leave the old value in place).
+        aiNiche: aiNiche.trim(),
+        aiTargetAudience: aiTargetAudience.trim(),
+        aiBrandVoice: aiBrandVoice.trim(),
+        aiForbiddenWords: aiForbiddenWords.trim(),
+        aiCtaPreferences: aiCtaPreferences.trim(),
       });
       setSavedBrand(true);
       setTimeout(() => setSavedBrand(false), 2000);
@@ -114,7 +114,7 @@ export default function AISettingsPage() {
         aiTone,
         aiLanguage,
         aiDescriptionLength,
-        aiGuidelines: aiGuidelines.trim() || undefined,
+        aiGuidelines: aiGuidelines.trim(),
         humanizeWriting,
       });
       setSaved(true);

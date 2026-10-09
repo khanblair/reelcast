@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useQuery, useMutation, useAction } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
+import { api, useQuery, useMutation, useAction } from "@/lib/rpc/client";
 import { Youtube, MessageCircle, CheckCircle, XCircle, Settings, Sparkles, CreditCard } from "lucide-react";
 import { AISettingsModal } from "@/components/settings/ai-settings-modal";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -42,6 +41,8 @@ export default function SettingsPage() {
         ? "This YouTube channel is already connected to another account. Each channel can only be linked to one account."
         : reason === "channel_limit"
         ? "Free plan is limited to one YouTube channel. Upgrade to Pro to connect additional channels."
+        : reason === "no_channel"
+        ? "No YouTube channel was found on that Google account. Create a channel on YouTube first, then try again."
         : `YouTube connection failed (${reason}). Please try again.`;
       setYoutubeBanner({ success: false, message });
     }
@@ -103,9 +104,13 @@ export default function SettingsPage() {
     const value = discordInput.trim();
     if (!value) return;
     setSavingDiscord(true);
+    setDiscordTestResult(null);
     try {
       await updateSettings({ discordWebhookUrl: value, notificationsEnabled: true });
       setDiscordInput("");
+    } catch (e) {
+      // Invalid webhook URLs are rejected by the server; say why instead of failing silently.
+      setDiscordTestResult({ success: false, message: e instanceof Error ? e.message : "Could not save the webhook URL." });
     } finally {
       setSavingDiscord(false);
     }
@@ -463,6 +468,7 @@ export default function SettingsPage() {
                     {savingDiscord ? "Saving…" : "Save"}
                   </Button>
                 </div>
+                {discordTestResult && <TestResultBanner result={discordTestResult} />}
               </div>
             )}
           </CardContent>

@@ -2,12 +2,10 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
-import { useMutation, useQuery, useAction } from "convex/react";
 import {
   UploadCloud, FileVideo, CheckCircle, AlertCircle, X, Plus, FolderOpen,
 } from "lucide-react";
-import { api } from "../../../../convex/_generated/api";
-import { Id } from "../../../../convex/_generated/dataModel";
+import { api, useMutation, useQuery, useAction, type Id } from "@/lib/rpc/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -19,6 +17,8 @@ interface UploadItem {
   progress: number;
   error?: string;
   videoId?: Id<"videos">;
+  /** Metadata is being generated in the background (the video's details fill in shortly). */
+  metadataQueued?: boolean;
 }
 
 function formatBytes(bytes: number) {
@@ -117,7 +117,8 @@ export default function UploadPage() {
       // on by default, so only an explicit `false` should skip this.
       if (settingsRef.current?.aiAutoGenerate !== false) {
         try {
-          await generateMetadata({ videoId: videoId as Id<"videos"> });
+          const meta = await generateMetadata({ videoId: videoId as Id<"videos"> });
+          if (meta.queued) updateItem(item.id, { metadataQueued: true });
         } catch (e) {
           // Non-critical: log but don't fail the upload
           console.warn("Auto-generate metadata failed:", e);
@@ -293,6 +294,9 @@ export default function UploadPage() {
                       {item.status === "done" && (
                         <p className="text-xs text-emerald-600 dark:text-emerald-400">
                           Uploaded successfully
+                          {item.metadataQueued && (
+                            <span className="text-muted-foreground"> · AI details are generating in the background</span>
+                          )}
                         </p>
                       )}
                     </div>

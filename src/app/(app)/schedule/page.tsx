@@ -3,15 +3,13 @@
 import { useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { useQuery, useMutation, useAction } from "convex/react";
 import {
   CalendarClock, CalendarCheck, Clock, X, ExternalLink,
   ChevronDown, ChevronUp, Zap,
   Calendar, CheckSquare, Square, Wand2, RefreshCw, CheckCircle, XCircle,
   CalendarDays, Sparkles,
 } from "lucide-react";
-import { api } from "../../../../convex/_generated/api";
-import { Id, Doc } from "../../../../convex/_generated/dataModel";
+import { api, useQuery, useMutation, useAction, type Id, type Doc } from "@/lib/rpc/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -136,7 +134,7 @@ export default function SchedulePage() {
 
   // Auto-schedule state
   const [autoStartTime, setAutoStartTime] = useState("");
-  const [intervalMin, setIntervalMin] = useState(360);
+  const [intervalMin] = useState(360);
   const [autoCount, setAutoCount] = useState(1);
   const [autoPrivacy, setAutoPrivacy] = useState<"private" | "public" | "unlisted">("public");
   const [autoSubmitting, setAutoSubmitting] = useState(false);
@@ -153,7 +151,7 @@ export default function SchedulePage() {
   const [metaProgress, setMetaProgress] = useState<{ done: number; total: number } | null>(null);
   // Regenerate-now state
   const [regenQueue, setRegenQueue] = useState<string[]>([]);
-  const [regenProgress, setRegenProgress] = useState<{ done: number; total: number; results: { id: string; success: boolean }[] } | null>(null);
+  const [regenProgress, setRegenProgress] = useState<{ done: number; total: number; results: { id: string; success: boolean; queued?: boolean }[] } | null>(null);
   const [regenSubmitting, setRegenSubmitting] = useState(false);
 
   const loading = scheduledVideos === undefined || allVideos === undefined;
@@ -289,14 +287,14 @@ export default function SchedulePage() {
     if (regenQueue.length === 0) return;
     setRegenSubmitting(true);
     const queue = [...regenQueue];
-    const results: { id: string; success: boolean }[] = [];
+    const results: { id: string; success: boolean; queued?: boolean }[] = [];
     setRegenProgress({ done: 0, total: queue.length, results });
     try {
       for (let i = 0; i < queue.length; i++) {
         const id = queue[i];
         try {
-          await regenMetadata({ videoId: id as Id<"videos">, autoMarkReady: false });
-          results.push({ id, success: true });
+          const meta = await regenMetadata({ videoId: id as Id<"videos">, autoMarkReady: false });
+          results.push({ id, success: true, queued: meta.queued });
         } catch {
           results.push({ id, success: false });
         }
@@ -526,7 +524,10 @@ export default function SchedulePage() {
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between text-xs text-muted-foreground">
                           <span>Processing {regenProgress.done}/{regenProgress.total}</span>
-                          <span>{regenProgress.results.filter(r => r.success).length} succeeded · {regenProgress.results.filter(r => !r.success).length} failed</span>
+                          <span>
+                            {regenProgress.results.filter(r => r.success).length} succeeded · {regenProgress.results.filter(r => !r.success).length} failed
+                            {regenProgress.results.some(r => r.queued) && ` · ${regenProgress.results.filter(r => r.queued).length} generating in the background`}
+                          </span>
                         </div>
                         <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                           <div
@@ -916,7 +917,7 @@ export default function SchedulePage() {
                             Your Best Times to Post
                           </CardTitle>
                           <p className="text-xs text-muted-foreground">
-                            Based on {suggestedTimes.totalVideosAnalysed} published videos — ranked by CTR and views.
+                            Based on {suggestedTimes.totalVideosAnalysed} published videos — ranked by {suggestedTimes.suggestedTimes.some((slot) => slot.avgCtr > 0) ? "CTR and views" : "views"}.
                           </p>
                         </CardHeader>
                         <CardContent>
@@ -930,7 +931,7 @@ export default function SchedulePage() {
                                       {slot.hourEat === 0 ? "12 AM" : slot.hourEat < 12 ? `${slot.hourEat} AM` : slot.hourEat === 12 ? "12 PM" : `${slot.hourEat - 12} PM`} EAT
                                     </p>
                                     <p className="text-xs text-muted-foreground">
-                                      CTR {(slot.avgCtr * 100).toFixed(1)}% · {slot.avgViews.toLocaleString()} avg views
+                                      {slot.avgCtr > 0 ? `CTR ${(slot.avgCtr * 100).toFixed(1)}% · ` : ""}{slot.avgViews.toLocaleString()} avg views
                                     </p>
                                   </div>
                                 </div>

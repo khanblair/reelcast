@@ -1,7 +1,6 @@
 "use client";
 
 import { use, useState, useMemo } from "react";
-import { useQuery, useMutation, useAction } from "convex/react";
 import { useRouter } from "next/navigation";
 import {
   Play,
@@ -27,8 +26,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
-import { api } from "../../../../../convex/_generated/api";
-import { Id } from "../../../../../convex/_generated/dataModel";
+import { api, useQuery, useMutation, useAction, type Id } from "@/lib/rpc/client";
 import { formatDateTimeEAT, formatCountdown, nextAutoPublishSlot } from "@/lib/eat";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -790,7 +788,11 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
               </CardContent>
             </Card>
           )}
-          <MetadataEditor video={video as VideoType} />
+          {/* Remount when the stored values change (save, regenerate, scheduled generation) so the form restarts from them. */}
+          <MetadataEditor
+            key={[video._id, video.title, video.aiTitle, video.aiDescription, video.description, (video.aiTags ?? video.tags ?? []).join("\u0001")].join("\u0000")}
+            video={video as VideoType}
+          />
           {(video.metadataHistory?.length ?? 0) > 0 && (
             <Card>
               <CardHeader className="pb-2">
@@ -815,7 +817,8 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
               </CardHeader>
               {showMetadataHistory && (
                 <CardContent className="space-y-3 pt-0">
-                  {[...(video.metadataHistory ?? [])].reverse().map(
+                  {/* newest first, as returned by videos.get */}
+                  {(video.metadataHistory ?? []).map(
                     (version, idx) => (
                       <div key={version.savedAt} className="rounded-md border p-3 space-y-1.5">
                         <p className="text-xs text-muted-foreground">

@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery, useMutation, useAction } from "convex/react";
 import {
   GripVertical,
   ArrowUp,
@@ -15,8 +14,7 @@ import {
   Loader2,
   AlertTriangle,
 } from "lucide-react";
-import { api } from "../../../../convex/_generated/api";
-import { Id } from "../../../../convex/_generated/dataModel";
+import { api, useQuery, useMutation, useAction, type Id } from "@/lib/rpc/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";

@@ -1,8 +1,7 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { api, useQuery } from "@/lib/rpc/client";
 import { useRouter } from "next/navigation";
-import { api } from "../../../../../convex/_generated/api";
 import { Settings, User, ArrowLeft } from "lucide-react";
 import { Loader2 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";

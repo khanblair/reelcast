@@ -144,8 +144,8 @@ Delivery is at-least-once, so handlers are idempotent. Failures retry with expon
 Ticks are started by:
 
 - **Production:** Supabase pg_cron + pg_net call `GET /api/cron/tick` every minute with `Authorization: Bearer <CRON_SECRET>` (installed once with `scripts/db-cron.ts`).
-- **Development:** `src/instrumentation.ts` runs the tick in-process every 5 seconds, so `next dev` is the only process needed.
-- **After user-initiated work** (Generate, Publish now): a best-effort immediate tick, so the user does not wait for the next minute.
+- **Development (opt-in):** with `DEV_TICK=1` in `.env.local`, `src/instrumentation.ts` runs the tick in-process every 5 seconds. It is off by default because dev and production can share one database; the line `[dev tick] off: ...` is printed instead.
+- **After user-initiated work** (Generate, Publish now): a best-effort immediate tick (`kickRunner`), so the user does not wait for the next minute. In production always; elsewhere only with `DEV_TICK=1`.
 
 ### Data Flow
 
@@ -950,7 +950,7 @@ All secrets are set as environment variables on the host (and in `.env.local` fo
 bun install
 cp .env.example .env.local   # then fill in the values
 bun run db:migrate           # apply migrations (uses DATABASE_URL_DIRECT)
-bun run dev                  # Next.js + in-process job runner (every 5 s)
+bun run dev                  # Next.js (+ in-process job runner every 5 s if DEV_TICK=1)
 bun run check                # typecheck + lint
 bun run test <file>          # bun test (DB-backed, slow because the database is remote)
 ```

@@ -180,7 +180,7 @@ An admin-only console with its own sidebar and routes, separate from the user ap
 
 **File uploads** go from the browser to Cloudinary using signed parameters from `/api/cloudinary/sign`; only the resulting URL is stored in the database. No video data touches the application server for uploads. Publishing streams the file from Cloudinary to YouTube.
 
-**Background work** runs on a Postgres queue (`jobs` for user-visible work, `tasks` for internal steps, `job_schedules` for periodic sweeps). A single runner, `runTick()`, claims due work with `FOR UPDATE SKIP LOCKED` so many callers can run it safely at once. In production, Supabase `pg_cron` calls `/api/cron/tick` every minute (installed once with `scripts/db-cron.ts`); in development an in-process timer calls it every five seconds, so `next dev` is the only process you need. Handlers are written to be idempotent, because delivery is at-least-once; long operations such as Veo polling and YouTube uploads resume across runs instead of holding a function open.
+**Background work** runs on a Postgres queue (`jobs` for user-visible work, `tasks` for internal steps, `job_schedules` for periodic sweeps). A single runner, `runTick()`, claims due work with `FOR UPDATE SKIP LOCKED` so many callers can run it safely at once. In production, Supabase `pg_cron` calls `/api/cron/tick` every minute (installed once with `scripts/db-cron.ts`); in development an in-process timer calls it every five seconds, but only when you opt in with `DEV_TICK=1` in `.env.local` (off by default, because dev and production can share one database and a local runner would process real users' jobs). Handlers are written to be idempotent, because delivery is at-least-once; long operations such as Veo polling and YouTube uploads resume across runs instead of holding a function open.
 
 **Periodic sweeps** include: due scheduled publishes (every minute), reconciliation of stuck publishes, OAuth health checks, the weekly digest, billing renewals/expiry/reconciliation, and daily analytics ingestion.
 
@@ -292,7 +292,7 @@ reelcast/
 │   │       └── ai.ts  cloudinary.ts  youtube.ts  notify.ts  email.ts  usage.ts  dto.ts  platformKeys.ts  ...
 │   │
 │   ├── middleware.ts                           # Redirects signed-out visitors away from app pages
-│   └── instrumentation.ts                      # Dev only: runs the job tick in-process every 5s
+│   └── instrumentation.ts                      # Dev only, opt-in (DEV_TICK=1): runs the job tick in-process every 5s
 │
 ├── drizzle/                                    # SQL migrations (generated + hand-written security migrations)
 ├── drizzle.config.ts
@@ -310,7 +310,7 @@ reelcast/
 bun install
 cp .env.example .env.local     # fill in the values
 bun run db:migrate             # apply SQL migrations to your Supabase database
-bun run dev                    # the only process you need (job runner included)
+bun run dev                    # the app (job runner only with DEV_TICK=1 in .env.local)
 bun run check                  # typecheck + lint
 bun run test <file>            # bun test, e.g. src/server/rpc/rpc.test.ts
 bun run build

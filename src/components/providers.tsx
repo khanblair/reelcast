@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider as NextThemesProvider } from "next-themes";
 import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { sessionUserId, shouldClearQueryCache, trackedUserIdAfter } from "@/lib/auth-cache";
+import { QUERY_CLIENT_DEFAULTS } from "@/lib/rpc/polling";
 import { createClient } from "@/lib/supabase/client";
 
 type AuthState = { isLoading: boolean; isAuthenticated: boolean };
@@ -18,9 +19,8 @@ export function Providers({ children }: Readonly<{ children: ReactNode }>) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
-        defaultOptions: {
-          queries: { staleTime: 10_000, refetchOnWindowFocus: true },
-        },
+        // Per-path staleTime and refetchInterval come from lib/rpc/polling.ts (applied in useQuery).
+        defaultOptions: QUERY_CLIENT_DEFAULTS,
       }),
   );
   const [auth, setAuth] = useState<AuthState>({ isLoading: true, isAuthenticated: false });

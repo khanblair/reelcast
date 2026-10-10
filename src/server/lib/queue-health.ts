@@ -5,9 +5,12 @@
  *
  * Every age is computed by the database (`now()`), like the tick heartbeat, so the app server's clock never matters.
  */
-import { sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, notLike, or, sql } from "drizzle-orm";
 import type { DbLike } from "@/db/client";
+import { jobSchedules, tasks } from "@/db/schema";
+import { TICK_HEARTBEAT } from "@/server/jobs/heartbeat";
 import type { QueueScope } from "@/server/jobs/queue";
+import { stripQueryParams } from "./safe-error";
 
 /** pg_cron ticks every minute; a heartbeat older than this means the scheduler (or the route) has stopped. */
 export const TICK_STALE_MS = 3 * 60_000;
@@ -79,8 +82,85 @@ export async function getQueueDepth(db: DbLike, scope?: QueueScope): Promise<Que
     from ${countsOf("jobs", "processing", scope)} j, ${countsOf("tasks", "running", scope)} t
   `)) as unknown as DepthRow[];
   const row = rows[0] ?? {};
-  const jobs = toCounts(row, "j");
-  const tasks = toCounts(row, "t");
-  const ages = [jobs.oldestPendingAgeMs, tasks.oldestPendingAgeMs].filter((a): a is number => a !== null);
-  return { jobs, tasks, oldestPendingAgeMs: ages.length ? Math.max(...ages) : null };
+  const jobCounts = toCounts(row, "j");
+  const taskCounts = toCounts(row, "t");
+  const ages = [jobCounts.oldestPendingAgeMs, taskCounts.oldestPendingAgeMs].filter((a): a is number => a !== null);
+  return { jobs: jobCounts, tasks: taskCounts, oldestPendingAgeMs: ages.length ? Math.max(...ages) : null };
+}
+
+// ─── failed tasks and sweep errors (admin only: they carry error text) ───────────────────────────────────────────────
+
+const MAX_ERROR_CHARS = 300;
+
+/**
+ * An error text that is safe to show an admin: a Drizzle "Failed query" message is cut before its `params:` line (the
+ * bound values are user data), then the text is truncated. Null stays null.
+ */
+export function scrubError(text: string | null): string | null {
+  return text === null ? null : stripQueryParams(text).slice(0, MAX_ERROR_CHARS);
+}
+
+export type FailedTask = { id: string; kind: string; attempts: number; maxAttempts: number; lastError: string | null; failedAt: Date };
+
+/**
+ * The most recent permanently failed tasks, newest first (ONE statement). Tasks have no UI, so before this nobody saw
+ * them fail. The payload is deliberately not selected: it can hold user data.
+ */
+export async function getFailedTasks(db: DbLike, limit = 20, scope?: QueueScope): Promise<FailedTask[]> {
+  if (scope !== undefined && (typeof scope.userId !== "string" || scope.userId === "")) throw new Error("queue scope requires a non-empty userId");
+  const rows = await db
+    .select({ id: tasks.id, kind: tasks.kind, attempts: tasks.attempts, maxAttempts: tasks.maxAttempts, lastError: tasks.lastError, failedAt: tasks.updatedAt })
+    .from(tasks)
+    .where(and(eq(tasks.status, "failed"), scope ? eq(tasks.userId, scope.userId) : undefined))
+    .orderBy(desc(tasks.updatedAt))
+    .limit(limit);
+  return rows.map((r) => ({ ...r, lastError: scrubError(r.lastError) }));
+}
+
+/** At most this many erroring sweeps are listed (there are a handful of sweeps in total). */
+export const SCHEDULE_ERROR_LIMIT = 50;
+
+export type TickState = {
+  /** When the last production tick finished, or null if none was ever recorded (normal in dev: only the cron route writes it). */
+  lastRunAt: Date | null;
+  ageMs: number | null;
+  /** The heartbeat exists and is older than TICK_STALE_MS: the scheduler has stopped. */
+  stale: boolean;
+  /** The last tick's own error summary, if it had errors. */
+  lastError: string | null;
+};
+export type ScheduleError = { name: string; lastRunAt: Date | null; lastError: string };
+export type ScheduleHealth = { tick: TickState; scheduleErrors: ScheduleError[] };
+
+/**
+ * The tick heartbeat and every sweep whose last run failed, in ONE statement over `job_schedules`.
+ *
+ * A sweep clears its `last_error` when it next succeeds (tick.ts), so a row listed here is failing NOW. Left out: the
+ * heartbeat row itself (its state is `tick`), and the `digest:` / `digest-week:` marker rows, which are bookkeeping
+ * and not sweeps. `heartbeatName` is for tests, which use a row of their own.
+ */
+export async function getScheduleHealth(db: DbLike, heartbeatName: string = TICK_HEARTBEAT): Promise<ScheduleHealth> {
+  const rows = await db
+    .select({
+      name: jobSchedules.name,
+      lastRunAt: jobSchedules.lastRunAt,
+      lastError: jobSchedules.lastError,
+      ageMs: sql<number | null>`(extract(epoch from (now() - ${jobSchedules.lastRunAt})) * 1000)::float8`,
+    })
+    .from(jobSchedules)
+    .where(
+      or(
+        eq(jobSchedules.name, heartbeatName),
+        and(isNotNull(jobSchedules.lastError), notLike(jobSchedules.name, "digest:%"), notLike(jobSchedules.name, "digest-week:%")),
+      ),
+    )
+    .orderBy(sql`(${jobSchedules.name} = ${heartbeatName}) desc`, jobSchedules.name)
+    .limit(SCHEDULE_ERROR_LIMIT + 1);
+
+  const beat = rows.find((r) => r.name === heartbeatName);
+  const ageMs = beat?.lastRunAt && beat.ageMs !== null ? Math.round(Number(beat.ageMs)) : null;
+  return {
+    tick: { lastRunAt: beat?.lastRunAt ?? null, ageMs, stale: ageMs !== null && ageMs > TICK_STALE_MS, lastError: scrubError(beat?.lastError ?? null) },
+    scheduleErrors: rows.flatMap((r) => (r.name !== heartbeatName && r.lastError !== null ? [{ name: r.name, lastRunAt: r.lastRunAt, lastError: scrubError(r.lastError) ?? "" }] : [])),
+  };
 }

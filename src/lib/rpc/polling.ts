@@ -64,6 +64,7 @@ type JobRow = Pick<Doc<"jobs">, "status">;
 type GenerationRow = Pick<Doc<"generations">, "status">;
 type SettingsData = Pick<NonNullable<ReturnOf<ApiShape["settings"]["get"]>>, "autoPublishEnabled" | "autoPublishNextAt">;
 type QueueStatsData = Pick<ReturnOf<ApiShape["queue"]["getQueueStats"]>, "nextPublishAt">;
+type QueueHealthData = Pick<ReturnOf<ApiShape["admin"]["queue"]["getHealth"]>, "queue" | "tick">;
 
 const VIDEO_IN_FLIGHT: ReadonlySet<VideoRow["status"]> = new Set(["queued", "generating", "publishing"]);
 const JOB_IN_FLIGHT: ReadonlySet<JobRow["status"]> = new Set(["pending", "processing"]);
@@ -103,6 +104,18 @@ const anyJob = (data: unknown) => rowsOf<JobRow>(data).some((j) => JOB_IN_FLIGHT
 const anyGeneration = (data: unknown) => rowsOf<GenerationRow>(data).some((g) => GENERATION_IN_FLIGHT.has(g.status));
 
 /**
+ * Admin queue health: work the runner has to do right now, i.e. a job or task that is due-pending or being processed.
+ * Work scheduled for later is normal and does not count. Neither does a stale tick: a backlog that nothing is draining
+ * must not pin the page at FAST (the same reasoning as DUE_GRACE_MS above); the baseline poll notices when it recovers.
+ */
+function queueBusy(data: unknown): boolean {
+  if (!isObject(data)) return false;
+  const d = data as Partial<QueueHealthData>;
+  if (d.tick?.stale) return false;
+  return [d.queue?.jobs, d.queue?.tasks].some((c) => (c?.pending ?? 0) + (c?.processing ?? 0) > 0);
+}
+
+/**
  * path -> rule, for every query that polls. A path that is absent never polls.
  *
  * Who can change each one without the user acting, and so why it polls at all:
@@ -110,6 +123,7 @@ const anyGeneration = (data: unknown) => rowsOf<GenerationRow>(data).some((g) =>
  *   videos / queue       the tick turns a due schedule into a publish; a job finishing moves the video on
  *   notifications        any job or sweep that finishes or fails adds one
  *   admin lists / stats  other users' activity
+ *   admin queue health   the tick, jobs and tasks move on their own (it is the page that says whether they do)
  */
 const RULES: ReadonlyMap<string, PollRule> = new Map<string, PollRule>([
   // History page. New rows come from the user (a write refreshes them) or a due schedule (BASELINE catches it).
@@ -150,6 +164,7 @@ const RULES: ReadonlyMap<string, PollRule> = new Map<string, PollRule>([
   // Admin console. The billing queries are money and keep their period.
   ["admin.jobs.listRecent", adaptive(10_000, anyJob)],
   ["admin.jobs.listFailed", fixed(BASELINE_MS)],
+  ["admin.queue.getHealth", adaptive(10_000, queueBusy)],
   ["admin.billing.overview", fixed(30_000)],
   ["admin.billing.listNeedsReview", fixed(30_000)],
   ["admin.stats.getStats", fixed(BASELINE_MS)],

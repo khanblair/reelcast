@@ -4,12 +4,13 @@ import { useState } from "react";
 import { ShieldAlert, KeyRound, Loader2, TriangleAlert, Check } from "lucide-react";
 import { api, useQuery, useAction } from "@/lib/rpc/client";
 import { AdminPage } from "@/components/admin/shell/admin-page";
-import { SkeletonBar, TableSkeleton } from "@/components/admin/shell/admin-skeleton";
+import { TableSkeleton } from "@/components/admin/shell/admin-skeleton";
 import { EmptyState } from "@/components/admin/billing/empty-state";
-import type { Tone } from "@/components/admin/billing/format";
 import { StatusDot } from "@/components/admin/billing/status-dot";
 import { Td, Th } from "@/components/admin/billing/table-parts";
+import { QueueHealthSection } from "@/components/admin/health/queue-health-section";
 import { SectionCard } from "@/components/admin/shared/section-card";
+import { StatBlock } from "@/components/admin/shared/stat-block";
 import { oauthStatus, videoStatus } from "@/components/admin/shared/status";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableHeader, TableRow } from "@/components/ui/table";
@@ -51,8 +52,11 @@ export default function AdminHealthPage() {
   return (
     <AdminPage
       title="System health"
-      description="Platform-wide storage and YouTube token status across all users."
+      description="The job runner, storage and YouTube token status across all users."
     >
+      {/* Job runner: queue depth, failed tasks, failing sweeps, tick heartbeat */}
+      <QueueHealthSection />
+
       {/* Storage health */}
       <SectionCard
         title="Storage health"
@@ -238,29 +242,5 @@ export default function AdminHealthPage() {
         </div>
       </SectionCard>
     </AdminPage>
-  );
-}
-
-/** A labelled count with a status dot. The label carries the meaning; the dot only supports it. */
-function StatBlock({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number | undefined;
-  tone: Tone;
-}) {
-  return (
-    <div className="rounded-lg border border-border p-3">
-      <p className="text-sm text-muted-foreground">
-        <StatusDot tone={tone} label={label} />
-      </p>
-      {value === undefined ? (
-        <SkeletonBar className="mt-2 h-7 w-10" />
-      ) : (
-        <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
-      )}
-    </div>
   );
 }

@@ -213,8 +213,8 @@ The `oauth.health` sweep also probes every connected channel every 6 hours, so r
 
 Users upload video files directly to Cloudinary with a signed upload. The upload flow:
 
-1. The browser calls `POST /api/cloudinary/sign` (signed-in users only). The server signs the upload and includes `max_file_size` from the user's plan, so Cloudinary rejects oversize files
-2. The file is sent straight from the browser to Cloudinary (with progress reporting); it never touches the Next.js server
+1. The browser calls `POST /api/cloudinary/sign` (signed-in users only). The server fixes and signs everything about the upload (`src/server/lib/videoUpload.ts`): the caller's own folder `reelcast/videos/<userId>`, a random public id, video-only `allowed_formats`, `overwrite=false` and `max_file_size` from the user's plan. It returns the signed `params`, the signature and the upload URL (which fixes the resource type to `video`)
+2. The file is sent straight from the browser to Cloudinary (with progress reporting) with exactly those params (`src/lib/upload-video.ts`); it never touches the Next.js server. Files uploaded before the per-user folder existed live at the root of the cloud and are handled identically everywhere, because every consumer works from the stored URL
 3. The browser then calls `videos.create`, which checks that the URL is a genuine Cloudinary delivery URL of the app's own cloud and, in one transaction, consumes one `videosUploaded` unit and creates the `videos` row with `status: "draft"` and `source_type: "upload"` (`raw_file_key` holds the Cloudinary URL)
 4. If auto-generate metadata is enabled in settings (the default), AI metadata generation is requested immediately
 
@@ -745,13 +745,13 @@ Every table has row-level security enabled with **no policies**, and all grants 
 
 ### Request Safety
 
-- **CSRF:** `/api/rpc` accepts only same-origin JSON requests — it rejects any request whose `Sec-Fetch-Site` header is present and is not `same-origin` or `none`, and any non-JSON content type
+- **CSRF and size:** `/api/rpc` accepts only same-origin JSON requests — it rejects (403) any request whose `Sec-Fetch-Site` header is present and is not `same-origin` or `none`, and any request whose `Origin` header is present but is not one of the app's own hosts (the `Host` / `X-Forwarded-Host` header, the request URL, or `NEXT_PUBLIC_APP_URL`); it requires exactly `Content-Type: application/json` (optional `charset=utf-8`; anything else is 415) and caps the body at 1 MiB (413, enforced while the stream is read, so a missing or false `Content-Length` does not help). The rules are in `src/server/rpc/request-guard.ts`
 - **OAuth:** the YouTube flow uses a random one-time `state` cookie
 - **Cron:** `/api/cron/tick` requires `CRON_SECRET` (compared in constant time)
 - **Payments:** Pesapal IPN and return calls are never trusted; status is re-verified with Pesapal before access is granted
 - **Validation:** every RPC input is validated with zod; unknown settings keys are rejected
 - **SSRF:** the server fetches video files only from the app's own Cloudinary delivery URLs over https, and posts only to genuine Discord webhook hosts
-- **Uploads:** direct-to-Cloudinary uploads are signed per request with a plan-based `max_file_size`
+- **Uploads:** direct-to-Cloudinary uploads are signed per request; the server fixes the per-user folder, a random public id, video-only formats and no overwrite, plus a plan-based `max_file_size`
 - **Abuse:** the public contact form is limited to 3 messages per email and 60 messages overall per hour
 
 ### Privacy

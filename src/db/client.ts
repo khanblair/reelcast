@@ -11,6 +11,7 @@
 import type { PgDatabase } from "drizzle-orm/pg-core";
 import { drizzle, type PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import { queryCountingLogger } from "./query-counter";
 import * as schema from "./schema";
 
 declare global {
@@ -33,7 +34,7 @@ function createClient() {
 function createDb() {
   const client = globalThis.__reelcastPg ?? createClient();
   if (process.env.NODE_ENV !== "production") globalThis.__reelcastPg = client;
-  return drizzle(client, { schema, casing: "snake_case" });
+  return drizzle(client, { schema, casing: "snake_case", logger: queryCountingLogger });
 }
 
 type Drizzle = ReturnType<typeof createDb>;

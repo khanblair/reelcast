@@ -185,3 +185,124 @@ describe("autoPublish.run", () => {
     });
   });
 });
+
+/**
+ * A throw outside the batch used to reach the queue, which retries a failing task at 30s and 60s and then marks the row
+ * `failed`: the chain was dead while `auto_publish_enabled` stayed true. These tests inject the failure at the db handle.
+ */
+describe("autoPublish.run keeps the chain alive when an infrastructure step throws", () => {
+  type Faults = { failSelect?: boolean; failSettingsUpdate?: boolean };
+  /** `faults` is read on every call, so a test can arm a fault in the middle of a run. */
+  function faulty(tx: DbLike, faults: Faults): DbLike {
+    return new Proxy(tx, {
+      get(target, prop) {
+        const value = Reflect.get(target, prop, target);
+        if (prop === "select" && faults.failSelect) {
+          return () => {
+            faults.failSelect = false; // a blip: only the first read fails
+            throw new Error("connection reset");
+          };
+        }
+        if (prop === "update") {
+          return (table: unknown) => {
+            if (table === settings && faults.failSettingsUpdate) throw new Error("commit lost");
+            return (value as (t: unknown) => unknown).call(target, table);
+          };
+        }
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    }) as DbLike;
+  }
+
+  const quiet = async <T>(fn: () => Promise<T>): Promise<T> => {
+    const orig = { error: console.error, warn: console.warn };
+    console.error = () => {};
+    console.warn = () => {};
+    try {
+      return await fn();
+    } finally {
+      console.error = orig.error;
+      console.warn = orig.warn;
+    }
+  };
+
+  test("a failing settings read re-pends the task with a short backoff instead of throwing, and records why", async () => {
+    await inRolledBackTx(async ({ tx, user }) => {
+      const { task } = await setup(tx, user.id);
+      const v = await ready(tx, user.id, "untouched");
+      const out = (await quiet(() => runAutoPublish(task, { db: faulty(tx, { failSelect: true }), now: new Date() }, makeDeps(new FakeWorld(1)).deps))) as {
+        rescheduleInMs: number;
+        payload: Record<string, unknown>;
+      };
+      expect(Math.abs(out.rescheduleInMs - 60_000)).toBeLessThan(1_000);
+      expect(out.payload).toEqual({ userId: user.id, failures: 1 });
+      const [t] = await tx.select().from(tasks).where(eq(tasks.id, task.id));
+      expect(t.lastError).toBe("connection reset");
+      expect(await jobVideoIds(tx, [v.id])).toEqual(new Set()); // no batch ran before the read succeeded
+    });
+  });
+
+  test("the backoff doubles with every consecutive failure and is capped at 30 minutes", async () => {
+    await inRolledBackTx(async ({ tx, user }) => {
+      const { task } = await setup(tx, user.id);
+      const wait = async (failures: number) => {
+        const t = { ...task, payload: { userId: user.id, failures } };
+        const out = (await quiet(() => runAutoPublish(t, { db: faulty(tx, { failSelect: true }), now: new Date() }, makeDeps(new FakeWorld(1)).deps))) as {
+          rescheduleInMs: number;
+          payload: { failures: number };
+        };
+        return { ms: out.rescheduleInMs, failures: out.payload.failures };
+      };
+      expect(await wait(0)).toEqual({ ms: 60_000, failures: 1 });
+      expect(await wait(1)).toEqual({ ms: 120_000, failures: 2 });
+      expect(await wait(3)).toEqual({ ms: 480_000, failures: 4 });
+      expect(await wait(5)).toEqual({ ms: 30 * 60_000, failures: 6 });
+      expect(await wait(40)).toEqual({ ms: 30 * 60_000, failures: 41 });
+      expect(await wait(-3)).toEqual({ ms: 60_000, failures: 1 }); // a damaged counter starts over
+    });
+  });
+
+  test("a successful run clears the failure counter and keeps the rest of the payload", async () => {
+    await inRolledBackTx(async ({ tx, user }) => {
+      const { task } = await setup(tx, user.id);
+      const t = { ...task, payload: { userId: user.id, failures: 4, extra: "kept" } };
+      const out = (await runAutoPublish(t, { db: tx, now: new Date() }, makeDeps(new FakeWorld(1)).deps)) as { rescheduleInMs: number; payload?: Record<string, unknown> };
+      expect(Math.abs(out.rescheduleInMs - 3 * H)).toBeLessThan(10_000);
+      expect(out.payload).toEqual({ userId: user.id, extra: "kept" });
+    });
+  });
+
+  test("a run that never failed returns no payload (the stored one is left alone)", async () => {
+    await inRolledBackTx(async ({ tx, user }) => {
+      const { task } = await setup(tx, user.id);
+      const out = (await runAutoPublish(task, { db: tx, now: new Date() }, makeDeps(new FakeWorld(1)).deps)) as { payload?: unknown };
+      expect(out.payload).toBeUndefined();
+    });
+  });
+
+  test("a failure AFTER the batch reschedules at the normal next time, never sooner, and the batch ran exactly once", async () => {
+    await inRolledBackTx(async ({ tx, user }) => {
+      const { task, row } = await setup(tx, user.id, { autoPublishCount: 1 });
+      const v = await ready(tx, user.id, "once");
+      const staleNext = (await row()).autoPublishNextAt;
+      const out = (await quiet(() => runAutoPublish(task, { db: faulty(tx, { failSettingsUpdate: true }), now: new Date() }, makeDeps(new FakeWorld(1)).deps))) as {
+        rescheduleInMs: number;
+        payload?: unknown;
+      };
+      // Retrying in 60s would claim and publish another video. The interval is 3h.
+      expect(Math.abs(out.rescheduleInMs - 3 * H)).toBeLessThan(10_000);
+      expect(out.payload).toBeUndefined();
+      expect(await jobVideoIds(tx, [v.id])).toEqual(new Set([v.id]));
+      expect((await row()).autoPublishNextAt).toEqual(staleNext); // the failed write left it; the next run's compare-and-swap repairs it
+      const [t] = await tx.select().from(tasks).where(eq(tasks.id, task.id));
+      expect(t.lastError).toBe("commit lost");
+    });
+  });
+
+  test("a user who stopped auto-publish is still not rescheduled (the chain ends on purpose)", async () => {
+    await inRolledBackTx(async ({ tx, user }) => {
+      const { task } = await setup(tx, user.id, { autoPublishEnabled: false });
+      expect(await runAutoPublish(task, { db: faulty(tx, {}), now: new Date() }, makeDeps(new FakeWorld(1)).deps)).toBeUndefined();
+    });
+  });
+});

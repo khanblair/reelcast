@@ -12,7 +12,7 @@ import { sql } from "drizzle-orm";
 import type { DbLike } from "@/db/client";
 import * as route from "@/app/api/health/route";
 import { countQueries, inRolledBackTx } from "@/server/testing";
-import { DB_TIMEOUT_MS, collectHealth, handleHealthRequest, httpStatusFor, statusFor, type HealthStatus } from "./health";
+import { ANONYMOUS_CACHE_MS, DB_TIMEOUT_MS, collectHealth, handleHealthRequest, httpStatusFor, statusFor, type HealthStatus } from "./health";
 import type { Env } from "./env-check";
 import { TICK_STALE_MS } from "./queue-health";
 
@@ -326,5 +326,59 @@ describe("the route", () => {
     expect(res.status).toBe(body.status === "down" ? 503 : 200);
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(queries).toBeLessThanOrEqual(2);
+  });
+});
+
+describe("anonymous results are shared briefly (the endpoint is public and the pool has one connection)", () => {
+  function countingDb() {
+    let statements = 0;
+    const db = {
+      execute: async () => void statements++,
+      select: () => ({ from: () => ({ where: () => ({ limit: async () => (statements++, []) }) }) }),
+    } as unknown as DbLike;
+    return { db, statements: () => statements };
+  }
+
+  test("repeated anonymous calls inside the window run the database check once", async () => {
+    const { db, statements } = countingDb();
+    let now = 1_000_000;
+    const opts = { db, env: goodEnv(), anonymousCacheMs: ANONYMOUS_CACHE_MS, nowMs: () => now };
+    await handleHealthRequest(anonymous(), opts);
+    const afterFirst = statements();
+    expect(afterFirst).toBeGreaterThan(0);
+    for (let i = 0; i < 25; i++) await handleHealthRequest(anonymous(), opts);
+    expect(statements()).toBe(afterFirst); // 25 more calls, no more statements
+    now += ANONYMOUS_CACHE_MS; // the window is over
+    await handleHealthRequest(anonymous(), opts);
+    expect(statements()).toBe(afterFirst * 2);
+  });
+
+  test("concurrent anonymous calls share the one in-flight check", async () => {
+    const { db, statements } = countingDb();
+    const opts = { db, env: goodEnv(), anonymousCacheMs: ANONYMOUS_CACHE_MS, nowMs: () => 5 };
+    await Promise.all(Array.from({ length: 20 }, () => handleHealthRequest(anonymous(), opts)));
+    const once = statements();
+    await handleHealthRequest(anonymous(), opts);
+    expect(statements()).toBe(once);
+  });
+
+  test("a caller with the cron secret is never served from the cache", async () => {
+    const { db, statements } = countingDb();
+    const opts = { db, env: goodEnv(), anonymousCacheMs: ANONYMOUS_CACHE_MS, nowMs: () => 7 };
+    await handleHealthRequest(anonymous(), opts); // primes the anonymous cache
+    const primed = statements();
+    await handleHealthRequest(withSecret(), opts);
+    expect(statements()).toBeGreaterThan(primed); // ran its own check
+    const secondDetailed = statements();
+    await handleHealthRequest(withSecret(), opts);
+    expect(statements()).toBeGreaterThan(secondDetailed); // and again: not cached
+  });
+
+  test("by default a test that injects its own database is not cached (no cross-test leakage)", async () => {
+    const { db, statements } = countingDb();
+    await handleHealthRequest(anonymous(), { db, env: goodEnv() });
+    const once = statements();
+    await handleHealthRequest(anonymous(), { db, env: goodEnv() });
+    expect(statements()).toBe(once * 2);
   });
 });

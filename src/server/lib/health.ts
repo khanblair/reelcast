@@ -95,17 +95,45 @@ export async function collectHealth(deps: HealthDeps): Promise<HealthReport> {
   };
 }
 
+/**
+ * Anonymous callers share ONE result for this long, per instance. The endpoint is public and every uncached call runs
+ * statements on the production pool of a single connection, so without this anyone could keep the app's only database
+ * connection busy by hammering the URL. A pinger polling every minute still sees fresh data; the answer is at most
+ * this old. Callers holding the cron secret are never cached.
+ */
+export const ANONYMOUS_CACHE_MS = 10_000;
+const anonymousCache = new WeakMap<object, { at: number; report: Promise<HealthReport> }>();
+
 /** The route's work, with its inputs injectable for tests. Defaults are the real database, environment and heartbeat row. */
-export async function handleHealthRequest(req: Request, deps: Partial<HealthDeps> = {}): Promise<Response> {
+export async function handleHealthRequest(
+  req: Request,
+  deps: Partial<HealthDeps> & {
+    /** How long an anonymous result is reused. Default: ANONYMOUS_CACHE_MS on the real database, 0 when a test injects `db`. */
+    anonymousCacheMs?: number;
+    nowMs?: () => number;
+  } = {},
+): Promise<Response> {
   const env = deps.env ?? process.env;
   const detailed = hasCronSecret(req, env.CRON_SECRET);
-  const report = await collectHealth({
-    db: deps.db ?? defaultDb,
-    env,
-    timeoutMs: deps.timeoutMs ?? DB_TIMEOUT_MS,
-    heartbeatName: deps.heartbeatName ?? TICK_HEARTBEAT,
-    withQueue: detailed,
-  });
+  const db = deps.db ?? defaultDb;
+  const run = (withQueue: boolean) =>
+    collectHealth({ db, env, timeoutMs: deps.timeoutMs ?? DB_TIMEOUT_MS, heartbeatName: deps.heartbeatName ?? TICK_HEARTBEAT, withQueue });
+
+  let report: HealthReport;
+  if (detailed) {
+    report = await run(true);
+  } else {
+    const ttl = deps.anonymousCacheMs ?? (deps.db ? 0 : ANONYMOUS_CACHE_MS);
+    const now = (deps.nowMs ?? Date.now)();
+    const hit = anonymousCache.get(db);
+    if (ttl > 0 && hit && now - hit.at < ttl) {
+      report = await hit.report;
+    } else {
+      const pending = run(false);
+      if (ttl > 0) anonymousCache.set(db, { at: now, report: pending });
+      report = await pending;
+    }
+  }
   const body = detailed ? { status: report.status, ...report.details } : { status: report.status };
   return Response.json(body, { status: httpStatusFor(report.status), headers: { "Cache-Control": "no-store" } });
 }

@@ -8,12 +8,17 @@
  * SSRF: video URLs come from rows the browser can write (`videos.rawFileKey`), so the server only
  * ever fetches https URLs on Cloudinary hosts.
  */
-import { FileState, type GoogleGenAI, type Part } from "@google/genai";
-import { PermanentAiError } from "@/server/lib/ai";
+import { FileState, type File as GeminiFile, type GoogleGenAI, type Part } from "@google/genai";
+import { PermanentAiError, toTimeoutError, withDeadline } from "@/server/lib/ai";
 
 const FRAME_TIMEOUT_MS = 15_000;
 /** Files API fallback never pulls more than this into memory. */
 const MAX_FILES_API_BYTES = 256 * 1024 * 1024;
+/** Hard cap for ONE Files API request (the upload, or a status poll); each is also bounded by the time left. */
+export const FILES_API_MAX_CALL_MS = 120_000;
+/** A per-call timeout is never armed below this: the SDK reads a timeout of 0 as "no timeout". */
+const FILES_API_MIN_CALL_MS = 1_000;
+const FILES_API_POLL_INTERVAL_MS = 2_000;
 
 const VIDEO_EXT = /\.(mp4|mov|avi|mkv|webm|flv|wmv)(\?.*)?$/;
 
@@ -54,13 +59,26 @@ export async function fetchFrames(videoUrl: string, transforms: string[], timeou
 
 export const framePart = (f: Frame): Part => ({ inlineData: { data: f.base64, mimeType: "image/jpeg" } });
 
+/** Test hooks; production uses the defaults above. */
+export type FilesApiOptions = { maxCallMs?: number; minCallMs?: number; pollIntervalMs?: number };
+
 /**
  * Upload the whole video to the Gemini Files API and wait (until `deadlineAt`, epoch ms) for it to
  * become ACTIVE. The uploaded file is auto-deleted by Google after 48h.
+ *
+ * Every Google request is bounded by min(time left, FILES_API_MAX_CALL_MS) so a hung connection ends in a
+ * retryable AiTimeoutError instead of holding the caller until the host kills it. The upload cannot take a
+ * per-request timeout from the SDK (2.6.0 drops `config.httpOptions`/`abortSignal` for the chunk requests, and
+ * `httpOptions` would replace the resumable-upload headers of the start request), so it is raced against a
+ * timer and abandoned, not cancelled. The status poll uses the SDK's own `httpOptions.timeout` and is aborted.
  */
-export async function geminiVideoFilePart(ai: GoogleGenAI, videoUrl: string, deadlineAt: number): Promise<Part> {
+export async function geminiVideoFilePart(ai: GoogleGenAI, videoUrl: string, deadlineAt: number, opts: FilesApiOptions = {}): Promise<Part> {
   assertCloudinaryUrl(videoUrl);
   const left = () => Math.max(deadlineAt - Date.now(), 0);
+  const minCallMs = opts.minCallMs ?? FILES_API_MIN_CALL_MS;
+  const maxCallMs = opts.maxCallMs ?? FILES_API_MAX_CALL_MS;
+  const callBudget = () => Math.min(Math.max(left(), minCallMs), maxCallMs);
+  const pollIntervalMs = opts.pollIntervalMs ?? FILES_API_POLL_INTERVAL_MS;
 
   const res = await fetch(videoUrl, { signal: AbortSignal.timeout(Math.max(left(), 1_000)) });
   if (!res.ok) throw new Error(`Could not fetch video for analysis: ${res.status}`);
@@ -70,11 +88,20 @@ export async function geminiVideoFilePart(ai: GoogleGenAI, videoUrl: string, dea
   if (blob.size > MAX_FILES_API_BYTES) throw new PermanentAiError("Video is too large to analyse");
   const mimeType = blob.type && blob.type !== "application/octet-stream" ? blob.type : "video/mp4";
 
-  let file = await ai.files.upload({ file: blob, config: { mimeType, displayName: "video" } });
+  let file: GeminiFile = await withDeadline(
+    ai.files.upload({ file: blob, config: { mimeType, displayName: "video" } }),
+    "Gemini Files API upload",
+    callBudget(),
+  );
   while (file.state === FileState.PROCESSING) {
     if (left() < 3_000) throw new Error("Gemini is still processing the video; try again shortly");
-    await new Promise((r) => setTimeout(r, 2_000));
-    file = await ai.files.get({ name: file.name as string });
+    await new Promise((r) => setTimeout(r, pollIntervalMs));
+    const pollMs = callBudget();
+    try {
+      file = await ai.files.get({ name: file.name as string, config: { httpOptions: { timeout: pollMs } } });
+    } catch (e) {
+      throw toTimeoutError(e, "Gemini Files API status check", pollMs);
+    }
   }
   if (file.state === FileState.FAILED || !file.uri) throw new PermanentAiError("Gemini file processing failed.");
   return { fileData: { fileUri: file.uri, mimeType } };

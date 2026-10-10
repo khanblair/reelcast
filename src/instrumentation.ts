@@ -1,13 +1,21 @@
 /**
- * Dev-only: run the job tick in-process every few seconds so `next dev` is the ONLY process
- * you need (no separate worker, no cron). In production the tick is driven by pg_cron.
+ * Dev-only, opt-in: run the job tick in-process every few seconds (`DEV_TICK=1` in `.env.local`).
+ * It is OFF by default because dev and production can share one database, and a local ticker would then
+ * claim and run real users' jobs. In production the tick is driven by pg_cron (`/api/cron/tick`).
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
   if (process.env.NODE_ENV !== "development") return;
 
-  const g = globalThis as { __reelcastDevTick?: ReturnType<typeof setInterval> };
-  if (g.__reelcastDevTick) return; // survive HMR without stacking intervals
+  const g = globalThis as { __reelcastDevTick?: ReturnType<typeof setInterval> | "off" };
+  if (g.__reelcastDevTick) return; // survive HMR without stacking intervals (or repeating the "off" line)
+
+  const { shouldRunDevTick, DEV_TICK_OFF_MESSAGE } = await import("@/server/jobs/dev-tick");
+  if (!shouldRunDevTick(process.env)) {
+    g.__reelcastDevTick = "off";
+    console.log(DEV_TICK_OFF_MESSAGE);
+    return;
+  }
 
   const { runTick } = await import("@/server/jobs/tick");
   let running = false;

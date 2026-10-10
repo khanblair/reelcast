@@ -5,6 +5,7 @@
  * fake registries; database-backed cases run in rolled-back transactions. Only requests that the route refuses BEFORE
  * dispatch are sent through the real route handler here, so no request ever reaches a session or the database.
  */
+import { inspect } from "node:util";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, setDefaultTimeout, spyOn, test } from "bun:test";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -57,6 +58,8 @@ type Level = "log" | "warn" | "error";
 const out: Record<Level, string[]> = { log: [], warn: [], error: [] };
 /** Everything written to the console, in order, with its level. */
 let seq: { level: Level; raw: string }[] = [];
+/** The arguments exactly as passed to console.error, for tests that care what a formatter could print. */
+let rawErrorArgs: unknown[][] = [];
 const spies: { mockRestore: () => void }[] = [];
 let wasLogging = false;
 
@@ -64,6 +67,7 @@ beforeAll(() => void (wasLogging = setRpcLogging(true)));
 afterAll(() => void setRpcLogging(wasLogging));
 beforeEach(() => {
   seq = [];
+  rawErrorArgs = [];
   for (const level of ["log", "warn", "error"] as const) {
     out[level] = [];
     spies.push(
@@ -71,6 +75,7 @@ beforeEach(() => {
         const raw = args.map(String).join(" ");
         out[level].push(raw);
         seq.push({ level, raw });
+        if (level === "error") rawErrorArgs.push(args);
       }),
     );
   }
@@ -212,6 +217,42 @@ describe("the rpc line: no personal data", () => {
     const json = JSON.parse(out.warn[0]) as Line;
     expect(json.path.length).toBe(120);
     expect(JSON.stringify(json)).not.toContain('"forged"');
+  });
+});
+
+describe("the unhandled-error line printed by toErrorBody", () => {
+  /** What a failed insert looks like after drizzle-orm and postgres.js are done with it. */
+  function drizzleFailure() {
+    const pg = Object.assign(new Error('duplicate key value violates unique constraint "users_email_key"'), {
+      name: "PostgresError",
+      code: "23505",
+      detail: `Key (email)=(${EMAIL}) already exists.`,
+    });
+    const err = new Error(`Failed query: insert into "users" ("email") values ($1)\nparams: ${EMAIL}`, { cause: pg }) as Error & { query: string; params: string[] };
+    err.query = 'insert into "users" ("email") values ($1)';
+    err.params = [EMAIL];
+    return err;
+  }
+
+  test("a database failure is printed without its bound values, the server's detail or the message's params line", () => {
+    const { status, body } = toErrorBody(drizzleFailure());
+    expect({ status, message: body.error.message, code: body.error.code }).toEqual({ status: 500, message: "Internal error", code: "INTERNAL" });
+    expect(rawErrorArgs).toHaveLength(1);
+    // Exactly what Node/Bun would print for these arguments, own enumerable properties and causes included.
+    const printed = inspect(rawErrorArgs[0], { depth: 8 });
+    expect(printed).not.toContain(EMAIL);
+    expect(printed).not.toContain("params:");
+    expect(printed).not.toContain("Key (email)");
+    // ...but it is still debuggable: what failed, the database error code, and where.
+    expect(printed).toContain("[rpc] unhandled error");
+    expect(printed).toContain('duplicate key value violates unique constraint "users_email_key"');
+    expect(printed).toContain("23505");
+    expect(printed).toMatch(/\bat .*observability\.test\.ts/);
+  });
+
+  test("a client error (RpcError) is not printed at all", () => {
+    toErrorBody(notFound("x"));
+    expect(rawErrorArgs).toEqual([]);
   });
 });
 

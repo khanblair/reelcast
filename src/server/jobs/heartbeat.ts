@@ -10,15 +10,16 @@
 import { eq, sql } from "drizzle-orm";
 import type { DbLike } from "@/db/client";
 import { jobSchedules } from "@/db/schema";
+import { stripQueryParams } from "@/server/lib/safe-error";
 
 export const TICK_HEARTBEAT = "tick.heartbeat";
 
 const MAX_ERROR_CHARS = 300;
 
-/** A short, single-line summary of a tick's errors for `last_error`, or null when there were none. */
+/** A short summary of a tick's errors for `last_error` (cut before any bound query values), or null when there were none. */
 export function summarizeTickErrors(errors: string[]): string | null {
   if (errors.length === 0) return null;
-  return `${errors.length} error${errors.length === 1 ? "" : "s"}: ${errors[0]}`.slice(0, MAX_ERROR_CHARS);
+  return `${errors.length} error${errors.length === 1 ? "" : "s"}: ${stripQueryParams(errors[0])}`.slice(0, MAX_ERROR_CHARS);
 }
 
 /**

@@ -263,6 +263,18 @@ describe("tick heartbeat", () => {
     expect(summarizeTickErrors(["x".repeat(5_000), "b"])?.length).toBe(300);
   });
 
+  test("the persisted summary never holds bound query values", async () => {
+    expect(summarizeTickErrors(["job 1 (publish): Failed query: update x set y = $1\nparams: victim@example.test"])).toBe("1 error: job 1 (publish): Failed query: update x set y = $1");
+    await inRolledBackTx(async ({ tx }) => {
+      const hb = heartbeatName();
+      const leaky: Sweep = { name: sweepName(), everyMs: 3_600_000, run: async () => { throw new Error("Failed query: select 1 where a = $1\nparams: victim@example.test"); } };
+      await runTick(opts(tx, [leaky], { heartbeat: hb }));
+      const { last_error } = await schedule(tx, hb);
+      expect(last_error).toContain("Failed query: select 1 where a = $1");
+      expect(last_error).not.toContain("victim@example.test");
+    });
+  });
+
   test("writing it is one statement, whether the row is new or exists", async () => {
     await inRolledBackTx(async ({ tx }) => {
       const hb = heartbeatName();

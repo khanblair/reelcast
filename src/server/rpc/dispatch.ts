@@ -11,6 +11,7 @@ import { db } from "@/db/client";
 import { withQueryCount } from "@/db/query-counter";
 import { getSessionUser } from "@/server/auth";
 import { reportError } from "@/server/lib/error-reporter";
+import { safeErrorMessage, unhandledErrorDetail } from "@/server/lib/safe-error";
 import type { AuthLevel, PublicCtx, UserCtx, UserRow } from "./define";
 import { RpcError, badRequest, forbidden, notFound, unauthenticated, type RpcErrorCode } from "./errors";
 import { logRpcAuthError, logRpcCall } from "./log";
@@ -91,7 +92,7 @@ export async function dispatch(options: DispatchOptions): Promise<unknown> {
     } catch (err) {
       const { code } = classifyError(err);
       logRpcCall({ path: options.path, ok: false, code, ms: performance.now() - started, stmts: statements(), uid: meta.uid });
-      if (code === "INTERNAL") reportError({ path: options.path, code, message: reportMessage(err), uid: meta.uid });
+      if (code === "INTERNAL") reportError({ path: options.path, code, message: safeErrorMessage(err), uid: meta.uid });
       throw err;
     }
   });
@@ -104,21 +105,10 @@ export function classifyError(err: unknown): { code: RpcErrorCode; status: numbe
   return { code: "INTERNAL", status: 500, message: "Internal error" };
 }
 
-const firstLine = (s: string) => s.split("\n", 1)[0].slice(0, 300);
-
-/**
- * The message handed to the error reporter. Drizzle wraps a failed statement as "Failed query: <sql> params: <values>",
- * and the values are user data (emails, ids), so for those only the underlying database message is used.
- */
-function reportMessage(err: unknown): string {
-  if (!(err instanceof Error)) return "Non-error value thrown";
-  if (err instanceof RpcError) return firstLine(err.message);
-  if (err.message.startsWith("Failed query:")) return firstLine(err.cause instanceof Error ? err.cause.message : "Failed query");
-  return firstLine(err.message);
-}
-
 export function toErrorBody(err: unknown): { status: number; body: { ok: false; error: { code: string; message: string } } } {
   const { code, status, message } = classifyError(err);
-  if (code === "INTERNAL" && !(err instanceof RpcError)) console.error("[rpc] unhandled error", err);
+  // Never the error object: Node prints its own properties, and a database error carries the bound query values and the
+  // server's `detail` (an email, for a unique violation). unhandledErrorDetail() keeps the name, code, message and stack frames.
+  if (code === "INTERNAL" && !(err instanceof RpcError)) console.error("[rpc] unhandled error", unhandledErrorDetail(err));
   return { status, body: { ok: false, error: { code, message } } };
 }

@@ -75,6 +75,12 @@ describe("logTickResult", () => {
     });
   }
 
+  test("bound query values never reach the log: a failed-query entry is cut before its params line", () => {
+    logTickResult(idle({ errors: ["job 9 (publish): Failed query: update \"x\" set \"y\" = $1\nparams: victim@example.test,tok_SECRET"] }), 1);
+    expect(errs).toEqual([["[tick] error", JSON.stringify('job 9 (publish): Failed query: update "x" set "y" = $1')]]);
+    expect(JSON.stringify([logs, errs])).not.toContain("victim@example.test");
+  });
+
   test("an enormous error entry is capped so one failure cannot flood the log", () => {
     logTickResult(idle({ errors: ["x".repeat(50_000)] }), 1);
     expect(JSON.parse(errs[0][1] as string)).toHaveLength(1_000);

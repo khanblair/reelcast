@@ -5,6 +5,7 @@
  */
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
+import { stripQueryParams } from "@/server/lib/safe-error";
 import { runTick, type TickOptions, type TickResult } from "./tick";
 
 export type TickRunner = (opts: TickOptions) => Promise<TickResult>;
@@ -23,11 +24,11 @@ function authorized(req: Request): boolean {
 
 /**
  * What the tick did, in the platform log (the HTTP response only goes to pg_net, where nobody reads it):
- * one `[tick] error` line per entry of `result.errors`, then one `[tick]` summary line, but only when work happened or
+ * one `[tick] error` line per entry of `result.errors` (cut before any bound query values), then one `[tick]` summary line, but only when work happened or
  * something failed; an idle tick (every minute, usually) logs nothing.
  */
 export function logTickResult(result: TickResult, ms: number): void {
-  for (const entry of result.errors) console.error("[tick] error", JSON.stringify(entry.slice(0, MAX_ERROR_CHARS)));
+  for (const entry of result.errors) console.error("[tick] error", JSON.stringify(stripQueryParams(entry).slice(0, MAX_ERROR_CHARS)));
   const { recovered } = result;
   const worked = recovered.jobs + recovered.tasks + recovered.failedJobs + result.sweepsRun.length + result.jobsRun + result.tasksRun > 0;
   if (!worked && result.errors.length === 0) return;

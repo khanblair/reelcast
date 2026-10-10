@@ -1029,17 +1029,58 @@ export async function runReconcileSweep(
   return res;
 }
 
-/** Audit retention: drop notifications that matched no order (forged / foreign ids) after 30 days. */
-export async function purgeUnmatchedEvents(db: DbLike, now = new Date()): Promise<number> {
-  const cutoff = new Date(now.getTime() - 30 * DAY_MS);
-  const rows = (await db.execute(sql`
-    delete from payment_events e
-    where e.received_at < ${cutoff.toISOString()}::timestamptz
-      and not exists (
-        select 1 from payment_orders o
-        where o.order_tracking_id = e.order_tracking_id or o.merchant_ref = e.merchant_ref
-      )
-    returning e.id
-  `)) as unknown as unknown[];
-  return rows.length;
+/** Payment notifications that match no order are dropped this long after they arrive. */
+export const PAYMENT_EVENT_RETENTION_MS = 30 * DAY_MS;
+/**
+ * The frequent purge (every 5 minutes, from `billing.reconcile`) only looks at events that turned 30 days old during the
+ * last day. Events that match an order are kept for good, so they pile up behind the cutoff; without this lower bound every
+ * run would re-check all of them (two index probes each) again and again, forever.
+ */
+export const PAYMENT_EVENT_PURGE_WINDOW_MS = DAY_MS;
+/** Most events one purge statement deletes. */
+export const PAYMENT_EVENT_PURGE_BATCH = 2_000;
+
+/**
+ * Audit retention: drop notifications that matched no order (forged / foreign ids) after 30 days. Events that match an
+ * order by tracking id or merchant reference are never deleted here. ONE statement, at most `limit` rows, safe to run twice
+ * at once (`FOR UPDATE SKIP LOCKED`: the second caller takes other rows or none).
+ *
+ * Default (the 5-minute path): only events received between 31 and 30 days ago. Every event passes through that day, so
+ * each is judged ~288 times while eligible, which is why bounding it loses nothing in normal operation.
+ * `catchUp: true` (the 6-hourly `maintenance.retention` sweep) drops the lower bound, i.e. the original behaviour: it
+ * also removes whatever the window missed (a gap in the tick of more than a day, or events older than the window when this
+ * bound was introduced), so the set of events that is eventually deleted is the same as before.
+ *
+ * `eventIds` is a test seam (production passes nothing): only those rows are considered.
+ */
+export async function purgeUnmatchedEvents(
+  db: DbLike,
+  now = new Date(),
+  opts: { catchUp?: boolean; limit?: number; eventIds?: string[] } = {},
+): Promise<number> {
+  const limit = opts.limit ?? PAYMENT_EVENT_PURGE_BATCH;
+  if (!Number.isInteger(limit) || limit < 1) throw new Error("purgeUnmatchedEvents: limit must be a positive integer");
+  if (opts.eventIds !== undefined && (opts.eventIds.length === 0 || opts.eventIds.some((id) => typeof id !== "string" || id === ""))) {
+    throw new Error("purgeUnmatchedEvents: eventIds, when given, must be a non-empty list of ids");
+  }
+  const cutoff = new Date(now.getTime() - PAYMENT_EVENT_RETENTION_MS);
+  const lowerBound = opts.catchUp ? sql`` : sql`and e.received_at >= ${new Date(cutoff.getTime() - PAYMENT_EVENT_PURGE_WINDOW_MS).toISOString()}::timestamptz`;
+  const only = opts.eventIds ? sql`and e.id in (${sql.join(opts.eventIds.map((id) => sql`${id}::uuid`), sql`, `)})` : sql``;
+  const [row] = (await db.execute(sql`
+    with picked as materialized (
+      select e.id from payment_events e
+      where e.received_at < ${cutoff.toISOString()}::timestamptz ${lowerBound}
+        and not exists (
+          select 1 from payment_orders o
+          where o.order_tracking_id = e.order_tracking_id or o.merchant_ref = e.merchant_ref
+        )
+        ${only}
+      limit ${limit}
+      for update skip locked
+    ), gone as (
+      delete from payment_events e using picked where e.id = picked.id returning e.id
+    )
+    select count(*)::int as n from gone
+  `)) as unknown as { n: number }[];
+  return row?.n ?? 0;
 }

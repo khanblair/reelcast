@@ -193,6 +193,9 @@ export const videos = pgTable(
     index("videos_created_idx").on(t.createdAt),
     index("videos_user_scheduled_idx").on(t.userId, t.createdAt.desc()).where(sql`scheduled_publish_at is not null`),
     index("videos_metadata_due_idx").on(t.metadataScheduledAt).where(sql`metadata_scheduled_at is not null`),
+    // The stuck-publish sweep (`reconcilePublishing`, every 5 min): status = 'publishing' and updated_at < cutoff.
+    // Holds only the handful of in-flight rows instead of letting the sweep scan every video.
+    index("videos_publishing_updated_idx").on(t.updatedAt).where(sql`status = 'publishing'`),
     check("videos_status_chk", inList("status", VIDEO_STATUSES)),
     check("videos_privacy_chk", inList("privacy_status", PRIVACY_STATUSES)),
     check("videos_publish_as_chk", inList("publish_as", PUBLISH_AS)),
@@ -274,6 +277,10 @@ export const tasks = pgTable(
   },
   (t) => [
     index("tasks_claim_idx").on(t.runAt).where(sql`status = 'pending'`),
+    // Stale-run recovery (`recoverStale`, every tick): status = 'running' and locked_at < cutoff. Almost always empty.
+    index("tasks_running_locked_idx").on(t.lockedAt).where(sql`status = 'running'`),
+    // Foreign key to users (ON DELETE CASCADE): without this, deleting an account scans every task.
+    index("tasks_user_idx").on(t.userId).where(sql`user_id is not null`),
     uniqueIndex("tasks_dedupe_idx").on(t.dedupeKey).where(sql`dedupe_key is not null and status in ('pending', 'running')`),
     check("tasks_status_chk", inList("status", TASK_STATUSES)),
   ],
@@ -511,6 +518,8 @@ export const ideas = pgTable(
   },
   (t) => [
     index("ideas_user_idx").on(t.userId, t.createdAt),
+    // Foreign key to videos (ON DELETE SET NULL): every deleted video looks up the ideas that point at it.
+    index("ideas_linked_video_idx").on(t.linkedVideoId).where(sql`linked_video_id is not null`),
     check("ideas_status_chk", inList("status", IDEA_STATUSES)),
   ],
 );
@@ -648,6 +657,13 @@ export const paymentOrders = pgTable(
     uniqueIndex("payment_orders_merchant_ref_idx").on(t.merchantRef),
     uniqueIndex("payment_orders_tracking_idx").on(t.orderTrackingId).where(sql`order_tracking_id is not null`),
     index("payment_orders_user_idx").on(t.userId, t.createdAt),
+    // Foreign key to subscriptions (ON DELETE SET NULL) and the per-subscription order lookups (newest first).
+    index("payment_orders_subscription_idx").on(t.subscriptionId, t.createdAt),
+    // Foreign key to users (ON DELETE SET NULL): only reviewed orders carry a reviewer, so the index stays tiny.
+    index("payment_orders_reviewed_by_idx").on(t.reviewedBy).where(sql`reviewed_by is not null`),
+    // The reconcile sweep (`runReconcileSweep`, every 5 min): orders with a tracking id that are still unapplied,
+    // oldest-touched first. Applied orders leave the index, so it holds only orders still awaiting a verdict.
+    index("payment_orders_unpaid_updated_idx").on(t.updatedAt).where(sql`applied_at is null and order_tracking_id is not null`),
     // The admin "needs review" queue: flagged and not yet reviewed.
     index("payment_orders_needs_review_idx")
       .on(t.createdAt)
@@ -670,5 +686,9 @@ export const paymentEvents = pgTable(
     processedAt: ts(),
     error: text(),
   },
-  (t) => [index("payment_events_tracking_idx").on(t.orderTrackingId, t.receivedAt)],
+  (t) => [
+    index("payment_events_tracking_idx").on(t.orderTrackingId, t.receivedAt),
+    // The retention purge (`purgeUnmatchedEvents`, every 5 min): received_at < now() - 30 days.
+    index("payment_events_received_idx").on(t.receivedAt),
+  ],
 );

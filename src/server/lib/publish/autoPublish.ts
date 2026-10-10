@@ -4,9 +4,14 @@
  *
  * The chain must never die silently, so this handler:
  *  - catches batch errors, records them on the task row, and STILL schedules the next run;
+ *  - catches a failing settings read (nothing ran yet) and re-pends this row with a growing delay (payload `failures`);
+ *  - catches a failing "schedule the next run" write (the batch already ran, so no early retry) and re-pends at the
+ *    normal next time;
  *  - schedules the next run by returning `{ rescheduleInMs }` (the queue re-pends this very task row).
  *    It cannot enqueue a new task under the same dedupe key: while this task is 'running' it still
  *    owns the key, so `enqueueTask` would just hand this row back and the chain would end.
+ * What can still end a chain (a worker that dies on its last attempt, a task cancelled by hand) is found by the
+ * `autoPublish.recover` sweep (./autoPublishChain.ts), which restarts it.
  */
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -14,6 +19,7 @@ import type { DbLike } from "@/db/client";
 import { settings, tasks, videos } from "@/db/schema";
 import { NonRetryableError } from "@/server/jobs/handlers";
 import type { TaskRow } from "@/server/jobs/queue";
+import { safeErrorMessage } from "@/server/lib/safe-error";
 import { claimAndEnqueuePublish } from "./claim";
 import { bestEffort, defaultDeps, type PublishDeps } from "./deps";
 import { computeNextAutoPublishAt } from "./schedule";
@@ -23,7 +29,7 @@ const payloadSchema = z.object({ userId: z.string().uuid() });
 const MIN_RESCHEDULE_MS = 5_000;
 
 export type AutoPublishCtx = { db: DbLike; now: Date };
-export type AutoPublishResult = void | { rescheduleInMs: number };
+export type AutoPublishResult = void | { rescheduleInMs: number; payload?: Record<string, unknown> };
 
 type Privacy = NonNullable<(typeof settings.$inferSelect)["autoPublishPrivacy"]>;
 
@@ -88,26 +94,67 @@ async function runBatch(db: DbLike, deps: PublishDeps, userId: string, s: typeof
   return { queued };
 }
 
+/** Wait before retrying a run whose settings read failed: 1 min, doubling per consecutive failure, capped at 30 min. */
+const RETRY_BASE_MS = 60_000;
+const RETRY_CAP_MS = 30 * 60_000;
+export const retryDelayMs = (failures: number) => Math.min(RETRY_BASE_MS * 2 ** Math.min(failures, 10), RETRY_CAP_MS);
+const priorFailures = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v > 0 ? v : 0);
+
+const recordError = (db: DbLike, task: TaskRow, err: unknown) =>
+  bestEffort("record task error", () => db.update(tasks).set({ lastError: safeErrorMessage(err), updatedAt: new Date() }).where(eq(tasks.id, task.id)));
+
 export async function runAutoPublish(task: TaskRow, ctx: AutoPublishCtx, deps: PublishDeps = defaultDeps()): Promise<AutoPublishResult> {
   const { db } = ctx;
-  const parsed = payloadSchema.safeParse({ userId: (task.payload as Record<string, unknown> | null)?.userId ?? task.userId });
+  const payload = (task.payload ?? {}) as Record<string, unknown>;
+  const parsed = payloadSchema.safeParse({ userId: payload.userId ?? task.userId });
   if (!parsed.success) throw new NonRetryableError("autoPublish.run needs a payload { userId }");
   const { userId } = parsed.data;
+  const failures = priorFailures(payload.failures);
 
-  const [s] = await db.select().from(settings).where(eq(settings.userId, userId)).limit(1);
+  // Anything that throws here reaches the queue, which retries a failing task twice and then marks it `failed`: the chain
+  // would be dead while auto-publish stays enabled. So an infrastructure error re-pends this row itself. Nothing has run
+  // yet at this point, so trying again soon is safe; the delay backs off while the failure lasts.
+  let s: typeof settings.$inferSelect | undefined;
+  try {
+    [s] = await db.select().from(settings).where(eq(settings.userId, userId)).limit(1);
+  } catch (err) {
+    console.error(`[autoPublish] could not read settings for user ${userId}:`, safeErrorMessage(err));
+    await recordError(db, task, err);
+    return { rescheduleInMs: retryDelayMs(failures), payload: { ...payload, userId, failures: failures + 1 } };
+  }
   if (!s?.autoPublishEnabled) return; // stopped: the chain ends here
 
   try {
     await runBatch(db, deps, userId, s);
   } catch (err) {
-    console.error(`[autoPublish] batch failed for user ${userId}:`, err instanceof Error ? err.message : err);
-    await bestEffort("record task error", () =>
-      db.update(tasks).set({ lastError: err instanceof Error ? err.message : String(err), updatedAt: new Date() }).where(eq(tasks.id, task.id)),
-    );
+    console.error(`[autoPublish] batch failed for user ${userId}:`, safeErrorMessage(err));
+    await recordError(db, task, err);
   }
 
-  // Next run. The user may have stopped or restarted auto-publish while the batch ran, so write
-  // our time only if next_at is still what we read (compare-and-swap), else adopt theirs.
+  let next: { rescheduleInMs: number } | undefined;
+  try {
+    next = await scheduleNext(db, userId, s);
+  } catch (err) {
+    // The batch HAS run: retrying soon would publish a second batch. Fall back to the time we meant to write; the next
+    // run's compare-and-swap repairs settings.auto_publish_next_at.
+    console.error(`[autoPublish] could not schedule the next run for user ${userId}:`, safeErrorMessage(err));
+    await recordError(db, task, err);
+    next = { rescheduleInMs: Math.max(MIN_RESCHEDULE_MS, computeNextAutoPublishAt(s, new Date()).getTime() - Date.now()) };
+  }
+  if (!next) return; // stopped while the batch ran: the chain ends
+  if (payload.failures === undefined) return next;
+  // A run got through: forget the failure streak (the rest of the payload is kept).
+  const rest = { ...payload };
+  delete rest.failures;
+  return { ...next, payload: rest };
+}
+
+/**
+ * Decide and store when the chain runs next. Returns undefined when the user stopped auto-publish meanwhile.
+ * The user may have stopped or restarted auto-publish while the batch ran, so write our time only if next_at is
+ * still what we read (compare-and-swap), else adopt theirs.
+ */
+async function scheduleNext(db: DbLike, userId: string, s: typeof settings.$inferSelect): Promise<{ rescheduleInMs: number } | undefined> {
   const now = new Date();
   const computed = computeNextAutoPublishAt(s, now);
   const startNext = s.autoPublishNextAt;
@@ -126,7 +173,7 @@ export async function runAutoPublish(task: TaskRow, ctx: AutoPublishCtx, deps: P
   let nextAt = computed;
   if (swapped.length === 0) {
     const [again] = await db.select().from(settings).where(eq(settings.userId, userId)).limit(1);
-    if (!again?.autoPublishEnabled) return; // stopped during the batch
+    if (!again?.autoPublishEnabled) return undefined; // stopped during the batch
     if (again.autoPublishNextAt && again.autoPublishNextAt.getTime() > now.getTime()) {
       nextAt = again.autoPublishNextAt; // restarted with a new schedule while we ran: honour it
     } else {

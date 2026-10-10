@@ -12,6 +12,7 @@ describe("publishing handlers are registered with the runner", () => {
     expect(by["publish.dueSchedules"]).toBe(60_000); // "process scheduled publishes": every minute
     expect(by["oauth.health"]).toBe(6 * 60 * 60_000); // "check youtube oauth health": every 6 hours
     expect(by["publish.reconcile"]).toBe(5 * 60_000);
+    expect(by["autoPublish.recover"]).toBe(15 * 60_000); // restarts dead auto-publish chains
   });
 
   test("sweep names are unique (they are the claim key in job_schedules)", () => {

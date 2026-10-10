@@ -690,7 +690,8 @@ export const paymentEvents = pgTable(
   },
   (t) => [
     index("payment_events_tracking_idx").on(t.orderTrackingId, t.receivedAt),
-    // The retention purge (`purgeUnmatchedEvents`, every 5 min): received_at < now() - 30 days.
+    // The retention purge (`purgeUnmatchedEvents`): a range scan on received_at around the 30-day mark (every 5 min: the
+    // last day only; every 6 h: everything older, in batches).
     index("payment_events_received_idx").on(t.receivedAt),
   ],
 );

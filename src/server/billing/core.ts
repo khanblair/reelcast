@@ -21,7 +21,7 @@
  *   upgrade  up_<subId hex32>_<periodEnd epoch s>_<rand3>  50 chars        anchored to the period it was priced for
  */
 import { randomBytes } from "node:crypto";
-import { and, desc, eq, inArray, isNotNull, isNull, like, lte, ne, notInArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, like, lte, ne, notExists, notInArray, or, sql } from "drizzle-orm";
 import type { DbLike } from "@/db/client";
 import { PAYMENT_PURPOSES, paymentEvents, paymentOrders, subscriptions, users } from "@/db/schema";
 import { createNotification } from "@/server/lib/notifications";
@@ -70,6 +70,11 @@ const STALE_PENDING_MS = 7 * DAY_MS;
 /** Reconcile gives up polling an unpaid order after this long (an IPN can still settle it later). */
 const RECONCILE_GIVE_UP_MS = 3 * DAY_MS;
 const RECONCILE_MIN_AGE_MS = 10 * 60_000;
+/**
+ * Upper bound of ONE provider status poll. Mirrors the Pesapal client's request timeout (20 s); core is
+ * provider-agnostic, so the number lives here instead of being imported from ./pesapal.
+ */
+export const RECONCILE_POLL_TIMEOUT_MS = 20_000;
 
 /** status_text values that mean "this order row can never become a live checkout". */
 const DEAD_TEXTS = ["submit_failed", "submit_abandoned", "superseded", "ABANDONED"];
@@ -174,20 +179,23 @@ async function grantEntitlement(tx: DbLike, userId: string, plan: PaidPlan, now:
 
 /**
  * Back to free, but ONLY for users whose plan came from a subscription, and only when no other
- * live paid subscription still backs the plan.
+ * live paid subscription still backs the plan. One statement for any number of users.
  */
-async function revokeEntitlement(tx: DbLike, userId: string, now: Date): Promise<void> {
+async function revokeEntitlements(tx: DbLike, userIds: string[], now: Date): Promise<void> {
+  if (userIds.length === 0) return;
   await tx
     .update(users)
     .set({ plan: "free", planSource: "default", updatedAt: now })
     .where(
       and(
-        eq(users.id, userId),
+        inArray(users.id, userIds),
         eq(users.planSource, "subscription"),
         sql`not exists (select 1 from subscriptions s where s.user_id = ${users.id} and s.status in ('active', 'past_due'))`,
       ),
     );
 }
+
+const revokeEntitlement = (tx: DbLike, userId: string, now: Date) => revokeEntitlements(tx, [userId], now);
 
 // ─── checkout ────────────────────────────────────────────────────────────────
 
@@ -817,21 +825,73 @@ export async function runRenewalSweep(
 }
 
 /**
+ * A paid plan whose subscription is already over is healed only once its users row has been idle this long.
+ * Why: the heal decides on a snapshot, and a payment applied at the same moment writes the subscription AND the
+ * plan in one transaction; the idle margin lets that fresh write win (see healOrphanedPlans).
+ * Sized above the longest a payment's own `now` can lag the moment it commits: the reconcile sweep applies its
+ * orders one after another with the `now` it started with, so the tick budget (4 min) plus a slow poll plus the
+ * host overrun is about 6 minutes.
+ */
+const HEAL_MIN_IDLE_MS = 10 * 60_000;
+
+/**
+ * Heal users left on a subscription-granted paid plan with NO live subscription behind it. Before the expiry
+ * transitions were atomic, a crash between "subscription -> cancelled/expired" and the downgrade left exactly
+ * that state, and the sweep could never find the row again (its WHERE only selects live subscriptions).
+ * Same guard as revokeEntitlements, one set-based statement for the whole batch:
+ *  - plan_source = 'subscription' only: admin grants and default plans are never touched;
+ *  - no approval_pending / active / past_due subscription: anything live is left to the normal flow;
+ *  - users.updated_at older than HEAL_MIN_IDLE_MS: under READ COMMITTED a payment that commits while this
+ *    statement waits on the users row would be re-checked against the OLD snapshot of subscriptions, and the
+ *    customer who just paid would be downgraded. grantEntitlement stamps updated_at with the payment's own `now`,
+ *    which is at most a few minutes old, so with this margin that re-check fails instead (see HEAL_MIN_IDLE_MS).
+ * Quiet on purpose: no notification (the missed "ended" notice cannot be reconstructed for a past date).
+ */
+async function healOrphanedPlans(db: DbLike, now: Date, limit: number, only: { userId?: string; userIds?: string[] }): Promise<number> {
+  const idleBefore = new Date(now.getTime() - HEAL_MIN_IDLE_MS);
+  const orphans = db
+    .select({ id: users.id })
+    .from(users)
+    .where(
+      and(
+        eq(users.planSource, "subscription"),
+        lte(users.updatedAt, idleBefore),
+        only.userId ? eq(users.id, only.userId) : undefined,
+        only.userIds ? inArray(users.id, only.userIds) : undefined,
+        notExists(db.select({ one: sql`1` }).from(subscriptions).where(and(eq(subscriptions.userId, users.id), inArray(subscriptions.status, [...LIVE_STATUSES])))),
+      ),
+    )
+    .limit(limit);
+  const rows = await db
+    .update(users)
+    .set({ plan: "free", planSource: "default", updatedAt: now })
+    .where(and(inArray(users.id, orphans), eq(users.planSource, "subscription"), lte(users.updatedAt, idleBefore)))
+    .returning({ id: users.id });
+  return rows.length;
+}
+
+/**
  * Period-end bookkeeping. Idempotent and safe to run concurrently with payments (the UPDATEs re-check
  * their predicates, and apply holds the subscription row lock):
  *   approval_pending untouched for 7 days   -> cancelled
  *   active, period over, user cancelled     -> cancelled (+ downgrade)
  *   active, period over                     -> past_due, grace_until = period_end + 3 days
  *   past_due, grace over                    -> expired (+ downgrade)
+ *   paid plan with no live subscription     -> free (heal, see healOrphanedPlans)
+ *
+ * Crash safety: a transition that ends access changes the subscription status AND downgrades the plan in ONE
+ * transaction (locks are taken subscriptions -> users, the same order payments use), so a crash can never leave
+ * a user on a paid plan whose subscription no later sweep would select. The in-app notification is written
+ * after the commit, outside the transaction.
  */
 export async function runExpirySweep(
   db: DbLike,
-  opts: { now?: Date; limit?: number; /** restrict to one user (tests, support tooling) */ userId?: string } = {},
-): Promise<{ cancelled: number; pastDue: number; expired: number; stale: number }> {
+  opts: { now?: Date; limit?: number; /** restrict to one user (tests, support tooling) */ userId?: string; /** restrict to these users (tests) */ userIds?: string[] } = {},
+): Promise<{ cancelled: number; pastDue: number; expired: number; stale: number; healed: number }> {
   const now = opts.now ?? new Date();
   const limit = opts.limit ?? 200;
-  const only = opts.userId ? eq(subscriptions.userId, opts.userId) : undefined;
-  const counts = { cancelled: 0, pastDue: 0, expired: 0, stale: 0 };
+  const only = and(opts.userId ? eq(subscriptions.userId, opts.userId) : undefined, opts.userIds ? inArray(subscriptions.userId, opts.userIds) : undefined);
+  const counts = { cancelled: 0, pastDue: 0, expired: 0, stale: 0, healed: 0 };
 
   const stale = await db
     .update(subscriptions)
@@ -847,13 +907,16 @@ export async function runExpirySweep(
   const cancelWhere = and(eq(subscriptions.status, "active"), eq(subscriptions.cancelAtPeriodEnd, true), lte(subscriptions.periodEnd, now), only);
   const cancelIds = await idsOf(cancelWhere);
   if (cancelIds.length) {
-    const rows = await db
-      .update(subscriptions)
-      .set({ status: "cancelled", graceUntil: null, pendingPlan: null, updatedAt: now })
-      .where(and(inArray(subscriptions.id, cancelIds), cancelWhere))
-      .returning({ userId: subscriptions.userId, plan: subscriptions.plan });
+    const rows = await db.transaction(async (tx) => {
+      const done = await tx
+        .update(subscriptions)
+        .set({ status: "cancelled", graceUntil: null, pendingPlan: null, updatedAt: now })
+        .where(and(inArray(subscriptions.id, cancelIds), cancelWhere))
+        .returning({ userId: subscriptions.userId, plan: subscriptions.plan });
+      await revokeEntitlements(tx, done.map((r) => r.userId), now);
+      return done;
+    });
     for (const r of rows) {
-      await revokeEntitlement(db, r.userId, now);
       await safeNotify(db, { userId: r.userId, title: "Subscription ended", message: `Your ${PLAN_NAMES[r.plan]} subscription has ended. You're back on the Free plan.`, type: "info" });
     }
     counts.cancelled += rows.length;
@@ -883,21 +946,27 @@ export async function runExpirySweep(
   const graceWhere = and(eq(subscriptions.status, "past_due"), lte(subscriptions.graceUntil, now), only);
   const graceIds = await idsOf(graceWhere);
   if (graceIds.length) {
-    const rows = await db
-      .update(subscriptions)
-      .set({
-        status: sql`case when ${subscriptions.cancelAtPeriodEnd} then 'cancelled' else 'expired' end`,
-        pendingPlan: null,
-        updatedAt: now,
-      })
-      .where(and(inArray(subscriptions.id, graceIds), graceWhere))
-      .returning({ userId: subscriptions.userId, plan: subscriptions.plan });
+    const rows = await db.transaction(async (tx) => {
+      const done = await tx
+        .update(subscriptions)
+        .set({
+          status: sql`case when ${subscriptions.cancelAtPeriodEnd} then 'cancelled' else 'expired' end`,
+          pendingPlan: null,
+          updatedAt: now,
+        })
+        .where(and(inArray(subscriptions.id, graceIds), graceWhere))
+        .returning({ userId: subscriptions.userId, plan: subscriptions.plan });
+      await revokeEntitlements(tx, done.map((r) => r.userId), now);
+      return done;
+    });
     for (const r of rows) {
-      await revokeEntitlement(db, r.userId, now);
       await safeNotify(db, { userId: r.userId, title: "Subscription expired", message: `Your ${PLAN_NAMES[r.plan]} plan expired because the renewal wasn't paid. You're back on the Free plan.`, type: "error" });
     }
     counts.expired += rows.length;
   }
+
+  // 4. heal what an earlier, non-atomic sweep left behind (see healOrphanedPlans)
+  counts.healed = await healOrphanedPlans(db, now, limit, { userId: opts.userId, userIds: opts.userIds });
   return counts;
 }
 
@@ -906,13 +975,20 @@ export async function runExpirySweep(
  * and have been quiet for 10+ minutes. Oldest-touched first; every poll bumps updated_at so a batch
  * of dead orders cannot starve the rest. Orders older than 3 days are marked ABANDONED (an IPN can
  * still settle them later).
+ *
+ * Time budget: polls run one after another and each can take up to RECONCILE_POLL_TIMEOUT_MS, so during a
+ * provider outage 25 orders could hold the tick for minutes and starve the drain behind it (publishing).
+ * `opts.deadline` is the tick's deadline (epoch ms, HandlerCtx.deadline): no poll STARTS once less than one
+ * poll timeout is left. Orders that were skipped are not touched, so they stay first in line for the next run.
  */
 export async function runReconcileSweep(
   db: DbLike,
-  deps: { provider: PaymentProvider; now?: () => Date },
-  opts: { limit?: number; /** restrict to one user (tests, support tooling) */ userId?: string } = {},
+  deps: { provider: PaymentProvider; now?: () => Date; /** wall clock in epoch ms for the deadline check (tests); NOT `now`, which is the tick's start */ nowMs?: () => number },
+  opts: { limit?: number; /** restrict to one user (tests, support tooling) */ userId?: string; /** epoch ms; undefined = no budget (callers outside a tick) */ deadline?: number } = {},
 ): Promise<{ polled: number; applied: number; abandoned: number; errors: number }> {
   const now = clock(deps);
+  const wallClock = deps.nowMs ?? Date.now;
+  const outOfBudget = () => opts.deadline !== undefined && opts.deadline - wallClock() < RECONCILE_POLL_TIMEOUT_MS;
   const unpaid = and(
     opts.userId ? eq(paymentOrders.userId, opts.userId) : undefined,
     isNotNull(paymentOrders.orderTrackingId),
@@ -927,6 +1003,9 @@ export async function runReconcileSweep(
     .where(and(unpaid, lte(paymentOrders.createdAt, new Date(now.getTime() - RECONCILE_GIVE_UP_MS))))
     .returning({ id: paymentOrders.id });
 
+  const res = { polled: 0, applied: 0, abandoned: abandoned.length, errors: 0 };
+  if (outOfBudget()) return res; // not even enough time for one poll: skip the lookup too
+
   const due = await db
     .select()
     .from(paymentOrders)
@@ -934,8 +1013,8 @@ export async function runReconcileSweep(
     .orderBy(paymentOrders.updatedAt)
     .limit(opts.limit ?? 25);
 
-  const res = { polled: 0, applied: 0, abandoned: abandoned.length, errors: 0 };
   for (const order of due) {
+    if (outOfBudget()) break;
     res.polled++;
     try {
       const status = await deps.provider.getStatus(order.orderTrackingId as string);

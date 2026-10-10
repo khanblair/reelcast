@@ -32,6 +32,44 @@ async function assertPublishable(db: DbLike, userId: string, videoId: string) {
   }
 }
 
+/**
+ * States a generation may start from. `queued` is included on purpose: a video stranded there by the old
+ * three-call client flow (create, mark queued, enqueue) must be startable again, and a repeated click on
+ * an already queued video must find its job instead of failing.
+ */
+const GENERATION_START_STATES = ["draft", "failed", "queued"] as const;
+
+/**
+ * Start a generation: move the video to `queued` and enqueue the job in ONE transaction, like the publish
+ * branch of `create`. The status change is a compare-and-swap scoped to the caller, so another user's video
+ * is never touched, and a crash or a dropped browser can no longer leave a `queued` video without a job
+ * (or a job without the status). The one-active-job-per-(video, type) index still decides duplicates.
+ */
+async function startGeneration(db: DbLike, userId: string, videoId: string): Promise<{ jobId: string; created: boolean }> {
+  return db.transaction(async (tx) => {
+    const moved = await tx
+      .update(videos)
+      .set({ status: "queued", updatedAt: new Date() })
+      .where(and(eq(videos.id, videoId), eq(videos.userId, userId), inArray(videos.status, [...GENERATION_START_STATES])))
+      .returning({ id: videos.id });
+    if (moved[0]) {
+      const { job, created } = await enqueueJob(tx, { userId, videoId, type: "generation" });
+      return { jobId: job.id, created };
+    }
+
+    // Not startable. Already generating (double click, or the runner picked the job up): hand back the active job.
+    const [active] = await tx
+      .select({ id: jobs.id })
+      .from(jobs)
+      .where(and(eq(jobs.videoId, videoId), eq(jobs.userId, userId), eq(jobs.type, "generation"), inArray(jobs.status, ["pending", "processing"])))
+      .limit(1);
+    if (active) return { jobId: active.id, created: false };
+    const [v] = await tx.select({ status: videos.status }).from(videos).where(and(eq(videos.id, videoId), eq(videos.userId, userId))).limit(1);
+    if (!v) throw notFound("Video not found");
+    throw badRequest(`Cannot generate a video with status "${v.status}". Video must be "draft", "failed" or "queued".`);
+  });
+}
+
 /** The user's jobs, newest first (capped at LIST_LIMIT). */
 export const list = query({
   auth: "public",
@@ -47,16 +85,15 @@ export const list = query({
  *
  * A publish job also claims the video (ready|scheduled -> publishing) in the same transaction,
  * exactly like "Publish now", so the schedule sweep and auto-publish can't pick it up again.
+ * A generation job does the same for draft|failed|queued -> queued (the client no longer sets `queued` itself).
  */
 export const create = mutation({
   input: z.object({ videoId: uuidSchema, type: jobTypeSchema }),
   handler: async (ctx, { videoId, type }) => {
     if (type === "generation") {
-      const [v] = await ctx.db.select({ id: videos.id }).from(videos).where(and(eq(videos.id, videoId), eq(videos.userId, ctx.userId))).limit(1);
-      if (!v) throw notFound("Video not found");
-      const { job, created } = await enqueueJob(ctx.db, { userId: ctx.userId, videoId, type });
+      const { jobId, created } = await startGeneration(ctx.db, ctx.userId, videoId);
       if (created) kickRunner();
-      return job.id;
+      return jobId;
     }
 
     await assertPublishable(ctx.db, ctx.userId, videoId);

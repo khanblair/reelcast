@@ -51,7 +51,6 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
   const video        = useQuery(api.videos.get, { id: videoId });
   const allVideos    = useQuery(api.videos.list);
   const userSettings = useQuery(api.settings.get);
-  const updateStatus = useMutation(api.videos.updateStatus);
   const updatePrivacy = useMutation(api.videos.updatePrivacyStatus);
   const updatePublishAs = useMutation(api.videos.updatePublishAs);
   const triggerGeneration = useMutation(api.jobs.create);
@@ -175,7 +174,7 @@ export default function VideoDetailPage({ params }: { params: Promise<{ id: stri
   };
 
   const handleGenerate = async () => {
-    await updateStatus({ id: video._id, status: "queued" });
+    // jobs.create moves the video to "queued" in the same transaction as the enqueue.
     await triggerGeneration({ videoId: video._id, type: "generation" });
   };
 

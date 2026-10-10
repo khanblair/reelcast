@@ -100,7 +100,7 @@ export default function GeneratePage() {
       });
 
       setGeneratedVideoId(videoId);
-      await updateStatus({ id: videoId, status: "queued" });
+      // jobs.create moves the video to "queued" in the same transaction as the enqueue.
       await triggerJob({ videoId, type: "generation" });
       setGenerationStatus("generating");
 

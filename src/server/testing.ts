@@ -68,3 +68,5 @@ export function callRpc(path: string, args: unknown, who: { user: UserRow | null
     override: { user: who.user, db: who.tx },
   });
 }
+
+export { countQueries } from "@/db/query-counter";

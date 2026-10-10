@@ -11,6 +11,8 @@
 import type { PgDatabase } from "drizzle-orm/pg-core";
 import { drizzle, type PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import { limitConcurrency } from "./concurrency-limit";
+import { queryCountingLogger } from "./query-counter";
 import * as schema from "./schema";
 
 declare global {
@@ -18,22 +20,32 @@ declare global {
   var __reelcastPg: ReturnType<typeof postgres> | undefined;
 }
 
+/** Connection options. Exported so tests can run the exact production configuration. */
+export function postgresOptions(nodeEnv: string | undefined = process.env.NODE_ENV, poolMax: string | undefined = process.env.DATABASE_POOL_MAX) {
+  const configured = Number(poolMax);
+  return {
+    // Supabase transaction pooler does not support prepared statements.
+    prepare: false,
+    // One connection per serverless instance by default (keeps pooler connections low); raise it with DATABASE_POOL_MAX
+    // to let a request's independent queries run in parallel. limitConcurrency() below makes any value safe.
+    max: Number.isInteger(configured) && configured >= 1 ? configured : nodeEnv === "production" ? 1 : 5,
+    idle_timeout: 20,
+    connect_timeout: 15,
+  };
+}
+
 function createClient() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is not set");
-  return postgres(url, {
-    // Supabase transaction pooler does not support prepared statements.
-    prepare: false,
-    max: process.env.NODE_ENV === "production" ? 1 : 5,
-    idle_timeout: 20,
-    connect_timeout: 15,
-  });
+  const options = postgresOptions();
+  // Never let postgres.js pipeline statements: through the Supabase pooler that hangs. See concurrency-limit.ts.
+  return limitConcurrency(postgres(url, options), options.max);
 }
 
 function createDb() {
   const client = globalThis.__reelcastPg ?? createClient();
   if (process.env.NODE_ENV !== "production") globalThis.__reelcastPg = client;
-  return drizzle(client, { schema, casing: "snake_case" });
+  return drizzle(client, { schema, casing: "snake_case", logger: queryCountingLogger });
 }
 
 type Drizzle = ReturnType<typeof createDb>;

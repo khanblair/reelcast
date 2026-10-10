@@ -215,7 +215,12 @@ function SessionSidebar({
 // ─── Main panel ───────────────────────────────────────────────────────────────
 
 export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
-  const sessions = useQuery(api.aiSessions.list);
+  // The top bar mounts this panel on every page, but most visits never open it. Fetch nothing until it
+  // has been opened once; after that the queries stay enabled, so behaviour from then on is unchanged.
+  const [everOpened, setEverOpened] = useState(open);
+  if (open && !everOpened) setEverOpened(true);
+
+  const sessions = useQuery(api.aiSessions.list, everOpened ? undefined : "skip");
   const createSession = useMutation(api.aiSessions.create);
   const removeSession = useMutation(api.aiSessions.remove);
   const updateTitle = useMutation(api.aiSessions.updateTitle);
@@ -293,6 +298,8 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
 
   // ── Session actions ───────────────────────────────────────────────────────
   const handleNewChat = () => {
+    // The sessions list now loads on first open: an explicit choice must beat the late auto-select.
+    setHasAutoSelected(true);
     setCurrentSessionId(null);
     setOptimisticMsg(null);
     setLoading(false);
@@ -342,6 +349,7 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
     let sessionId = currentSessionId;
     if (!sessionId) {
       const title = trimmed.slice(0, 50);
+      setHasAutoSelected(true); // don't let a late-arriving sessions list switch away from this new chat
       sessionId = (await createSession({ title })) as Id<"aiSessions">;
       setCurrentSessionId(sessionId);
     } else if ((dbMessages ?? []).length === 0) {
@@ -467,7 +475,7 @@ export function AssistantPanel({ open, onClose }: AssistantPanelProps) {
                 onScroll={handleScroll}
                 className="h-full overflow-y-auto px-3 py-4 space-y-3"
               >
-                {dbMessages === undefined && currentSessionId ? (
+                {(dbMessages === undefined && currentSessionId) || (sessions === undefined && !hasAutoSelected) ? (
                   <div className="flex items-center justify-center h-full">
                     <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                   </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle, CreditCard, History, Info, Smartphone, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { PaymentHistory } from "@/components/billing/payment-history";
 import { PlanCards } from "@/components/billing/plan-cards";
 import { PLAN_NAMES, RENEWAL_LEAD_DAYS, SUBSCRIPTION_STATUS_LABELS, formatDate, formatMoney, type PaidPlanKey, type PlanKey } from "@/components/billing/plans";
 import { UsageMeters } from "@/components/billing/usage-meters";
+import { ALL_RPC_KEY, BILLING_STATUS_KEY, INITIAL_PAYMENT_WATCH, billingSignature, stepPaymentWatch } from "@/lib/billing-poll";
 import { api, useAction, useMutation, useQuery } from "@/lib/rpc/client";
 import { cn } from "@/lib/utils";
 
@@ -67,11 +68,22 @@ export default function BillingPage() {
     let ticks = 0;
     const id = setInterval(() => {
       ticks += 1;
-      void queryClient.invalidateQueries({ queryKey: ["rpc"] });
+      // The page only renders billing.getStatus, so poll just that (the old poll refetched every active query).
+      void queryClient.invalidateQueries({ queryKey: BILLING_STATUS_KEY });
       if (ticks >= 20) clearInterval(id); // ~80s, then the user can refresh
     }, 4000);
     return () => clearInterval(id);
   }, [waitingForPayment, queryClient]);
+
+  // When the payment is detected (the plan/subscription changed since we started waiting), refresh every
+  // other query once so the plan shows up everywhere. The narrow poll above does not do that.
+  const paymentWatch = useRef(INITIAL_PAYMENT_WATCH);
+  const signature = billingSignature(status);
+  useEffect(() => {
+    const step = stepPaymentWatch(paymentWatch.current, { signature, waiting: waitingForPayment });
+    paymentWatch.current = step.watch;
+    if (step.refreshAll) void queryClient.invalidateQueries({ queryKey: ALL_RPC_KEY });
+  }, [signature, waitingForPayment, queryClient]);
 
   if (status === undefined) {
     return (

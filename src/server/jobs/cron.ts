@@ -3,25 +3,15 @@
  * The route (src/app/api/cron/tick/route.ts) is a thin wrapper so this can be tested with a fake runner: a real tick
  * claims and runs real jobs, so no test may call the route itself.
  */
-import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { stripQueryParams } from "@/server/lib/safe-error";
+import { authorized } from "./cron-auth";
 import { TICK_HEARTBEAT } from "./heartbeat";
 import { runTick, type TickOptions, type TickResult } from "./tick";
 
 export type TickRunner = (opts: TickOptions) => Promise<TickResult>;
 
 const MAX_ERROR_CHARS = 1_000;
-
-function authorized(req: Request): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  const header = req.headers.get("authorization") ?? "";
-  const given = header.startsWith("Bearer ") ? header.slice(7) : (req.headers.get("x-cron-secret") ?? "");
-  const a = Buffer.from(given);
-  const b = Buffer.from(secret);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
 
 /**
  * What the tick did, in the platform log (the HTTP response only goes to pg_net, where nobody reads it):

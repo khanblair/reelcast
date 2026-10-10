@@ -34,6 +34,7 @@ import * as ad_health from "../modules/admin/health";
 import * as ad_jobs from "../modules/admin/jobs";
 import * as ad_notifications from "../modules/admin/notifications";
 import * as ad_platformSettings from "../modules/admin/platformSettings";
+import * as ad_queue from "../modules/admin/queue";
 import * as ad_quota from "../modules/admin/quota";
 import * as ad_stats from "../modules/admin/stats";
 import * as ad_storage from "../modules/admin/storage";
@@ -81,6 +82,7 @@ export const api = {
     jobs: ad_jobs,
     notifications: ad_notifications,
     platformSettings: ad_platformSettings,
+    queue: ad_queue,
     quota: ad_quota,
     stats: ad_stats,
     storage: ad_storage,

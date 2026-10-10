@@ -161,7 +161,7 @@ describe("api.admin registry: every function is admin-only", () => {
       "admin.videos.adminDelete", "admin.videos.listAll", "admin.notifications.broadcastToAll",
       "admin.stats.getStats", "admin.health.getTokenHealth", "admin.jobs.listFailed",
       "admin.contact.listAll", "admin.quota.getQuotaOverview", "admin.storage.getPerUserBreakdown",
-      "admin.usageLedger.getOverview",
+      "admin.usageLedger.getOverview", "admin.queue.getHealth",
     ]) expect(paths).toContain(p);
   });
 

@@ -75,6 +75,15 @@ const video = (status: string, extra: Record<string, unknown> = {}) => ({
 });
 const job = (status: string) => ({ _id: `j-${status}`, userId: "u1", videoId: "v1", type: "publish", status, createdAt: NOW, _creationTime: NOW });
 const generation = (status: string) => ({ _id: `g-${status}`, userId: "u1", videoId: "v1", model: "veo", prompt: "p", status, _creationTime: NOW });
+/** admin.queue.getHealth as the browser receives it: null fields are absent, only the numbers the rule reads are set. */
+type Counts = { pending?: number; scheduled?: number; processing?: number };
+const counts = (c: Counts = {}) => ({ pending: 0, scheduled: 0, processing: 0, failedLast24h: 0, ...c });
+const queueHealth = (o: { jobs?: Counts; tasks?: Counts; stale?: boolean; heartbeat?: boolean } = {}) => ({
+  queue: { jobs: counts(o.jobs), tasks: counts(o.tasks) },
+  tick: { stale: o.stale ?? false, ...(o.heartbeat === false ? {} : { lastRunAt: NOW - 30_000, ageMs: 30_000 }) },
+  failedTasks: [],
+  scheduleErrors: [],
+});
 const settings = (extra: Record<string, unknown> = {}) => ({ userId: "u1", notificationsEnabled: true, hasResendApiKey: false, hasDeepseekApiKey: false, youtubeConnected: false, ...extra });
 
 const IN_FLIGHT_VIDEO = ["queued", "generating", "publishing"];
@@ -94,7 +103,10 @@ describe("the table matches the server", () => {
   });
 
   test("everything that polled before still has a rule, and nothing new started polling", () => {
-    expect(polledPaths().sort()).toEqual(Object.keys(LEGACY_LIVE).sort());
+    // LEGACY_LIVE is the frozen "before" table. Paths added since then are listed here on purpose, so a query cannot
+    // start polling by accident: admin.queue.getHealth (scaling ladder M-3, the admin job-runner health section).
+    const ADDED_SINCE = ["admin.queue.getHealth"];
+    expect(polledPaths().sort()).toEqual([...Object.keys(LEGACY_LIVE), ...ADDED_SINCE].sort());
   });
 
   test("the lead window is at least one baseline period, so a baseline poll always lands inside it", () => {
@@ -227,6 +239,41 @@ describe("queue stats, notifications, settings, admin aggregates", () => {
     for (const path of ["admin.stats.getStats", "admin.quota.getQuotaOverview"]) {
       for (const data of [undefined, {}, []]) expect(intervalFor(path, data, NOW)).toBe(BASELINE_MS);
     }
+  });
+});
+
+describe("admin queue health", () => {
+  const PATH = "admin.queue.getHealth";
+
+  test("fast while a job or task is due or being processed", () => {
+    for (const o of [{ jobs: { pending: 1 } }, { jobs: { processing: 1 } }, { tasks: { pending: 3 } }, { tasks: { processing: 1 } }, { jobs: { pending: 2 }, tasks: { processing: 2 } }]) {
+      expect(intervalFor(PATH, queueHealth(o), NOW)).toBe(10_000);
+    }
+  });
+
+  test("baseline when nothing is due or running, however much is scheduled for later or has failed", () => {
+    expect(intervalFor(PATH, queueHealth(), NOW)).toBe(BASELINE_MS);
+    expect(intervalFor(PATH, queueHealth({ jobs: { scheduled: 40 }, tasks: { scheduled: 9 } }), NOW)).toBe(BASELINE_MS);
+    const failed = queueHealth();
+    failed.queue.tasks.failedLast24h = 12;
+    failed.failedTasks = [{ kind: "x" }] as never[];
+    expect(intervalFor(PATH, failed, NOW)).toBe(BASELINE_MS);
+  });
+
+  test("a stale tick does not pin the page at fast: a backlog nothing is draining stays at the baseline", () => {
+    expect(intervalFor(PATH, queueHealth({ jobs: { pending: 5 }, stale: true }), NOW)).toBe(BASELINE_MS);
+    expect(intervalFor(PATH, queueHealth({ tasks: { processing: 1 }, stale: true }), NOW)).toBe(BASELINE_MS);
+  });
+
+  test("no heartbeat recorded (normal in dev) is not a stale tick: work still polls fast", () => {
+    expect(intervalFor(PATH, queueHealth({ jobs: { pending: 1 }, heartbeat: false }), NOW)).toBe(10_000);
+  });
+
+  test("it always polls, and loading or unexpected data is the baseline, never fast and never off", () => {
+    for (const data of [undefined, null, {}, [], "x", 7, { queue: null }, { queue: {} }, { queue: { jobs: null, tasks: [] }, tick: null }]) {
+      expect(intervalFor(PATH, data, NOW)).toBe(BASELINE_MS);
+    }
+    expect(pollingOptions(PATH).refetchInterval).toBeInstanceOf(Function);
   });
 });
 
@@ -602,6 +649,26 @@ describe("simulation: in-flight work refreshes as fast as before", () => {
       expect(seenAt - 200 * SEC).toBeLessThanOrEqual(BASELINE_MS);
       // ...and from then on every 10 s.
       expect(sim.polls("videos.list", seenAt, seenAt + 60 * SEC)).toBe(6);
+    });
+  });
+});
+
+describe("simulation: admin queue health", () => {
+  const PATH = "admin.queue.getHealth";
+
+  test("every 10 s while work is due, once a minute when idle, and it relaxes when the queue drains", async () => {
+    await withSim(async (sim) => {
+      sim.server.set(PATH, queueHealth({ jobs: { pending: 1 } }));
+      sim.observe(PATH, "after");
+      await sim.time.advance(60 * SEC);
+      expect(sim.polls(PATH, 0, 60 * SEC)).toBe(6);
+
+      sim.server.set(PATH, queueHealth()); // drained
+      await sim.time.advance(10 * SEC); // the next fast poll sees it
+      const idleFrom = sim.time.elapsed;
+      await sim.time.advance(10 * MIN);
+      expect(sim.polls(PATH, idleFrom, idleFrom + 10 * MIN)).toBeLessThanOrEqual(10);
+      expect(sim.polls(PATH, idleFrom, idleFrom + 10 * MIN)).toBeGreaterThanOrEqual(9);
     });
   });
 });

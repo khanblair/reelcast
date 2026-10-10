@@ -1,11 +1,10 @@
 // Port of convex/admin/users.ts. EVERY function is admin-only (the Convex version had NO auth:
 // anyone could call setAdmin/setPlan). Responses are DTOs: no tokens, no BYOK keys, no webhook
 // URLs; "has key" booleans only.
-import { and, count, desc, eq, ilike, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, ilike, or, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import type { DbLike } from "@/db/client";
 import { PLANS, jobs, settings, users, videos, youtubeChannels } from "@/db/schema";
-import { getChannelSummary } from "@/server/lib/dto";
 import { badRequest, conflict, notFound } from "../../rpc/errors";
 import { mutation, query } from "../../rpc/define";
 
@@ -65,6 +64,11 @@ export const listAll = query({
 
 const VIDEO_LIMIT = 200;
 
+/**
+ * The user, their settings flags and their primary channel in ONE statement. `youtube_channels_one_primary_idx` allows at
+ * most one primary row per user, so the left join cannot duplicate the user; with no primary channel the youtube* columns
+ * are null, which is exactly what `getChannelSummary` reports for "not connected".
+ */
 async function adminUserDto(db: DbLike, userId: string) {
   const [u] = await db
     .select({
@@ -81,13 +85,17 @@ async function adminUserDto(db: DbLike, userId: string) {
       hasTelegram: has(settings.telegramChatId),
       hasResendApiKey: has(settings.resendApiKey),
       hasDeepseekApiKey: has(settings.deepseekApiKey),
+      youtubeConnected: sql<boolean>`${youtubeChannels.id} is not null`,
+      youtubeChannelId: youtubeChannels.channelId,
+      youtubeChannelName: youtubeChannels.channelName,
+      youtubeOAuthStatus: youtubeChannels.oauthStatus,
     })
     .from(users)
     .leftJoin(settings, eq(settings.userId, users.id))
+    .leftJoin(youtubeChannels, and(eq(youtubeChannels.userId, users.id), eq(youtubeChannels.isPrimary, true)))
     .where(eq(users.id, userId))
     .limit(1);
-  if (!u) return null;
-  return { ...u, ...(await getChannelSummary(db, userId)) };
+  return u ?? null;
 }
 
 /** One user with their (latest 200) videos and last 20 jobs. null when the user does not exist. */
@@ -95,10 +103,10 @@ export const getWithDetails = query({
   auth: "admin",
   input: z.object({ userId: z.string().uuid() }),
   handler: async (ctx, args) => {
-    const user = await adminUserDto(ctx.db, args.userId);
-    if (!user) return null;
-
-    const [videoRows, [videoTotal], recentJobs] = await Promise.all([
+    // Three statements, started together: the user (with the channel), the videos (with the total as a window count, so no
+    // separate count(*)), and the jobs. They do not depend on each other; for an unknown id the last two are wasted work.
+    const [user, videoRows, recentJobs] = await Promise.all([
+      adminUserDto(ctx.db, args.userId),
       ctx.db
         .select({
           id: videos.id,
@@ -108,12 +116,13 @@ export const getWithDetails = query({
           publishedAt: videos.publishedAt,
           scheduledPublishAt: videos.scheduledPublishAt,
           rawFileSize: videos.rawFileSize,
+          // Over the whole filtered set (before LIMIT): the user's total video count. No rows means no videos, so 0.
+          total: sql<number>`count(*) over ()`.mapWith(Number),
         })
         .from(videos)
         .where(eq(videos.userId, args.userId))
         .orderBy(desc(videos.createdAt))
         .limit(VIDEO_LIMIT),
-      ctx.db.select({ n: count() }).from(videos).where(eq(videos.userId, args.userId)),
       ctx.db
         .select({
           id: jobs.id,
@@ -129,8 +138,11 @@ export const getWithDetails = query({
         .orderBy(desc(jobs.createdAt))
         .limit(20),
     ]);
+    if (!user) return null;
 
-    return { user, videos: videoRows, videoCount: videoTotal.n, recentJobs };
+    // The window total is the same on every row; it must not appear in the video objects themselves.
+    const videoList = videoRows.map((v) => ({ id: v.id, createdAt: v.createdAt, title: v.title, status: v.status, publishedAt: v.publishedAt, scheduledPublishAt: v.scheduledPublishAt, rawFileSize: v.rawFileSize }));
+    return { user, videos: videoList, videoCount: videoRows[0]?.total ?? 0, recentJobs };
   },
 });
 

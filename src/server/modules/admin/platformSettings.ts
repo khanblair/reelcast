@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { platformSettings } from "@/db/schema";
 import { createPesapalClient, PesapalError } from "@/server/billing/pesapal/client";
-import { getPesapalConfig } from "@/server/billing/pesapal/config";
+import { getPesapalConfig, pesapalConfigFromRow } from "@/server/billing/pesapal/config";
 import { getCurrency } from "@/server/billing/plans";
 import { appUrlFrom, ipnUrl, saveIpn } from "@/server/billing/service";
 import { decryptSecret, encryptSecret, maskSecret } from "@/server/crypto";
@@ -25,7 +25,7 @@ export const getStatus = query({
   auth: "admin",
   handler: async (ctx) => {
     const [row] = await ctx.db.select().from(platformSettings).where(eq(platformSettings.id, 1)).limit(1);
-    const cfg = await getPesapalConfig(ctx.db);
+    const cfg = pesapalConfigFromRow(row); // from the row just read: no second SELECT of the same row
     return {
       deepseekKeySet: !!row?.deepseekApiKey,
       geminiKeySet: !!row?.geminiApiKey,

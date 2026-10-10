@@ -1,8 +1,20 @@
 // Port of convex/admin/stats.ts getStats. All counts/sums run in SQL (no table scans in JS).
 // `getSystemStats` was internal and unused in Convex, so it is not ported.
-import { and, count, eq, gte, isNotNull, sql } from "drizzle-orm";
-import { jobs, settings, users, videos, youtubeChannels } from "@/db/schema";
+import { sql } from "drizzle-orm";
 import { query } from "../../rpc/define";
+
+type StatsRow = {
+  totalUsers: number;
+  adminCount: number;
+  youtubeConnected: number;
+  totalVideos: number;
+  publishedVideos: number;
+  totalStorageBytes: number;
+  jobsToday: number;
+  finished: number;
+  ok: number;
+  autoPublishActive: number;
+};
 
 export const getStats = query({
   auth: "admin",
@@ -11,39 +23,44 @@ export const getStats = query({
     startOfTodayUtc.setUTCHours(0, 0, 0, 0);
     const last24h = new Date(Date.now() - 86_400_000);
 
-    const [userAgg, channelAgg, videoAgg, jobAgg, publishAgg, settingsAgg] = await Promise.all([
-      ctx.db.select({ total: count(), admins: sql<number>`count(*) filter (where ${users.isAdmin})`.mapWith(Number) }).from(users),
-      ctx.db.select({ connected: count() }).from(youtubeChannels).where(eq(youtubeChannels.isPrimary, true)),
-      ctx.db
-        .select({
-          total: count(),
-          published: sql<number>`count(*) filter (where ${videos.status} = 'published')`.mapWith(Number),
-          bytes: sql<number>`coalesce(sum(${videos.rawFileSize}), 0)`.mapWith(Number),
-        })
-        .from(videos),
-      ctx.db.select({ today: count() }).from(jobs).where(gte(jobs.startedAt, startOfTodayUtc)),
-      // Publish jobs that finished (completed or failed) in the last 24h.
-      ctx.db
-        .select({
-          total: count(),
-          ok: sql<number>`count(*) filter (where ${jobs.status} = 'completed')`.mapWith(Number),
-        })
-        .from(jobs)
-        .where(and(eq(jobs.type, "publish"), isNotNull(jobs.completedAt), gte(jobs.completedAt, last24h))),
-      ctx.db.select({ active: count() }).from(settings).where(eq(settings.autoPublishEnabled, true)),
-    ]);
+    // `p` = publish jobs that finished (completed or failed) in the last 24h.
+    // ONE statement (polled every 30 s over a slow link): each aggregate is a one-row derived table, so the cross join
+    // below always has exactly one row. Counts are cast to int and the byte sum to float8 (postgres.js returns int8 and
+    // numeric as strings). The instants go in as ISO strings: a raw `sql` template does not serialise a Date column value.
+    const [row] = (await ctx.db.execute(sql`
+      select u.total::int as "totalUsers",
+             u.admins::int as "adminCount",
+             c.connected::int as "youtubeConnected",
+             v.total::int as "totalVideos",
+             v.published::int as "publishedVideos",
+             v.bytes::float8 as "totalStorageBytes",
+             j.today::int as "jobsToday",
+             p.finished::int as "finished",
+             p.ok::int as "ok",
+             s.active::int as "autoPublishActive"
+      from (select count(*) as total, count(*) filter (where is_admin) as admins from users) u,
+           (select count(*) as connected from youtube_channels where is_primary = true) c,
+           (select count(*) as total,
+                   count(*) filter (where status = 'published') as published,
+                   coalesce(sum(raw_file_size), 0) as bytes
+              from videos) v,
+           (select count(*) as today from jobs where started_at >= ${startOfTodayUtc.toISOString()}::timestamptz) j,
+           (select count(*) as finished, count(*) filter (where status = 'completed') as ok
+              from jobs
+             where type = 'publish' and completed_at is not null and completed_at >= ${last24h.toISOString()}::timestamptz) p,
+           (select count(*) as active from settings where auto_publish_enabled = true) s
+    `)) as unknown as StatsRow[];
 
-    const finished = publishAgg[0].total;
     return {
-      totalUsers: userAgg[0].total,
-      youtubeConnected: channelAgg[0].connected,
-      adminCount: userAgg[0].admins,
-      totalVideos: videoAgg[0].total,
-      publishedVideos: videoAgg[0].published,
-      totalStorageBytes: videoAgg[0].bytes,
-      jobsToday: jobAgg[0].today,
-      successRate24h: finished > 0 ? publishAgg[0].ok / finished : null,
-      autoPublishActive: settingsAgg[0].active,
+      totalUsers: row.totalUsers,
+      youtubeConnected: row.youtubeConnected,
+      adminCount: row.adminCount,
+      totalVideos: row.totalVideos,
+      publishedVideos: row.publishedVideos,
+      totalStorageBytes: row.totalStorageBytes,
+      jobsToday: row.jobsToday,
+      successRate24h: row.finished > 0 ? row.ok / row.finished : null,
+      autoPublishActive: row.autoPublishActive,
     };
   },
 });

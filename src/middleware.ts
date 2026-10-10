@@ -45,9 +45,15 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  // getClaims() checks the access token's signature locally against the project's public signing key (the
+  // JWKS is cached per instance) instead of asking Supabase Auth on every request like getUser() did. It still
+  // refreshes an expiring session first and writes the new cookies through setAll above. Trade-off: a session
+  // revoked, or a user deleted, server-side keeps passing this page gate until its access token expires
+  // (1 hour); every data call re-checks the user in src/server/auth.ts.
+  const { data } = await supabase.auth.getClaims();
+  const signedIn = Boolean(data?.claims?.sub);
 
-  if (!user && isProtected(request.nextUrl.pathname)) {
+  if (!signedIn && isProtected(request.nextUrl.pathname)) {
     const signInUrl = new URL("/sign-in", request.url);
     signInUrl.searchParams.set("redirect_url", request.nextUrl.pathname);
     return NextResponse.redirect(signInUrl);

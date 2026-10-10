@@ -392,8 +392,9 @@ describe("admin aggregates (SQL) match inserted rows", () => {
       expect(sh.totalRelevant).toBeGreaterThanOrEqual(1);
 
       // jobs lists (joined with user + video)
-      const failed = await call<{ _id: string; error?: string; userEmail: string; videoTitle: string }[]>("admin.jobs.listFailed", { limit: 200 });
+      const failed = await call<{ _id: string; type: string; error?: string; userEmail: string; videoTitle: string }[]>("admin.jobs.listFailed", { limit: 200 });
       const f = failed.find((j) => j.error === "boom")!;
+      expect(typeof f.type).toBe("string"); // the admin overview labels each row by type
       expect(f.userEmail).toBe(user.email);
       expect(f.videoTitle).toBe("pub 2");
       expect(failed.every((j) => (j as unknown as { status: string }).status === "failed")).toBe(true);

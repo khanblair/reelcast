@@ -48,6 +48,7 @@ export const viewport: Viewport = {
 
 import AnalyticsProvider from "@/components/analytics-provider";
 import { Providers } from "@/components/providers";
+import { SIDEBAR_INIT_SCRIPT } from "@/lib/sidebar-collapse";
 
 // Production registers public/sw.js (static install assets only). In development the worker is not registered, and any
 // worker or reelcast-* cache left over from an earlier run is removed: a stale worker serves old HTML that never hydrates.
@@ -89,6 +90,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
       </head>
       <body className={`${inter.variable} font-sans antialiased`}>
+        {/* Restores collapsed sidebars before first paint (see src/lib/sidebar-collapse.ts). */}
+        <script dangerouslySetInnerHTML={{ __html: SIDEBAR_INIT_SCRIPT }} />
         <Providers>
           <AnalyticsProvider>{children}</AnalyticsProvider>
         </Providers>

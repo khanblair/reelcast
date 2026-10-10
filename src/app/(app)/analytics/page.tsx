@@ -142,7 +142,7 @@ export default function AnalyticsPage() {
           </CardHeader>
           <CardContent className="pl-2">
             <div className="h-[200px] sm:h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 200 }}>
                 <LineChart data={stats.timelineData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" opacity={0.1} vertical={false} />
                   <XAxis 
@@ -184,7 +184,7 @@ export default function AnalyticsPage() {
           </CardHeader>
           <CardContent>
             <div className="h-[200px] sm:h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 200 }}>
                 <BarChart data={stats.statusData} margin={{ top: 20, right: 0, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" opacity={0.1} vertical={false} />
                   <XAxis 
@@ -249,7 +249,7 @@ export default function AnalyticsPage() {
             </CardHeader>
             <CardContent className="pl-2">
               <div className="h-[200px] sm:h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 200 }}>
                   <LineChart data={series.points} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" opacity={0.1} vertical={false} />
                     <XAxis

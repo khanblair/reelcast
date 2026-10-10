@@ -16,7 +16,9 @@ export async function register() {
     running = true;
     try {
       const r = await runTick({ budgetMs: 25_000 });
-      if (r.jobsRun || r.tasksRun || r.sweepsRun.length || r.errors.length) console.log("[dev tick]", JSON.stringify(r));
+      // Routine sweeps that found nothing to do every few seconds are noise: log real work, recoveries and errors only.
+      const recovered = r.recovered.jobs || r.recovered.tasks || r.recovered.failedJobs;
+      if (r.jobsRun || r.tasksRun || recovered || r.errors.length) console.log("[dev tick]", JSON.stringify(r));
     } catch (e) {
       console.error("[dev tick] failed", e);
     } finally {

@@ -38,5 +38,5 @@ export const videoStatus = (status: string): StatusInfo => VIDEO[status] ?? fall
 export const jobStatus = (status: string): StatusInfo => JOB[status] ?? fallback(status);
 export const oauthStatus = (status: string): StatusInfo => OAUTH[status] ?? fallback(status);
 
-/** "publish" -> "Publish". Job types are plain words. */
-export const jobTypeLabel = (type: string): string => type.charAt(0).toUpperCase() + type.slice(1);
+/** "publish" -> "Publish". Job types are plain words; a missing type reads "Unknown" rather than crashing the table. */
+export const jobTypeLabel = (type?: string | null): string => (type ? type.charAt(0).toUpperCase() + type.slice(1) : "Unknown");

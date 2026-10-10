@@ -244,6 +244,136 @@ describe("actions.generateThumbnail / generateCaptions", () => {
   });
 });
 
+describe("actions.generateThumbnail / generateCaptions: metering", () => {
+  // Both actions call Gemini with video frames, exactly like metadata.generateForUpload, so they spend the same
+  // `metadataGenerated` unit (free: 5 / month, pro and elite: unlimited).
+  const FRAME_AI_MESSAGE = "AI limit reached for your plan: captions, thumbnails and metadata generation share one monthly allowance. Upgrade for more.";
+  const gemCalls = () => net.calls.filter((c) => c.url.includes(":generateContent")).length;
+  const cloudCalls = () => net.calls.filter((c) => c.url.includes("res.cloudinary.com")).length;
+  const frame = () => new Response(new Uint8Array([1, 2]), { status: 200 });
+
+  const endpoints = [
+    { name: "thumbnail", path: "actions.generateThumbnail.generate", reply: () => geminiText("1") },
+    { name: "captions", path: "actions.generateCaptions.generate", reply: () => geminiText("WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nHi") },
+  ] as const;
+
+  async function setup(tx: Parameters<typeof setPlan>[0], user: { id: string }, plan: "free" | "pro" | "elite", used: number) {
+    await setPlatformKeys(tx, { gemini: "gem-key" });
+    await setPlan(tx, user.id, plan);
+    await setUsage(tx, user.id, "metadata_generated", used);
+    return mkVideo(tx, user.id, { rawFileKey: CLOUD, duration: 5 });
+  }
+
+  for (const ep of endpoints) {
+    test(`${ep.name}: at the plan limit it is rejected before any network call and nothing is charged`, async () => {
+      await inRolledBackTx(async ({ tx, user }) => {
+        const v = await setup(tx, user, "free", 5);
+        handler = (url) => (url.includes(":generateContent") ? ep.reply() : frame());
+        const err = await callRpc(ep.path, { videoId: v.id }, { user: asPlan(user, "free"), tx }).catch((e: unknown) => e);
+        expect(err).toMatchObject({ code: "PLAN_LIMIT_EXCEEDED", message: FRAME_AI_MESSAGE });
+        expect(gemCalls()).toBe(0);
+        expect(cloudCalls()).toBe(0); // the gate sits before the frame fetches, too
+        expect(await usageCount(tx, user.id, "metadata_generated")).toBe(5);
+        const row = (await tx.select().from(videos).where(eq(videos.id, v.id)))[0];
+        expect(row.captionsVtt).toBeNull();
+        expect(row.thumbnailGeneratedUrl).toBeNull();
+      });
+    });
+
+    test(`${ep.name}: under the limit it succeeds, calls Gemini once and spends exactly one unit`, async () => {
+      await inRolledBackTx(async ({ tx, user }) => {
+        const v = await setup(tx, user, "free", 4);
+        handler = (url) => (url.includes(":generateContent") ? ep.reply() : frame());
+        await callRpc(ep.path, { videoId: v.id }, { user: asPlan(user, "free"), tx });
+        expect(gemCalls()).toBe(1);
+        expect(await usageCount(tx, user.id, "metadata_generated")).toBe(5);
+      });
+    });
+
+    test(`${ep.name}: pro and elite are never blocked by it (unlimited allowance), but the unit is still counted`, async () => {
+      await inRolledBackTx(async ({ tx, user }) => {
+        const v = await setup(tx, user, "pro", 5000);
+        handler = (url) => (url.includes(":generateContent") ? ep.reply() : frame());
+        await callRpc(ep.path, { videoId: v.id }, { user: asPlan(user, "pro"), tx });
+        expect(gemCalls()).toBe(1);
+        expect(await usageCount(tx, user.id, "metadata_generated")).toBe(5001);
+      });
+    });
+
+    test(`${ep.name}: a missing Gemini key, a foreign host and someone else's video cost nothing`, async () => {
+      await inRolledBackTx(async ({ tx, user, makeUser }) => {
+        const v = await setup(tx, user, "free", 1);
+        await setPlatformKeys(tx, { gemini: null });
+        await expect(callRpc(ep.path, { videoId: v.id }, { user: asPlan(user, "free"), tx })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+        await setPlatformKeys(tx, { gemini: "gem-key" });
+        const evil = await mkVideo(tx, user.id, { rawFileKey: "https://example.com/x.mp4" });
+        await expect(callRpc(ep.path, { videoId: evil.id }, { user: asPlan(user, "free"), tx })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+        const other = await makeUser();
+        const theirs = await mkVideo(tx, other.id, { rawFileKey: CLOUD });
+        await expect(callRpc(ep.path, { videoId: theirs.id }, { user: asPlan(user, "free"), tx })).rejects.toMatchObject({ code: "NOT_FOUND" });
+        expect(await usageCount(tx, user.id, "metadata_generated")).toBe(1);
+        expect(await usageCount(tx, other.id, "metadata_generated")).toBe(0);
+      });
+    });
+  }
+
+  test("captions: a Gemini failure and an unreadable video both refund the unit", async () => {
+    await inRolledBackTx(async ({ tx, user }) => {
+      const v = await setup(tx, user, "free", 2);
+      handler = (url) => (url.includes(":generateContent") ? new Response("down", { status: 503 }) : frame());
+      await expect(callRpc("actions.generateCaptions.generate", { videoId: v.id }, { user: asPlan(user, "free"), tx })).rejects.toMatchObject({ code: "INTERNAL" });
+      expect(gemCalls()).toBeGreaterThan(0);
+      expect(await usageCount(tx, user.id, "metadata_generated")).toBe(2);
+
+      net.calls.length = 0;
+      handler = () => new Response("", { status: 404 }); // no frames at all
+      await expect(callRpc("actions.generateCaptions.generate", { videoId: v.id }, { user: asPlan(user, "free"), tx })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expect(gemCalls()).toBe(0);
+      expect(await usageCount(tx, user.id, "metadata_generated")).toBe(2);
+    });
+  });
+
+  test("thumbnail: when Gemini fails or there are no frames the default frame is still returned and the unit is refunded", async () => {
+    await inRolledBackTx(async ({ tx, user }) => {
+      const v = await setup(tx, user, "free", 2);
+      const fallback = "https://res.cloudinary.com/demo/video/upload/so_25p,w_1280,h_720,c_fill,e_sharpen,e_vibrance:50/v1/clip.jpg";
+
+      handler = (url) => (url.includes(":generateContent") ? new Response("down", { status: 503 }) : frame());
+      expect(await callRpc("actions.generateThumbnail.generate", { videoId: v.id }, { user: asPlan(user, "free"), tx })).toEqual({ thumbnailUrl: fallback });
+      expect(gemCalls()).toBeGreaterThan(0);
+      expect(await usageCount(tx, user.id, "metadata_generated")).toBe(2);
+
+      net.calls.length = 0;
+      handler = () => new Response("", { status: 404 });
+      expect(await callRpc("actions.generateThumbnail.generate", { videoId: v.id }, { user: asPlan(user, "free"), tx })).toEqual({ thumbnailUrl: fallback });
+      expect(gemCalls()).toBe(0);
+      expect(await usageCount(tx, user.id, "metadata_generated")).toBe(2);
+    });
+  });
+
+  test("thumbnail: a Gemini reply that is not a frame index still spent the call, so the unit stays spent", async () => {
+    await inRolledBackTx(async ({ tx, user }) => {
+      const v = await setup(tx, user, "free", 2);
+      handler = (url) => (url.includes(":generateContent") ? geminiText("the third one") : frame());
+      await callRpc("actions.generateThumbnail.generate", { videoId: v.id }, { user: asPlan(user, "free"), tx });
+      expect(gemCalls()).toBe(1);
+      expect(await usageCount(tx, user.id, "metadata_generated")).toBe(3);
+    });
+  });
+
+  test("captions, thumbnails and metadata draw from one allowance", async () => {
+    await inRolledBackTx(async ({ tx, user }) => {
+      const v = await setup(tx, user, "free", 3);
+      const free = asPlan(user, "free");
+      handler = (url) => (url.includes(":generateContent") ? geminiText("1") : frame());
+      await callRpc("actions.generateThumbnail.generate", { videoId: v.id }, { user: free, tx }); // 4
+      await callRpc("actions.generateCaptions.generate", { videoId: v.id }, { user: free, tx }); // 5
+      await expect(callRpc("actions.generateThumbnail.generate", { videoId: v.id }, { user: free, tx })).rejects.toMatchObject({ code: "PLAN_LIMIT_EXCEEDED" });
+      await expect(callRpc("actions.metadata.generateForUpload", { videoId: v.id }, { user: free, tx })).rejects.toMatchObject({ code: "PLAN_LIMIT_EXCEEDED" });
+    });
+  });
+});
+
 describe("actions.testConnections", () => {
   test("Discord: SSRF guard; Telegram: success and failure; nothing configured is reported", async () => {
     await inRolledBackTx(async ({ tx, user }) => {

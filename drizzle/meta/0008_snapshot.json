@@ -1,5 +1,5 @@
 {
-  "id": "ebefdb34-e143-42b5-9a46-232daf044cd9",
+  "id": "fdd4a4af-ee14-4c46-9bd9-13ea6ca59157",
   "prevId": "6583d0ed-4c2d-465d-a0eb-b884984d0d56",
   "version": "7",
   "dialect": "postgresql",
@@ -3302,11 +3302,11 @@
           "method": "btree",
           "with": {}
         },
-        "videos_publishing_updated_idx": {
-          "name": "videos_publishing_updated_idx",
+        "videos_publishing_idx": {
+          "name": "videos_publishing_idx",
           "columns": [
             {
-              "expression": "updated_at",
+              "expression": "id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

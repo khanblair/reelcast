@@ -194,8 +194,10 @@ export const videos = pgTable(
     index("videos_user_scheduled_idx").on(t.userId, t.createdAt.desc()).where(sql`scheduled_publish_at is not null`),
     index("videos_metadata_due_idx").on(t.metadataScheduledAt).where(sql`metadata_scheduled_at is not null`),
     // The stuck-publish sweep (`reconcilePublishing`, every 5 min): status = 'publishing' and updated_at < cutoff.
-    // Holds only the handful of in-flight rows instead of letting the sweep scan every video.
-    index("videos_publishing_updated_idx").on(t.updatedAt).where(sql`status = 'publishing'`),
+    // Lists only the handful of in-flight rows, and the sweep filters updated_at on those. Keyed on `id`, NOT on
+    // updated_at: Postgres decides HOT per indexed column, and nearly every video update touches updated_at, so
+    // an updated_at key would make every video update non-HOT. `id` never changes and `status` is already indexed.
+    index("videos_publishing_idx").on(t.id).where(sql`status = 'publishing'`),
     check("videos_status_chk", inList("status", VIDEO_STATUSES)),
     check("videos_privacy_chk", inList("privacy_status", PRIVACY_STATUSES)),
     check("videos_publish_as_chk", inList("publish_as", PUBLISH_AS)),

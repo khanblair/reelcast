@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import type { Route } from "next";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +40,13 @@ export default function SignInPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  // The delete-account page sends people here with ?accountDeleted=1. Read it without an effect or a hydration mismatch.
+  const search = useSyncExternalStore(
+    () => () => {},
+    () => window.location.search,
+    () => "",
+  );
+  const accountDeleted = new URLSearchParams(search).get("accountDeleted") === "1";
 
   const handleGoogleAuth = async () => {
     const supabase = createClient();
@@ -138,6 +145,15 @@ export default function SignInPage() {
               <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight mb-1.5">Welcome back</h1>
               <p className="text-muted-foreground text-sm">Sign in to your ReelCast account</p>
             </div>
+
+            {accountDeleted && (
+              <p
+                role="status"
+                className="mb-5 rounded-lg border border-border bg-secondary px-3 py-2 text-sm text-foreground"
+              >
+                Your account and all of its data have been deleted.
+              </p>
+            )}
 
             {/* Google */}
             <Button

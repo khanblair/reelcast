@@ -4,35 +4,16 @@ import { api, useQuery } from "@/lib/rpc/client";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { useCallback, useState } from "react";
-import Image from "next/image";
+import Link from "next/link";
+import type { Route } from "next";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
-import { LogOut, Mail, Calendar, Video, Youtube, Shield } from "lucide-react";
-
-function Avatar({ name, imageUrl }: { name?: string | null; imageUrl?: string | null }) {
-  const initials = name
-    ? name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
-    : "?";
-
-  if (imageUrl) {
-    return (
-      <Image
-        src={imageUrl}
-        alt={name ?? "Profile"}
-        width={96}
-        height={96}
-        className="rounded-full object-cover ring-4 ring-border shadow-lg"
-      />
-    );
-  }
-  return (
-    <div className="h-24 w-24 rounded-full bg-primary/10 ring-4 ring-border shadow-lg flex items-center justify-center text-3xl font-bold text-primary">
-      {initials}
-    </div>
-  );
-}
+import { UserAvatar } from "@/components/shared/user-avatar";
+import { EditProfileDialog } from "@/components/profile/edit-profile-dialog";
+import { displayName } from "@/lib/user-display";
+import { LogOut, Mail, Calendar, Pencil, Trash2, Video, Youtube, Shield } from "lucide-react";
 
 function StatCard({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string | number }) {
   return (
@@ -54,6 +35,7 @@ export default function ProfilePage() {
   const user = useQuery(api.users.current);
   const stats = useQuery(api.analytics.getDashboardStats);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
   const handleSignOut = useCallback(async () => {
@@ -87,15 +69,29 @@ export default function ProfilePage() {
         <Card>
           <CardContent className="p-6 sm:p-8">
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
-              <Avatar name={user?.name} imageUrl={user?.imageUrl} />
+              <UserAvatar
+                name={user?.name}
+                email={user?.email}
+                imageUrl={user?.imageUrl}
+                size={96}
+                className="ring-4 ring-border shadow-lg"
+              />
 
-              <div className="flex-1 text-center sm:text-left space-y-3">
-                <div>
-                  <h2 className="text-2xl font-bold">{user?.name ?? "Unknown"}</h2>
-                  <div className="flex items-center justify-center sm:justify-start gap-1.5 mt-1 text-muted-foreground">
-                    <Mail className="h-3.5 w-3.5 shrink-0" />
-                    <span className="text-sm">{user?.email}</span>
+              <div className="flex-1 text-center sm:text-left space-y-3 min-w-0">
+                <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <h2 className="text-2xl font-bold break-words">{user ? displayName(user) : "Account"}</h2>
+                    <div className="flex items-center justify-center sm:justify-start gap-1.5 mt-1 text-muted-foreground">
+                      <Mail className="h-3.5 w-3.5 shrink-0" />
+                      <span className="text-sm break-all">{user?.email}</span>
+                    </div>
                   </div>
+                  {user && (
+                    <Button variant="outline" size="sm" className="shrink-0" onClick={() => setEditOpen(true)}>
+                      <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                      Edit profile
+                    </Button>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -174,7 +170,24 @@ export default function ProfilePage() {
             Sign out
           </Button>
         </div>
+
+        {/* Delete account */}
+        <div className="border border-destructive/30 rounded-lg p-5">
+          <h3 className="font-semibold mb-1">Delete account</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Permanently delete your account and everything in it: videos, files, channel connections, settings and billing records. This cannot be undone.
+          </p>
+          <Link
+            href={"/profile/delete" as Route}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-destructive/50 px-4 py-2 text-sm font-medium text-destructive transition-colors hover:bg-destructive hover:text-destructive-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            Delete account…
+          </Link>
+        </div>
       </div>
+
+      {user && <EditProfileDialog open={editOpen} onOpenChange={setEditOpen} user={user} />}
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="max-w-sm mx-4">

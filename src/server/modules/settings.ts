@@ -15,8 +15,12 @@ export const get = query({
   auth: "public",
   handler: async (ctx) => {
     if (!ctx.userId) return null;
-    const [row] = await ctx.db.select().from(settings).where(eq(settings.userId, ctx.userId)).limit(1);
-    return settingsDto(row ?? null, ctx.userId, await getChannelSummary(ctx.db, ctx.userId));
+    // Independent reads, issued together.
+    const [[row], channel] = await Promise.all([
+      ctx.db.select().from(settings).where(eq(settings.userId, ctx.userId)).limit(1),
+      getChannelSummary(ctx.db, ctx.userId),
+    ]);
+    return settingsDto(row ?? null, ctx.userId, channel);
   },
 });
 

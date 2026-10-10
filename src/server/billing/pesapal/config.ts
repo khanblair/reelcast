@@ -30,8 +30,12 @@ function tryDecrypt(blob: string | null | undefined, label: string): string | nu
   }
 }
 
-export async function getPesapalConfig(db: DbLike): Promise<PesapalConfig | null> {
-  const [row] = await db.select().from(platformSettings).where(eq(platformSettings.id, 1)).limit(1);
+/**
+ * The config a platform_settings row (or its absence) yields: the decrypted database pair, else the environment pair, else
+ * null. Pure apart from reading process.env; a caller that already holds the row (the admin status card) uses this instead
+ * of fetching it a second time.
+ */
+export function pesapalConfigFromRow(row: typeof platformSettings.$inferSelect | undefined): PesapalConfig | null {
   const environment: PesapalEnvironment = row?.pesapalEnvironment === "live" ? "live" : "sandbox";
   const dbKey = tryDecrypt(row?.pesapalConsumerKey, "consumer key");
   const dbSecret = tryDecrypt(row?.pesapalConsumerSecret, "consumer secret");
@@ -44,4 +48,9 @@ export async function getPesapalConfig(db: DbLike): Promise<PesapalConfig | null
     return { consumerKey: envKey, consumerSecret: envSecret, environment, ipnId: row?.pesapalIpnId ?? null, ipnUrl: row?.pesapalIpnUrl ?? null, source: "environment" };
   }
   return null;
+}
+
+export async function getPesapalConfig(db: DbLike): Promise<PesapalConfig | null> {
+  const [row] = await db.select().from(platformSettings).where(eq(platformSettings.id, 1)).limit(1);
+  return pesapalConfigFromRow(row);
 }

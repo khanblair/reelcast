@@ -12,16 +12,19 @@ export const getStorageHealth = query({
   auth: "admin",
   handler: async (ctx) => {
     const relevant = inArray(videos.status, ["ready", "scheduled"]);
-    const [agg] = await ctx.db
+    // The totals and the list of missing files do not depend on each other, so they are ONE statement: the one-row
+    // aggregate LEFT JOINed to the (capped, newest-check-first) list. No missing video gives a single row with null
+    // video columns, so the totals are still returned.
+    const totals = ctx.db
       .select({
-        total: sql<number>`count(*)`.mapWith(Number),
-        missing: sql<number>`count(*) filter (where ${videos.storageMissing} is true)`.mapWith(Number),
-        healthy: sql<number>`count(*) filter (where ${videos.storageMissing} is false)`.mapWith(Number),
+        total: sql<number>`count(*)`.mapWith(Number).as("total"),
+        missing: sql<number>`count(*) filter (where ${videos.storageMissing} is true)`.mapWith(Number).as("missing"),
+        healthy: sql<number>`count(*) filter (where ${videos.storageMissing} is false)`.mapWith(Number).as("healthy"),
       })
       .from(videos)
-      .where(relevant);
-
-    const missingVideos = await ctx.db
+      .where(relevant)
+      .as("totals");
+    const missingList = ctx.db
       .select({
         videoId: videos.id,
         aiTitle: videos.aiTitle,
@@ -34,20 +37,36 @@ export const getStorageHealth = query({
       .leftJoin(users, eq(users.id, videos.userId))
       .where(and(relevant, eq(videos.storageMissing, true)))
       .orderBy(sql`${videos.storageCheckedAt} desc nulls last`)
-      .limit(MISSING_LIMIT);
+      .limit(MISSING_LIMIT)
+      .as("missing_videos");
+    const rows = await ctx.db
+      .select({
+        total: totals.total,
+        missing: totals.missing,
+        healthy: totals.healthy,
+        videoId: missingList.videoId,
+        aiTitle: missingList.aiTitle,
+        title: missingList.title,
+        userEmail: missingList.userEmail,
+        status: missingList.status,
+        checkedAt: missingList.checkedAt,
+      })
+      .from(totals)
+      .leftJoin(missingList, sql`true`)
+      .orderBy(sql`${missingList.checkedAt} desc nulls last`);
+    const agg = rows[0];
 
     return {
       totalRelevant: agg.total,
       healthyCount: agg.healthy,
       missingCount: agg.missing,
       uncheckedCount: agg.total - agg.missing - agg.healthy,
-      missingVideos: missingVideos.map((v) => ({
-        videoId: v.videoId,
-        title: v.aiTitle ?? v.title,
-        userEmail: v.userEmail ?? "unknown",
-        status: v.status,
-        checkedAt: v.checkedAt,
-      })),
+      // (title and status are NOT NULL columns; the checks only narrow the types the left join made nullable)
+      missingVideos: rows.flatMap((v) =>
+        v.videoId === null || v.title === null || v.status === null
+          ? []
+          : [{ videoId: v.videoId, title: v.aiTitle ?? v.title, userEmail: v.userEmail ?? "unknown", status: v.status, checkedAt: v.checkedAt }],
+      ),
     };
   },
 });

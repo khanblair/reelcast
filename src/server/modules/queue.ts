@@ -86,19 +86,17 @@ export const getQueueStats = query({
   handler: async (ctx) => {
     if (!ctx.userId) return { readyCount: 0, scheduledCount: 0, nextPublishAt: null };
 
-    const counts = (await ctx.db.execute(sql`
-      select status, count(*)::int as n
-      from videos
-      where user_id = ${ctx.userId} and status in ('ready', 'scheduled')
-      group by status
-    `)) as unknown as { status: string; n: number }[];
-    const [s] = await ctx.db
-      .select({ nextAt: settings.autoPublishNextAt })
-      .from(settings)
-      .where(eq(settings.userId, ctx.userId))
-      .limit(1);
+    // One statement: the two counts and the next auto-publish time (a scalar subquery on the unique settings row).
+    // `mapWith(column)` decodes the timestamp exactly as the query builder would, so the wire value is unchanged.
+    const [r] = await ctx.db
+      .select({
+        readyCount: sql<number>`(count(*) filter (where ${videos.status} = 'ready'))::int`.mapWith(Number),
+        scheduledCount: sql<number>`(count(*) filter (where ${videos.status} = 'scheduled'))::int`.mapWith(Number),
+        nextAt: sql<Date | null>`(select ${settings.autoPublishNextAt} from ${settings} where ${settings.userId} = ${ctx.userId})`.mapWith(settings.autoPublishNextAt),
+      })
+      .from(videos)
+      .where(and(eq(videos.userId, ctx.userId), inArray(videos.status, ["ready", "scheduled"])));
 
-    const count = (status: string) => Number(counts.find((c) => c.status === status)?.n ?? 0);
-    return { readyCount: count("ready"), scheduledCount: count("scheduled"), nextPublishAt: s?.nextAt ?? null };
+    return { readyCount: r?.readyCount ?? 0, scheduledCount: r?.scheduledCount ?? 0, nextPublishAt: r?.nextAt ?? null };
   },
 });

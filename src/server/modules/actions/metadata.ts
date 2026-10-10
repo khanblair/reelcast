@@ -29,8 +29,18 @@ export const generateForUpload = action({
   }),
   handler: async (ctx, args): Promise<{ title: string; description: string; tags: string[]; queued?: true }> => {
     const { db, userId } = ctx;
+    // Only the columns this action and its helpers use: `select *` would drag the (large) captions transcript along.
     const [video] = await db
-      .select()
+      .select({
+        id: videos.id,
+        userId: videos.userId,
+        status: videos.status,
+        title: videos.title,
+        aiTitle: videos.aiTitle,
+        aiDescription: videos.aiDescription,
+        aiTags: videos.aiTags,
+        rawFileKey: videos.rawFileKey,
+      })
       .from(videos)
       .where(and(eq(videos.id, args.videoId), eq(videos.userId, userId)))
       .limit(1);
@@ -49,7 +59,8 @@ export const generateForUpload = action({
     if (!(await getPlatformKey(db, "gemini"))) throw badRequest(GEMINI_NOT_CONFIGURED);
 
     try {
-      await consumeQuota(db, video.userId, "metadataGenerated");
+      // ctx.user.plan is fresh (read on every request) and video.userId is ctx.userId: no extra `users` read.
+      await consumeQuota(db, video.userId, "metadataGenerated", ctx.user.plan);
     } catch (e) {
       if (isPlanLimitError(e)) {
         if (args.autoMarkReady) await clearMetadataSchedule(db, video.id);

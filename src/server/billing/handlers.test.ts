@@ -10,7 +10,7 @@ import type { DbLike } from "@/db/client";
 import { paymentEvents, paymentOrders, platformSettings, subscriptions } from "@/db/schema";
 import { encryptSecret, isEncrypted } from "@/server/crypto";
 import { GEMINI_MODEL } from "@/server/lib/ai/metadata";
-import { callRpc, inRolledBackTx } from "@/server/testing";
+import { callRpc, countQueries, inRolledBackTx } from "@/server/testing";
 import { createCheckout } from "./core";
 import { handleCallback } from "./pesapal/callback";
 import { handleIpn, type NotificationDeps } from "./pesapal/ipn";
@@ -399,6 +399,39 @@ describe("admin.platformSettings", () => {
       // empty string clears
       await callRpc("admin.platformSettings.update", { deepseekApiKey: "" }, { user: admin, tx });
       expect(await callRpc("admin.platformSettings.getStatus", {}, { user: admin, tx })).toMatchObject({ deepseekKeySet: false, geminiKeySet: true });
+    });
+  });
+
+  test("getStatus reads the settings row ONCE and derives the Pesapal config from it (database or environment)", async () => {
+    await inRolledBackTx(async ({ tx, user }) => {
+      const admin = { ...user, isAdmin: true };
+      await seedPlatformSettings(tx, { pesapalEnvironment: "live" });
+      const run = await countQueries(() => callRpc("admin.platformSettings.getStatus", {}, { user: admin, tx }));
+      expect(run.queries).toBe(1);
+      expect(run.result).toMatchObject({ pesapalConfigured: true, pesapalConfigSource: "database", pesapalEnvironment: "live", pesapalIpnRegistered: true, pesapalConsumerSecretSet: true });
+
+      // A stored pair that cannot be decrypted counts as "not configured in the database": the environment pair is used, or none.
+      const keys = { PESAPAL_CONSUMER_KEY: process.env.PESAPAL_CONSUMER_KEY, PESAPAL_CONSUMER_SECRET: process.env.PESAPAL_CONSUMER_SECRET };
+      const quiet = console.error;
+      console.error = () => {};
+      try {
+        await seedPlatformSettings(tx, { pesapalConsumerKey: "not-a-ciphertext", pesapalConsumerSecret: "not-a-ciphertext" });
+        process.env.PESAPAL_CONSUMER_KEY = "env-key";
+        process.env.PESAPAL_CONSUMER_SECRET = "env-secret";
+        const viaEnv = await countQueries(() => callRpc("admin.platformSettings.getStatus", {}, { user: admin, tx }));
+        expect(viaEnv.result).toMatchObject({ pesapalConfigured: true, pesapalConfigSource: "environment" });
+        delete process.env.PESAPAL_CONSUMER_KEY;
+        delete process.env.PESAPAL_CONSUMER_SECRET;
+        const none = (await callRpc("admin.platformSettings.getStatus", {}, { user: admin, tx })) as Record<string, unknown>;
+        expect(none.pesapalConfigured).toBe(false);
+        expect(none).not.toHaveProperty("pesapalConfigSource");
+      } finally {
+        console.error = quiet;
+        for (const [k, v] of Object.entries(keys)) {
+          if (v === undefined) delete process.env[k];
+          else process.env[k] = v;
+        }
+      }
     });
   });
 

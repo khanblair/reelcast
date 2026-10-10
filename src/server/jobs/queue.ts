@@ -239,26 +239,43 @@ export async function rescheduleTask(db: DbLike, id: string, delayMs: number, pa
 /**
  * Rows stuck in processing/running (worker crashed or timed out) go back to pending, or to
  * failed once attempts are exhausted. Returns how many were recovered.
+ *
+ * Nothing is stuck on almost every call, so ONE read-only probe asks whether any row of either
+ * table is stale and the UPDATEs run only for the table(s) that have some (idle cost: 1 statement
+ * instead of 2). The UPDATEs are unchanged and re-check the same predicate, so a row that stopped
+ * being stale between the probe and the UPDATE is still left alone; a row that turned stale after
+ * the probe is recovered by the next call. The probe takes no row locks, and the two tables are
+ * still updated by separate statements, so no transaction ever holds a jobs lock while waiting
+ * on a tasks lock (or the other way round).
  */
 export async function recoverStale(db: DbLike, staleMs: number): Promise<{ jobs: number; tasks: number; failedJobs: JobRow[] }> {
   const cutoff = new Date(Date.now() - staleMs).toISOString();
-  const j = (await db.execute(sql`
-    update jobs set
-      status = case when attempts >= max_attempts then 'failed' else 'pending' end,
-      error = coalesce(error, 'Worker timed out'),
-      completed_at = case when attempts >= max_attempts then now() else completed_at end,
-      locked_at = null, run_at = now(), updated_at = now()
-    where status = 'processing' and locked_at < ${cutoff}::timestamptz
-    returning *
-  `)) as unknown as Record<string, unknown>[];
-  const t = (await db.execute(sql`
-    update tasks set
-      status = case when attempts >= max_attempts then 'failed' else 'pending' end,
-      last_error = coalesce(last_error, 'Worker timed out'),
-      locked_at = null, run_at = now(), updated_at = now()
-    where status = 'running' and locked_at < ${cutoff}::timestamptz
-    returning id
-  `)) as unknown as unknown[];
+  const [probe] = (await db.execute(sql`
+    select
+      exists (select 1 from jobs where status = 'processing' and locked_at < ${cutoff}::timestamptz) as jobs,
+      exists (select 1 from tasks where status = 'running' and locked_at < ${cutoff}::timestamptz) as tasks
+  `)) as unknown as { jobs: boolean; tasks: boolean }[];
+  const j = !probe.jobs
+    ? []
+    : ((await db.execute(sql`
+        update jobs set
+          status = case when attempts >= max_attempts then 'failed' else 'pending' end,
+          error = coalesce(error, 'Worker timed out'),
+          completed_at = case when attempts >= max_attempts then now() else completed_at end,
+          locked_at = null, run_at = now(), updated_at = now()
+        where status = 'processing' and locked_at < ${cutoff}::timestamptz
+        returning *
+      `)) as unknown as Record<string, unknown>[]);
+  const t = !probe.tasks
+    ? []
+    : ((await db.execute(sql`
+        update tasks set
+          status = case when attempts >= max_attempts then 'failed' else 'pending' end,
+          last_error = coalesce(last_error, 'Worker timed out'),
+          locked_at = null, run_at = now(), updated_at = now()
+        where status = 'running' and locked_at < ${cutoff}::timestamptz
+        returning id
+      `)) as unknown as unknown[]);
   const failedJobs = j.map(camelRow).filter((r) => r.status === "failed") as JobRow[];
   return { jobs: j.length, tasks: t.length, failedJobs };
 }

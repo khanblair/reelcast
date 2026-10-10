@@ -134,9 +134,10 @@ or measurement that proves it.
 
 | ID | Item | Sev | Gate | Status | Verified by |
 |---|---|---|---|---|---|
-| F-1 | Separate the database used by dev/tests from production. Option A: local Docker Postgres for DB-backed tests (no cost). Option B: second Supabase project (needed for pooler/region behaviour). Add a guard that makes the test suite refuse a non-local `DATABASE_URL` unless explicitly allowed. | P0 | G (B) | BLOCKED on decision | suite runs green against local Postgres; guard test |
+| F-1 | Separate the database used by dev/tests from production. Option A: local Docker Postgres for DB-backed tests (no cost). Option B: second Supabase project (needed for pooler/region behaviour). Add a guard that makes the test suite refuse a non-local `DATABASE_URL` unless explicitly allowed. | P0 | G (B) | **DECIDED 2026-10-10: stays shared for now** (owner: a few real users live there). Consequence: no load, fault-injection or destructive runs; DB-backed tests must be made safe instead (F-1c). Revisit before launch. | – |
+| F-1c | Make the existing DB-backed tests safe on a shared database: `race.test.ts` must use a synthetic user instead of the oldest real account; `queue.test.ts` `claimJobs` calls must filter to the test's own rows; `recoverStale`/`runTick` cases must not touch real due jobs. | P0 | – | TODO (after branch base) | tests pass; grep shows no test selects a real account; a "rows that existed before" snapshot is identical after the suite |
 | F-1b | Guard dev behaviour that acts on prod data: `instrumentation.ts` 5 s ticker, and `kickRunner` (`kick.ts:9-21`, no env check) must only run against a non-prod database or with an explicit opt-in. `queue.test.ts` (`claimJobs` with no owner filter) and `race.test.ts` (rewrites the oldest real account's plan, restores in `afterAll`) must not run against prod. | P0 | G (changes dev loop) | BLOCKED on decision | unit tests for the guard; manual: dev server prints "tick disabled" |
-| F-2 | Schedule the production tick: install `pg_cron` + `pg_net` and the cron job (`scripts/db-cron.ts`) **in the production database**; confirm `CRON_SECRET` matches in Vercel; confirm the first runs return 200. | P0 | G (prod DB) | BLOCKED on you | `cron.job_run_details` shows 200s; `job_schedules.last_run_at` advances with the dev server stopped |
+| F-2 | Schedule the production tick: install `pg_cron` + `pg_net` and the cron job (`scripts/db-cron.ts`) **in the production database**; confirm `CRON_SECRET` matches in Vercel; confirm the first runs return 200. | P0 | G (prod DB) | **DONE 2026-10-10** (owner approved) | [live] pre-flight authenticated tick → HTTP 200 `ok:true` (proves Vercel's secret matches); after install `cron.job` `reelcast-tick` active `* * * * *`; `cron.job_run_details` 2/2 `succeeded`; `net._http_response` 200 `ok:true`. Still to prove: heartbeat advances with the dev server stopped (needs M-2). |
 | F-3 | Production tick heartbeat + alert (see M-2, M-4). | P0 | – | TODO | heartbeat age test; external pinger configured by owner |
 | F-4 | Vercel plan: Hobby is "non-commercial use only" (docs/SPEC.md:938) but billing is live. Owner decision. | P0 if billing is live | G (owner) | BLOCKED on you | owner confirms plan |
 | F-5 | Backups / PITR / Supabase plan and compute size are not knowable from code. Owner confirms in the dashboard; one restore test. | P0 | G (owner) | BLOCKED on you | owner confirms |
@@ -173,9 +174,10 @@ or measurement that proves it.
 
 | ID | Item | Sev | Gate | Status | Verified by |
 |---|---|---|---|---|---|
-| D-1 | Statement / lock / idle-in-transaction timeouts. First prove which mechanism the transaction pooler accepts (startup parameter vs role-level `ALTER ROLE`), read-only, per session. | P0 | G if it needs `ALTER ROLE` on prod | TODO (experiment first) | test: runaway `pg_sleep` is cancelled and the connection serves the next statement |
+| D-1 | Statement / lock / idle-in-transaction timeouts. **Experiment done (2026-10-10, [live], session-scoped, read-only):** the transaction pooler (port 6543) **ignores** both the postgres.js `connection: {statement_timeout…}` startup parameters and `options=-c statement_timeout=…` in the URL — `current_setting` stayed `2min` and `pg_sleep(8)` ran to completion in all three variants (baseline, startup parameter, `options`), standalone and inside `sql.begin`. `SET LOCAL` would need a transaction around every statement (extra round trips). The only mechanism left is **role-level**: `alter role postgres set statement_timeout = '30s'`, `lock_timeout = '10s'`, `idle_in_transaction_session_timeout = '60s'`. Side effect: it also applies to migrations and the dashboard SQL editor on that role (a long `create index` on a large table would be cancelled). Today the bound is the 120 s server default, so severity is P1, not P0. | P1 | G (`alter role` = prod DB) | BLOCKED on you | after applying: `pg_sleep(40)` is cancelled at ~30 s and the same connection serves the next statement (rerun `timeoutexp` experiment) |
 | D-2 | One migration with the indexes that have a nameable problem: `ideas(linked_video_id)` (per-video cascade scan), `tasks(user_id)`, `tasks(locked_at) where running`, `payment_orders(subscription_id, created_at)`, `payment_orders(updated_at) where applied_at is null`, `payment_events(received_at)` + bounded purge. Plus a test that fails when an FK has no leading index. | P1 | G (migration = prod DB) | TODO (code), BLOCKED to apply | `EXPLAIN` on synthetic rows in the isolated DB: plan flips seq scan → index; FK-guard test |
 | D-3 | Retention sweep (bounded batches): `tasks` done/cancelled/failed > 14 d, read `notifications` > 90 d, `youtube_quota_usage` > 90 d. | P1 | – (runs in prod only after deploy) | TODO | test: old rows deleted, young rows kept, batch bounded |
+| D-5 | `cron.job_run_details` grows one row per minute (about 1,440/day) and Supabase does not prune it. Add a daily `pg_cron` job deleting rows older than 7 days (installed the same way as the tick job). | P2 | G (prod DB) | TODO | row count stays bounded after a day |
 | D-4 | `latestPerVideo` / `getStats` rewrites, cursor/total on capped lists, `deleteAccount` URL-scan indexes, unused-index drop. | P2 | – | SKIP (trigger: any user > 400 videos, or `getStats` > 300 ms in M-1) | – |
 
 ### Step 8 · queue and background work
@@ -203,7 +205,15 @@ or measurement that proves it.
 
 ## 4. Decisions waiting on you
 
-Asked in one batch; see the PR description / chat. Items marked `G` in the tracker do not move until answered.
+Answered 2026-10-10: shared DB stays; F-1b, R-1, R-2, D-2 may be prepared as PRs; F-2 executed; branch base = main.
+
+Still open (nothing below moves until you answer):
+
+1. **Merge PRs #6 (perf) and #7 (account summary)** so fix branches can start from a clean `main`. Code PRs wait on this.
+2. **D-1 role-level timeouts** (`alter role postgres set statement_timeout = '30s'`, `lock_timeout = '10s'`, `idle_in_transaction_session_timeout = '60s'`): yes/no, and the values. It also affects migrations and the dashboard SQL editor on that role.
+3. **F-4 Vercel plan** (Hobby is non-commercial while billing is live), **F-5 backups/PITR** confirmation, **F-6 password rotation**: dashboard-only, yours to do or confirm.
+4. **R-9 edge rate limits** (Vercel Firewall rules): needs your dashboard; plan availability unknown.
+5. **D-5 prune `cron.job_run_details`**: yes/no to installing a second small cron job.
 
 ---
 
@@ -248,3 +258,5 @@ Local Postgres cannot reproduce the Supabase transaction pooler (pipelining hang
 | Date | Change |
 |---|---|
 | 2026-10-10 | Audit complete: live database, HTTP, Docker checks + four read-only code audits (queue, request path, DB access, observability). Tracker created. |
+| 2026-10-10 | Owner decisions: DB stays shared for now (so no load/fault-injection runs; unsafe tests will be made safe instead); F-1b, R-1, R-2, D-2 approved as PRs (never applied to prod by me); F-2 approved and executed; branch base = main after owner merges PRs #6 and #7. |
+| 2026-10-10 | F-2 DONE: production tick scheduled and verified (see tracker). D-1 experiment recorded: pooler ignores client-side timeout settings, role-level `ALTER ROLE` is the only route. |

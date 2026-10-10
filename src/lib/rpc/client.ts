@@ -8,12 +8,14 @@
  *   const video  = useQuery(api.videos.get, id ? { id } : "skip");
  *   const update = useMutation(api.videos.updateStatus); // await update({ id, status })
  *
- * Writes (mutations AND actions) invalidate every cached query when they resolve, which
- * stands in for Convex's global reactivity. Queries listed in LIVE also poll while the tab
- * is visible (job/queue status, notifications).
+ * Writes (mutations AND actions) invalidate cached queries when they resolve, which stands in
+ * for Convex's global reactivity: every query by default, or only the ones a path is known to
+ * affect (invalidation.ts). Queries listed in LIVE also poll while the tab is visible
+ * (job/queue status, notifications).
  */
 import { useQuery as useTanQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
+import { invalidateForWrite } from "./invalidation";
 import type { ApiShape, ArgsOf, FnRef, RestArgs, ReturnOf } from "./types";
 
 export type { Doc, Id } from "./types";
@@ -110,7 +112,8 @@ function useWrite<F extends AnyRef>(ref: F) {
   return useCallback(
     async (...rest: unknown[]) => {
       const result = await rpcCall(path, rest[0] ?? {});
-      await qc.invalidateQueries({ queryKey: ["rpc"] });
+      // Only the queries this write can change (see invalidation.ts); everything for paths not in its table.
+      await invalidateForWrite(qc, path);
       return result;
     },
     [qc, path],

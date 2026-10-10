@@ -113,7 +113,6 @@ function buildPublishTimeline(videos: VideoType[], period: Period) {
 
 export default function DashboardPage() {
   const videos          = useQuery(api.videos.list);
-  const jobs            = useQuery(api.jobs.list);
   const userSettings    = useQuery(api.settings.get);
   const scheduledVideos = useQuery(api.videos.listScheduled);
   const [period, setPeriod] = useState<Period>("today");
@@ -206,7 +205,7 @@ export default function DashboardPage() {
 
   const isAutoActive = userSettings?.autoPublishEnabled === true;
 
-  if (videos === undefined || jobs === undefined) {
+  if (videos === undefined) {
     return <div className="flex h-full items-center justify-center"><LoadingSpinner /></div>;
   }
 

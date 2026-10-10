@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* ── Collapsible sidebars ──────────────────────────────────────────────
+   `data-sidebar-<name>="collapsed"` is set on <html> before first paint (src/lib/sidebar-collapse.ts), so the
+   layout follows it in CSS and a collapsed sidebar never flashes open.
+   app-rail:   the main app sidebar is collapsed to its icon rail.
+   admin-rail: the admin sidebar is collapsed to its icon rail.
+   Both sidebars only exist from 768px up (below that the mobile sheet takes over), so no breakpoint is needed. */
+@custom-variant app-rail (&:where(html[data-sidebar-app="collapsed"] *));
+@custom-variant admin-rail (&:where(html[data-sidebar-admin="collapsed"] *));
+
 /* ── ReelCast Design Tokens — YouTube-Inspired Dark-First ─────────── */
 
 :root {

@@ -8,7 +8,8 @@ import { AdminTopbar } from "./admin-topbar";
 
 /**
  * Chrome for the whole admin console: skip link, sidebar (240px / 56px icon rail / off-canvas sheet), top bar and
- * the main landmark. Owns the mobile sheet state and the responsive grid.
+ * the main landmark. Owns the mobile sheet state and the responsive grid. From 768px the user can collapse the
+ * sidebar to the rail; that preference is an <html> attribute followed in CSS (see src/lib/sidebar-collapse.ts).
  *
  * `pathnameOverride` replaces `usePathname()` for active-item highlighting and the breadcrumb (used to preview
  * the shell on a route that is not under /admin). Leave it unset in the real layout.
@@ -37,7 +38,7 @@ export function AdminShell({ children, pathnameOverride }: { children: ReactNode
         Skip to content
       </a>
 
-      <div className="grid min-h-dvh grid-cols-1 bg-background md:grid-cols-[56px_minmax(0,1fr)] lg:grid-cols-[240px_minmax(0,1fr)]">
+      <div className="grid min-h-dvh grid-cols-1 bg-background transition-[grid-template-columns] duration-200 ease-out motion-reduce:transition-none md:grid-cols-[240px_minmax(0,1fr)] md:admin-rail:grid-cols-[56px_minmax(0,1fr)]">
         <AdminSidebar pathname={pathname} />
         <div className="flex min-w-0 flex-col">
           <AdminTopbar pathname={pathname} />

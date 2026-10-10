@@ -164,7 +164,7 @@ Job runner (runTick) ◄── pg_cron + pg_net → GET /api/cron/tick (every mi
 
 Some traffic bypasses RPC by design: the browser uploads video files straight to Cloudinary (using a signature from `/api/cloudinary/sign`), the YouTube OAuth flow and the Pesapal return/IPN calls hit their own route handlers.
 
-There is no real-time push. After any mutation or action succeeds, the client invalidates all cached queries. Queries whose data changes on the server also poll while the tab is visible — for example job and queue status every 4–5 seconds, the video list every 10 seconds, notifications every 20 seconds, billing status every 10 seconds and admin dashboards every 10–30 seconds (the `LIVE` map in `src/lib/rpc/client.ts`).
+There is no real-time push. After any mutation or action succeeds, the client invalidates the cached queries it can change (every query unless the write is listed in `src/lib/rpc/invalidation.ts`). Queries whose data changes on the server also poll while the tab is visible, at a rate that follows their own data (`src/lib/rpc/polling.ts`): the original rate (job and queue status every 4–5 seconds, the video list every 10 seconds) only while something is in flight or a schedule is about to fire, once a minute otherwise, and not at all for data only the user changes (settings while auto-publish is off). Notifications poll once a minute, billing status stays at 10 seconds and the admin billing queries at 30 seconds. `staleTime` is set per path in the same file: 60 seconds for the user, settings, channels, ideas and assistant sessions, 5–10 minutes for analytics, 10 seconds for everything else (billing and usage included). A write always refreshes what it changes, whatever the `staleTime`.
 
 ---
 

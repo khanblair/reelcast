@@ -46,6 +46,7 @@ quotes or braces returned different data, so tags could silently change).
 | Dashboard no longer fetches `jobs.list` (it was only a loading gate) | 1 request per load, about 15 per minute while open |
 | Writes invalidate only what they change for notifications, ideas and the assistant chat (everything else still refreshes everything) | e.g. marking a notification read: about 6 refetches down to 1 |
 | Billing page polling while waiting for a payment refreshes only `billing.getStatus`, then one full refresh when the plan changes | about 75 requests per minute down to about 15 |
+| Polling follows the data (`src/lib/rpc/polling.ts`): the old rate only while a job, generation or video is in flight or a schedule is about to fire, once a minute otherwise, not at all for settings while auto-publish is off. `staleTime` by data class: 60 s for user, settings, channels, ideas and assistant sessions; 5-10 min for analytics; billing and usage keep 10 s and their old poll rate | an idle focused dashboard: 900 requests an hour down to 180 (150 down to 30 in ten minutes). Measured by a QueryClient simulation on a virtual clock in `polling.test.ts` |
 
 ### Server (statements per call, measured with `countQueries`)
 
@@ -112,10 +113,10 @@ Index suggestions (no migrations were written; each needs a migration on the sha
   `captionsVtt` for up to 250 rows), `checkTargets` (one UPDATE per file), OAuth health check (4 statements per channel),
   generation polling and finalize (settings read 3 times), `deleteVideoForUser`, `getContentGaps`, `jobs.create`/`retryJob`,
   `ideas.update`/`linkVideo`, `saveVideoMetadata` (re-reads a row the caller already locked).
-- Client: loops of serial writes (mark-ready, generate metadata, schedule) each pay a full refetch round; polls that run when
-  nothing can change (history page polls four queries every 4-15 s); `videos.listScheduled` duplicates `videos.list`;
+- Client: loops of serial writes (mark-ready, generate metadata, schedule) each pay a full refetch round; `videos.listScheduled` duplicates `videos.list`;
   `queue.getQueueStats` duplicates the queue list; the analytics page loads 500 videos only for ten titles; the admin jobs
-  page polls both tabs; static header queries refetch on every focus.
+  page polls both tabs. `videos.get` still polls every 4 s on the detail page (a metadata run handed to the background task leaves
+  the video's status unchanged, so nothing in its data says work is running), and the admin billing queries keep their old rate.
 - Cold database connections cost 1.0-1.6 s (and any request after 20 s idle pays it on a low-traffic deploy).
 
 ## 5. Keeping it fast

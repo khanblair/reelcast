@@ -406,7 +406,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="h-[200px]">
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 320, height: 200 }}>
                 <AreaChart data={timelineData} margin={{ top: 4, right: 0, left: -28, bottom: 0 }}>
                   <defs>
                     <linearGradient id="uploadGradient" x1="0" y1="0" x2="0" y2="1">
@@ -446,7 +446,7 @@ export default function DashboardPage() {
               {statusData.length > 0 ? (
                 <>
                   <div className="h-[160px] w-[160px] shrink-0">
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" initialDimension={{ width: 160, height: 160 }}>
                       <PieChart>
                         <Pie
                           data={statusData}

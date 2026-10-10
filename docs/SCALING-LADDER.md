@@ -142,6 +142,7 @@ or measurement that proves it.
 | #11 | R-4, R-6, R-7 | product decision inside: free users now share one 5/month allowance across metadata, captions and thumbnails |
 | #12 | R-3 adaptive polling | browser recipe in the PR (Network tab filtered to `/api/rpc`, idle 3 minutes: about 3 POSTs/min instead of about 15) |
 | #15 | Q-4 timeouts | independent |
+| #16 | Q-1, Q-2, Q-5, Q-6 | the Q-1 heal step downgrades users stuck on a paid plan with no live subscription; it changes nothing today (0 subscriptions, both users free/default) |
 
 #13 and #14 are the only dependent pair; the rest touch different files and can merge in any order.
 
@@ -199,12 +200,12 @@ or measurement that proves it.
 
 | ID | Item | Sev | Gate | Status | Verified by |
 |---|---|---|---|---|---|
-| Q-1 | `billing.expiry`: revoke entitlement atomically with the subscription update (one transaction per row) and heal rows left half-done. | P1 | – | IN PROGRESS | test simulating a crash between the two statements |
-| Q-2 | Generation: `jobs.create('generation')` moves the video to `queued` in the same transaction (as the publish path does) so a dropped browser leaves no stuck `queued` video. | P1 | – | IN PROGRESS | test: no state where job exists without status, or vice versa |
+| Q-1 | `billing.expiry`: revoke entitlement atomically with the subscription update (one transaction per row) and heal rows left half-done. | P1 | – | PR #16 open | test simulating a crash between the two statements |
+| Q-2 | Generation: `jobs.create('generation')` moves the video to `queued` in the same transaction (as the publish path does) so a dropped browser leaves no stuck `queued` video. | P1 | – | PR #16 open | test: no state where job exists without status, or vice versa |
 | Q-3 | Visibility: failed tasks and sweep `last_error` in admin; re-enqueue sweep for auto-publish users whose chain died. | P1 | – | TODO | admin test; chain-recovery test |
 | Q-4 | Timeouts on Veo submit/poll and Files API calls (`httpOptions.timeout`); budget-aware start (defer when too little tick budget remains). | P1 | – | PR #15 open | test with a fake server that hangs: call aborts, job retries |
-| Q-5 | `billing.reconcile` honours the tick deadline. | P2 | – | IN PROGRESS | test with deadline in the past |
-| Q-6 | Metadata slow path: refund quota if the enqueue throws; analytics enqueue-after-work crash window. | P2 | – | IN PROGRESS | test |
+| Q-5 | `billing.reconcile` honours the tick deadline. | P2 | – | PR #16 open | test with deadline in the past |
+| Q-6 | Metadata slow path: refund quota if the enqueue throws; analytics enqueue-after-work crash window. | P2 | – | PR #16 open | test |
 | Q-7 | Fence final job updates with `status = 'processing'`; lock order in checkout vs apply (deadlock). | P2 | – | SKIP (needs race-test coverage first; self-heals via reconcile) | – |
 | Q-8 | Veo double-submit window (needs an intent row). | P2 | – | SKIP (costs state; trigger: first real Veo spend) | – |
 

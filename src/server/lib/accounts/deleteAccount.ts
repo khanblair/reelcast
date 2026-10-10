@@ -46,35 +46,36 @@ export type AccountSummary = {
 };
 
 export async function getAccountSummary(db: DbLike, user: UserRow): Promise<AccountSummary> {
-  const count = sql<number>`count(*)::int`;
-  const [videoStats] = await db
-    .select({ n: count, bytes: sql<number>`coalesce(sum(${videos.rawFileSize}), 0)::float8` })
-    .from(videos)
-    .where(eq(videos.userId, user.id));
-  const [channels] = await db.select({ n: count }).from(youtubeChannels).where(eq(youtubeChannels.userId, user.id));
-  const [ideaStats] = await db.select({ n: count }).from(ideas).where(eq(ideas.userId, user.id));
-  const [sessions] = await db.select({ n: count }).from(aiSessions).where(eq(aiSessions.userId, user.id));
-  const [subs] = await db
-    .select({ n: count })
-    .from(subscriptions)
-    .where(and(eq(subscriptions.userId, user.id), inArray(subscriptions.status, ["active", "past_due"])));
-
-  let blockedReason: AccountSummary["blockedReason"] = null;
-  if (user.isAdmin) {
-    const [others] = await db.select({ n: count }).from(users).where(and(eq(users.isAdmin, true), ne(users.id, user.id)));
-    if (others.n === 0) blockedReason = "last_admin";
-  }
+  // One statement, not six: every statement is a network round trip to the database, and these are independent counts.
+  const [r] = (await db.execute(sql`
+    select
+      (select count(*)::int from ${videos} where ${videos.userId} = ${user.id}) as video_count,
+      (select coalesce(sum(${videos.rawFileSize}), 0)::float8 from ${videos} where ${videos.userId} = ${user.id}) as storage_bytes,
+      (select count(*)::int from ${youtubeChannels} where ${youtubeChannels.userId} = ${user.id}) as channel_count,
+      (select count(*)::int from ${ideas} where ${ideas.userId} = ${user.id}) as idea_count,
+      (select count(*)::int from ${aiSessions} where ${aiSessions.userId} = ${user.id}) as ai_session_count,
+      exists (select 1 from ${subscriptions} where ${subscriptions.userId} = ${user.id} and ${subscriptions.status} in ('active', 'past_due')) as has_active_subscription,
+      exists (select 1 from ${users} where ${users.isAdmin} = true and ${users.id} <> ${user.id}) as has_other_admin
+  `)) as unknown as {
+    video_count: number;
+    storage_bytes: number;
+    channel_count: number;
+    idea_count: number;
+    ai_session_count: number;
+    has_active_subscription: boolean;
+    has_other_admin: boolean;
+  }[];
 
   return {
     email: user.email,
     plan: user.plan,
-    videoCount: videoStats.n,
-    storageBytes: videoStats.bytes,
-    channelCount: channels.n,
-    ideaCount: ideaStats.n,
-    aiSessionCount: sessions.n,
-    hasActiveSubscription: subs.n > 0,
-    blockedReason,
+    videoCount: r.video_count,
+    storageBytes: r.storage_bytes,
+    channelCount: r.channel_count,
+    ideaCount: r.idea_count,
+    aiSessionCount: r.ai_session_count,
+    hasActiveSubscription: r.has_active_subscription,
+    blockedReason: user.isAdmin && !r.has_other_admin ? "last_admin" : null,
   };
 }
 

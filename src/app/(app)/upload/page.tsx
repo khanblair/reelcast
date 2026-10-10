@@ -6,6 +6,7 @@ import {
   UploadCloud, FileVideo, CheckCircle, AlertCircle, X, Plus, FolderOpen,
 } from "lucide-react";
 import { api, useMutation, useQuery, useAction, type Id } from "@/lib/rpc/client";
+import { buildVideoUploadForm, describeUploadFailure, type SignedVideoUpload } from "@/lib/upload-video";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -62,19 +63,14 @@ export default function UploadPage() {
     try {
       const signRes = await fetch("/api/cloudinary/sign", { method: "POST" });
       if (!signRes.ok) throw new Error("Failed to get upload signature");
-      const { signature, timestamp, apiKey, cloudName, maxFileSize } = await signRes.json();
-
-      const formData = new FormData();
-      formData.append("file", item.file);
-      formData.append("signature", signature);
-      formData.append("timestamp", timestamp.toString());
-      formData.append("api_key", apiKey);
-      if (maxFileSize) formData.append("max_file_size", maxFileSize.toString());
+      // The server decides the folder, id, formats and size limit and signs them; send exactly what it returned.
+      const signed = (await signRes.json()) as SignedVideoUpload;
+      const formData = buildVideoUploadForm(item.file, signed);
 
       const cloudinaryData = await new Promise<{ secure_url: string; bytes: number }>(
         (resolve, reject) => {
           const xhr = new XMLHttpRequest();
-          xhr.open("POST", `https://api.cloudinary.com/v1_1/${cloudName}/video/upload`, true);
+          xhr.open("POST", signed.uploadUrl, true);
           xhr.upload.onprogress = (e) => {
             if (e.lengthComputable) {
               updateItem(item.id, { progress: Math.round((e.loaded / e.total) * 100) });
@@ -88,7 +84,7 @@ export default function UploadPage() {
                 reject(new Error("Failed to parse upload response"));
               }
             } else {
-              reject(new Error(`Upload failed: ${xhr.status}`));
+              reject(new Error(describeUploadFailure(xhr.status, xhr.responseText)));
             }
           };
           xhr.onerror = () => reject(new Error("Network error during upload"));

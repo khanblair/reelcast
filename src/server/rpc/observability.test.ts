@@ -384,7 +384,7 @@ describe("requests refused before dispatch still get their one line", () => {
 
   const cases: [string, Parameters<typeof call>[0], number, string][] = [
     ["cross-site", { headers: { "sec-fetch-site": "cross-site" } }, 403, "FORBIDDEN"],
-    ["not JSON", { headers: { "content-type": "text/plain" } }, 400, "BAD_REQUEST"],
+    ["not JSON", { headers: { "content-type": "text/plain" } }, 415, "UNSUPPORTED_MEDIA_TYPE"],
     ["invalid JSON", { body: "{nope" }, 400, "BAD_REQUEST"],
     ["JSON null", { body: "null" }, 400, "BAD_REQUEST"],
     ["missing path", { body: JSON.stringify({ args: { email: EMAIL } }) }, 400, "BAD_REQUEST"],

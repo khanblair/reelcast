@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { dispatch, toErrorBody } from "@/server/rpc/dispatch";
 import { logRpcCall } from "@/server/rpc/log";
 import { api } from "@/server/rpc/registry";
+import { checkRpcHeaders, readJsonBody } from "@/server/rpc/request-guard";
 
 // Hobby-plan ceiling. Anything that can run longer must be queued as a job instead.
 export const maxDuration = 300;
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 /**
  * Single entry point for all browser -> server calls: POST { path, args }.
- * Same-origin JSON only (CSRF defence for cookie auth).
+ * Same-origin JSON only, at most 1 MiB (CSRF and resource defence for cookie auth; the rules live in request-guard.ts).
  */
 export async function POST(req: Request) {
   const started = performance.now();
@@ -19,20 +20,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: { code, message } }, { status });
   };
 
-  const site = req.headers.get("sec-fetch-site");
-  if (site && site !== "same-origin" && site !== "none") {
-    return refuse(403, "FORBIDDEN", "Cross-site request blocked");
-  }
-  if (!req.headers.get("content-type")?.includes("application/json")) {
-    return refuse(400, "BAD_REQUEST", "Expected application/json");
-  }
+  // Header-only checks first (cross-site, foreign Origin, content type, declared size), then the size-capped body read.
+  const refused = checkRpcHeaders(req);
+  if (refused) return refuse(refused.status, refused.code, refused.message);
 
-  let payload: { path?: unknown; args?: unknown } | null;
-  try {
-    payload = await req.json();
-  } catch {
-    return refuse(400, "BAD_REQUEST", "Invalid JSON");
-  }
+  const body = await readJsonBody(req);
+  if (!body.ok) return refuse(body.refusal.status, body.refusal.code, body.refusal.message);
+  const payload = body.value as { path?: unknown; args?: unknown } | null;
   if (typeof payload?.path !== "string") {
     return refuse(400, "BAD_REQUEST", "Missing path");
   }

@@ -10,12 +10,13 @@
  *
  * Writes (mutations AND actions) invalidate cached queries when they resolve, which stands in
  * for Convex's global reactivity: every query by default, or only the ones a path is known to
- * affect (invalidation.ts). Queries listed in LIVE also poll while the tab is visible
- * (job/queue status, notifications).
+ * affect (invalidation.ts). Some queries also poll while the tab is visible (job/queue status,
+ * notifications), at a rate that follows their data, and each path has its own staleTime (polling.ts).
  */
 import { useQuery as useTanQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { invalidateForWrite } from "./invalidation";
+import { pollingOptions } from "./polling";
 import type { ApiShape, ArgsOf, FnRef, RestArgs, ReturnOf } from "./types";
 
 export type { Doc, Id } from "./types";
@@ -28,26 +29,6 @@ export class RpcClientError extends Error {
     this.code = code;
   }
 }
-
-/** path -> poll interval (ms). Replaces Convex push for queries whose data changes server-side. */
-export const LIVE: Record<string, number> = {
-  "jobs.list": 4000,
-  "generations.listByUser": 5000,
-  "queue.list": 5000,
-  "queue.getQueueStats": 5000,
-  "videos.get": 4000,
-  "videos.list": 10000,
-  "videos.listScheduled": 15000,
-  "notifications.get": 20000,
-  "settings.get": 30000,
-  "billing.getStatus": 10000,
-  "admin.jobs.listRecent": 10000,
-  "admin.jobs.listFailed": 15000,
-  "admin.billing.overview": 30000,
-  "admin.billing.listNeedsReview": 30000,
-  "admin.stats.getStats": 30000,
-  "admin.quota.getQuotaOverview": 30000,
-};
 
 export async function rpcCall(path: string, args: unknown): Promise<unknown> {
   const res = await fetch("/api/rpc", {
@@ -97,7 +78,7 @@ export function useQuery<F extends FnRef<"query", never, unknown> | FnRef<"query
     queryKey: ["rpc", path, skip ? null : (args ?? {})],
     queryFn: () => rpcCall(path, args ?? {}),
     enabled: !skip,
-    refetchInterval: LIVE[path] ?? false,
+    ...pollingOptions(path),
     // Like Convex, surface unexpected errors to the nearest error boundary,
     // but treat "signed out" as "no data".
     throwOnError: (err) => !isUnauthenticated(err),

@@ -1,8 +1,10 @@
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
 import { and, eq } from "drizzle-orm";
+import type { DbLike } from "@/db/client";
 import { jobs, videos } from "@/db/schema";
 import { insertVideo } from "@/server/lib/content/testing";
 import { callRpc, inRolledBackTx } from "@/server/testing";
+import { InjectedFault, failOn } from "@/server/testing-faults";
 
 setDefaultTimeout(120_000);
 
@@ -22,7 +24,7 @@ describe("jobs.create", () => {
       const rows = await tx.select().from(jobs).where(and(eq(jobs.videoId, v.id), eq(jobs.type, "generation")));
       expect(rows).toHaveLength(1);
       expect(rows[0]).toMatchObject({ id: first, userId: user.id, status: "pending" });
-      expect((await tx.select().from(videos).where(eq(videos.id, v.id)))[0].status).toBe("queued"); // untouched
+      expect((await tx.select().from(videos).where(eq(videos.id, v.id)))[0].status).toBe("queued"); // stays queued (a repeat call is idempotent)
     });
   });
 
@@ -58,6 +60,79 @@ describe("jobs.create", () => {
       await expect(callRpc("jobs.create", { videoId: destroyed.id, type: "publish" }, { user, tx })).rejects.toMatchObject({ code: "BAD_REQUEST" });
       expect(await tx.select().from(jobs).where(eq(jobs.userId, user.id))).toHaveLength(0);
       expect((await tx.select().from(videos).where(eq(videos.id, draft.id)))[0].status).toBe("draft");
+    });
+  });
+});
+
+describe("jobs.create generation: the video moves to queued in the same transaction as the enqueue", () => {
+  const statusOf = async (tx: DbLike, id: string) => (await tx.select().from(videos).where(eq(videos.id, id)))[0].status;
+  const jobsOf = (tx: DbLike, id: string) => tx.select().from(jobs).where(and(eq(jobs.videoId, id), eq(jobs.type, "generation")));
+
+  test("a draft or failed video is queued by the call that enqueues; a video stuck in queued without a job gets one", async () => {
+    await inRolledBackTx(async ({ tx, user }) => {
+      for (const status of ["draft", "failed", "queued"] as const) {
+        const v = await insertVideo(tx, user.id, { status, sourceType: "generate", rawFileKey: "", rawFileSize: 0 });
+        const id = (await callRpc("jobs.create", { videoId: v.id, type: "generation" }, { user, tx })) as string;
+        const rows = await jobsOf(tx, v.id);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({ id, userId: user.id, status: "pending" });
+        expect(await statusOf(tx, v.id)).toBe("queued");
+      }
+    });
+  });
+
+  test("a failing enqueue rolls the status change back: no job and the video is still a draft", async () => {
+    await inRolledBackTx(async ({ tx, user }) => {
+      const v = await insertVideo(tx, user.id, { status: "draft", sourceType: "generate", rawFileKey: "", rawFileSize: 0 });
+      // The status change is applied first inside the transaction; the job insert then fails, as a dropped connection would.
+      await expect(callRpc("jobs.create", { videoId: v.id, type: "generation" }, { user, tx: failOn(tx, "insert", jobs) })).rejects.toBeInstanceOf(InjectedFault);
+      expect(await statusOf(tx, v.id)).toBe("draft");
+      expect(await jobsOf(tx, v.id)).toHaveLength(0);
+
+      // and the retry on a healthy connection works
+      await callRpc("jobs.create", { videoId: v.id, type: "generation" }, { user, tx });
+      expect(await statusOf(tx, v.id)).toBe("queued");
+      expect(await jobsOf(tx, v.id)).toHaveLength(1);
+    });
+  });
+
+  test("a duplicate click, or a click once the runner has picked the job up, returns the same job and never a second one", async () => {
+    await inRolledBackTx(async ({ tx, user }) => {
+      const v = await insertVideo(tx, user.id, { status: "draft", sourceType: "generate", rawFileKey: "", rawFileSize: 0 });
+      const first = (await callRpc("jobs.create", { videoId: v.id, type: "generation" }, { user, tx })) as string;
+      expect(await callRpc("jobs.create", { videoId: v.id, type: "generation" }, { user, tx })).toBe(first);
+
+      // the runner claimed the job and Veo is generating
+      await tx.update(jobs).set({ status: "processing" }).where(eq(jobs.id, first));
+      await tx.update(videos).set({ status: "generating" }).where(eq(videos.id, v.id));
+      expect(await callRpc("jobs.create", { videoId: v.id, type: "generation" }, { user, tx })).toBe(first);
+      expect(await jobsOf(tx, v.id)).toHaveLength(1);
+      expect(await statusOf(tx, v.id)).toBe("generating"); // not dragged back to queued
+    });
+  });
+
+  test("someone else's video is NOT_FOUND and stays exactly as it was", async () => {
+    await inRolledBackTx(async ({ tx, user, makeUser }) => {
+      const mine = await insertVideo(tx, user.id, { status: "draft", sourceType: "generate", rawFileKey: "", rawFileSize: 0 });
+      const intruder = await makeUser();
+      await expect(callRpc("jobs.create", { videoId: mine.id, type: "generation" }, { user: intruder, tx })).rejects.toMatchObject({ code: "NOT_FOUND" });
+      expect(await statusOf(tx, mine.id)).toBe("draft");
+      expect(await jobsOf(tx, mine.id)).toHaveLength(0);
+      await expect(callRpc("jobs.create", { videoId: crypto.randomUUID(), type: "generation" }, { user, tx })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    });
+  });
+
+  test("a video in a state that must not start a generation is refused with a clear error and left alone", async () => {
+    await inRolledBackTx(async ({ tx, user }) => {
+      for (const status of ["ready", "scheduled", "publishing", "published", "generating"] as const) {
+        const v = await insertVideo(tx, user.id, { status, sourceType: "generate" });
+        await expect(callRpc("jobs.create", { videoId: v.id, type: "generation" }, { user, tx })).rejects.toMatchObject({
+          code: "BAD_REQUEST",
+          message: expect.stringContaining(`"${status}"`),
+        });
+        expect(await statusOf(tx, v.id)).toBe(status);
+        expect(await jobsOf(tx, v.id)).toHaveLength(0);
+      }
     });
   });
 });

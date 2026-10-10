@@ -57,6 +57,13 @@
       "when": 1791549216760,
       "tag": "0007_military_pet_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1791647762260,
+      "tag": "0008_fk_and_sweep_indexes",
+      "breakpoints": true
     }
   ]
 }

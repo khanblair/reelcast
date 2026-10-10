@@ -49,6 +49,37 @@ export const viewport: Viewport = {
 import AnalyticsProvider from "@/components/analytics-provider";
 import { Providers } from "@/components/providers";
 
+// Production registers public/sw.js (static install assets only). In development the worker is not registered, and any
+// worker or reelcast-* cache left over from an earlier run is removed: a stale worker serves old HTML that never hydrates.
+const SERVICE_WORKER_SCRIPT =
+  process.env.NODE_ENV === "production"
+    ? `
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/sw.js').then(
+            function(registration) {
+              console.log('ServiceWorker registration successful');
+            },
+            function(err) {
+              console.log('ServiceWorker registration failed: ', err);
+            }
+          );
+        });
+      }
+    `
+    : `
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          registrations.forEach(function(registration) { registration.unregister(); });
+        });
+        if (window.caches) {
+          caches.keys().then(function(keys) {
+            keys.forEach(function(key) { if (key.indexOf('reelcast-') === 0) caches.delete(key); });
+          });
+        }
+      }
+    `;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
@@ -61,24 +92,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           <AnalyticsProvider>{children}</AnalyticsProvider>
         </Providers>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js').then(
-                    function(registration) {
-                      console.log('ServiceWorker registration successful');
-                    },
-                    function(err) {
-                      console.log('ServiceWorker registration failed: ', err);
-                    }
-                  );
-                });
-              }
-            `,
-          }}
-        />
+        <script dangerouslySetInnerHTML={{ __html: SERVICE_WORKER_SCRIPT }} />
       </body>
     </html>
   );

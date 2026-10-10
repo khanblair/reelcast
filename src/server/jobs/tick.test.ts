@@ -1,10 +1,13 @@
 /**
- * Statement count and claiming rules of the tick's recovery and sweep phases.
+ * Statement count and claiming rules of the tick's recovery and sweep phases, and the tick heartbeat.
  *
  * Every test runs in a transaction that is rolled back (`db: tx`), so it is deterministic: the live dev
  * server's ticker can neither see nor race these rows, and nothing persists. The drain is never run here
  * (`drain: false`): against the shared database it would claim and run real jobs. `staleMs` is chosen so
  * that no real row can be recovered (and no real onJobFailed hook can fire) by these tests.
+ *
+ * The heartbeat is written under a test-unique name (`opts` below), never `tick.heartbeat`: even rolled back, an upsert of
+ * the live row would hold its row lock and block the production tick's own heartbeat for the length of a test.
  */
 import { randomUUID } from "node:crypto";
 import { describe, expect, setDefaultTimeout, test } from "bun:test";
@@ -14,7 +17,8 @@ import type { DbLike } from "@/db/client";
 import { tasks } from "@/db/schema";
 import { mkJob, mkVideo } from "@/server/lib/publish/dbkit";
 import { countQueries, inRolledBackTx } from "@/server/testing";
-import type { Sweep } from "./handlers";
+import { sweeps as defaultSweeps, type Sweep } from "./handlers";
+import { TICK_HEARTBEAT, getTickHeartbeat, summarizeTickErrors, writeTickHeartbeat } from "./heartbeat";
 import { recoverStale } from "./queue";
 import { runTick, type TickOptions } from "./tick";
 
@@ -23,6 +27,7 @@ setDefaultTimeout(180_000);
 /** Nothing real is this old, so recovery finds no real row. */
 const NO_STALE_MS = 10 * 365 * 24 * 3_600_000;
 const sweepName = () => `__tick_${randomUUID()}`;
+const heartbeatName = () => `__tick_hb_${randomUUID()}`;
 
 type Sched = { lastRun: SQL; lease?: SQL };
 const NOW = sql`now()`;
@@ -48,6 +53,7 @@ const opts = (tx: DbLike, sweeps: Sweep[], extra: TickOptions = {}) => ({
   sweeps,
   staleMs: NO_STALE_MS,
   jobFailedHooks: {},
+  heartbeat: heartbeatName(),
   ...extra,
 });
 
@@ -66,18 +72,20 @@ describe("idle tick", () => {
         counts[k] = queries;
       }
       expect(counts[8]).toBe(counts[1]);
-      expect(counts[1]).toBeLessThanOrEqual(2); // 1 stale probe + 1 due check (the drain, not run here, adds its own claim round)
+      // 1 stale probe + 1 due check + 1 heartbeat (the drain, not run here, adds its own claim round). The heartbeat raised
+      // this from 2 on purpose (scaling ladder M-2); it must stay ONE statement per tick.
+      expect(counts[1]).toBe(3);
     });
   });
 
-  test("no sweeps: only the stale probe; an already-spent budget: nothing but the stale probe and no schedule row is touched", async () => {
+  test("no sweeps: the stale probe and the heartbeat; an already-spent budget: nothing but those two and no sweep row is touched", async () => {
     await inRolledBackTx(async ({ tx }) => {
-      expect((await countQueries(() => runTick(opts(tx, [])))).queries).toBe(1);
+      expect((await countQueries(() => runTick(opts(tx, [])))).queries).toBe(2); // was 1 before the heartbeat
 
       const ran: string[] = [];
       const due = sweepOf(sweepName(), ran);
       const { result, queries } = await countQueries(() => runTick(opts(tx, [due], { budgetMs: 0 })));
-      expect(queries).toBe(1);
+      expect(queries).toBe(2); // was 1 before the heartbeat
       expect(result.sweepsRun).toEqual([]);
       expect(await schedule(tx, due.name)).toBeUndefined(); // not even seeded
     });
@@ -159,9 +167,11 @@ describe("sweep claiming", () => {
       await seed(tx, second.name, { lastRun: HOURS_AGO_2 });
       const secondBefore = await schedule(tx, second.name);
 
-      const result = await runTick(opts(tx, [slow, second, third], { budgetMs: 10_000 }));
+      const hb = heartbeatName();
+      const result = await runTick(opts(tx, [slow, second, third], { budgetMs: 10_000, heartbeat: hb }));
       expect(result.sweepsRun).toEqual([slow.name]);
       expect(ran).toEqual([slow.name]);
+      expect((await getTickHeartbeat(tx, hb)).lastRunAt).toBeInstanceOf(Date); // the deadline cut the tick short, the heartbeat still landed
       expect(await schedule(tx, second.name)).toEqual(secondBefore); // still due, still unleased
       const thirdRow = await schedule(tx, third.name);
       if (thirdRow) expect(thirdRow.last_run_at).toBeNull(); // at most seeded, never claimed
@@ -193,6 +203,153 @@ describe("sweep claiming", () => {
       const result = await runTick(opts(racing, [contested, other]));
       expect(result.sweepsRun).toEqual([other.name]);
       expect(ran).toEqual([other.name]);
+    });
+  });
+});
+
+describe("tick heartbeat", () => {
+  const MIN_5 = sql`now() - interval '5 minutes'`;
+
+  test("an idle tick writes it, as one extra statement", async () => {
+    await inRolledBackTx(async ({ tx }) => {
+      const hb = heartbeatName();
+      expect(await getTickHeartbeat(tx, hb)).toEqual({ lastRunAt: null, ageMs: null });
+      const { result, queries } = await countQueries(() => runTick(opts(tx, [], { heartbeat: hb })));
+      expect(result).toMatchObject({ sweepsRun: [], jobsRun: 0, tasksRun: 0, errors: [] }); // idle: nothing else happened
+      expect(queries).toBe(2); // stale probe + heartbeat
+      const beat = await getTickHeartbeat(tx, hb);
+      expect(beat.lastRunAt).toBeInstanceOf(Date);
+      expect(beat.ageMs).toBeLessThan(5_000);
+      expect(await schedule(tx, hb)).toMatchObject({ lease_until: null, last_error: null });
+
+      // Turned off: the statement is gone again.
+      const off = await countQueries(() => runTick(opts(tx, [], { heartbeat: null })));
+      expect(off.queries).toBe(1);
+    });
+  });
+
+  test("a deadline-cut tick still writes it (budget already spent)", async () => {
+    await inRolledBackTx(async ({ tx }) => {
+      const hb = heartbeatName();
+      const ran: string[] = [];
+      const result = await runTick(opts(tx, [sweepOf(sweepName(), ran)], { budgetMs: 0, heartbeat: hb }));
+      expect(result.sweepsRun).toEqual([]); // the budget really did cut the tick short
+      expect(ran).toEqual([]);
+      expect((await getTickHeartbeat(tx, hb)).lastRunAt).toBeInstanceOf(Date);
+    });
+  });
+
+  test("every tick advances it and records a short summary of its errors, or null", async () => {
+    await inRolledBackTx(async ({ tx }) => {
+      const hb = heartbeatName();
+      await tx.execute(sql`insert into job_schedules (name, last_run_at, last_error) values (${hb}, now() - interval '2 hours', 'stale error from long ago')`);
+      expect((await getTickHeartbeat(tx, hb)).ageMs).toBeGreaterThan(2 * 3_600_000 - 5_000);
+
+      const bad: Sweep = { name: sweepName(), everyMs: 3_600_000, run: async () => { throw new Error("boom"); } };
+      const failed = await runTick(opts(tx, [bad], { heartbeat: hb }));
+      expect(failed.errors).toEqual([`sweep ${bad.name}: boom`]);
+      expect((await getTickHeartbeat(tx, hb)).ageMs).toBeLessThan(5_000); // advanced from 2 hours old
+      expect((await schedule(tx, hb)).last_error).toBe(`1 error: sweep ${bad.name}: boom`);
+
+      await runTick(opts(tx, [], { heartbeat: hb }));
+      expect((await schedule(tx, hb)).last_error).toBeNull(); // a clean tick clears it
+    });
+  });
+
+  test("the error summary is one capped line", () => {
+    expect(summarizeTickErrors([])).toBeNull();
+    expect(summarizeTickErrors(["a"])).toBe("1 error: a");
+    expect(summarizeTickErrors(["a", "b"])).toBe("2 errors: a");
+    expect(summarizeTickErrors(["x".repeat(5_000), "b"])?.length).toBe(300);
+  });
+
+  test("writing it is one statement, whether the row is new or exists", async () => {
+    await inRolledBackTx(async ({ tx }) => {
+      const hb = heartbeatName();
+      expect((await countQueries(() => writeTickHeartbeat(tx, hb, []))).queries).toBe(1); // insert
+      expect((await countQueries(() => writeTickHeartbeat(tx, hb, ["e"]))).queries).toBe(1); // update
+      expect((await schedule(tx, hb)).last_error).toBe("1 error: e");
+    });
+  });
+
+  test("the default name is tick.heartbeat (checked without touching the live row)", async () => {
+    await inRolledBackTx(async ({ tx }) => {
+      const written: unknown[] = [];
+      const recording = new Proxy(tx, {
+        get(target, prop) {
+          if (prop === "insert") return () => ({ values: (v: unknown) => ({ onConflictDoUpdate: async () => void written.push(v) }) });
+          const value = Reflect.get(target, prop, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      }) as DbLike;
+      await runTick({ db: recording, drain: false, sweeps: [], staleMs: NO_STALE_MS, jobFailedHooks: {} }); // no `heartbeat` option
+      expect(written).toHaveLength(1);
+      expect(written[0]).toMatchObject({ name: "tick.heartbeat" });
+      expect(TICK_HEARTBEAT).toBe("tick.heartbeat");
+    });
+  });
+
+  test("a failed heartbeat write is reported but does not fail the tick that did its work", async () => {
+    await inRolledBackTx(async ({ tx }) => {
+      const failing = new Proxy(tx, {
+        get(target, prop) {
+          if (prop === "insert") return () => { throw new Error("heartbeat down"); };
+          const value = Reflect.get(target, prop, target);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      }) as DbLike;
+      const result = await runTick(opts(failing, [])); // no sweeps: the heartbeat is the only insert
+      expect(result.errors).toEqual(["heartbeat: heartbeat down"]);
+      expect(result.recovered).toEqual({ jobs: 0, tasks: 0, failedJobs: 0 });
+    });
+  });
+
+  test("getTickHeartbeat is one statement: null when never written, otherwise the database-clock age", async () => {
+    await inRolledBackTx(async ({ tx }) => {
+      const hb = heartbeatName();
+      const none = await countQueries(() => getTickHeartbeat(tx, hb));
+      expect(none.queries).toBe(1);
+      expect(none.result).toEqual({ lastRunAt: null, ageMs: null });
+
+      await seed(tx, hb, { lastRun: MIN_5 });
+      const some = await countQueries(() => getTickHeartbeat(tx, hb));
+      expect(some.queries).toBe(1);
+      expect(some.result.lastRunAt).toBeInstanceOf(Date);
+      expect(some.result.ageMs).toBeGreaterThan(300_000 - 1_000);
+      expect(some.result.ageMs).toBeLessThan(300_000 + 5_000);
+
+      // a row that exists but never ran reads as "no heartbeat"
+      const blank = heartbeatName();
+      await seed(tx, blank, { lastRun: sql`null` });
+      expect(await getTickHeartbeat(tx, blank)).toEqual({ lastRunAt: null, ageMs: null });
+    });
+  });
+
+  describe("is never run as a sweep", () => {
+    test("no registered sweep carries its name, and the digest cleanup patterns cannot match it", () => {
+      expect(defaultSweeps.map((s) => s.name)).not.toContain(TICK_HEARTBEAT);
+      expect(TICK_HEARTBEAT.startsWith("digest:")).toBe(false);
+      expect(TICK_HEARTBEAT.startsWith("digest-week:")).toBe(false);
+    });
+
+    test("an old, unleased heartbeat row (looks due) is neither run, claimed nor leased by a tick; only the heartbeat write touches it", async () => {
+      await inRolledBackTx(async ({ tx }) => {
+        const hb = heartbeatName();
+        await seed(tx, hb, { lastRun: HOURS_AGO_2 }); // exactly the shape of a due sweep
+        const ran: string[] = [];
+        const real = sweepOf(sweepName(), ran);
+        const result = await runTick(opts(tx, [real], { heartbeat: null })); // heartbeat OFF: any change to the row would be a claim
+        expect(result.sweepsRun).toEqual([real.name]);
+        expect(ran).toEqual([real.name]);
+        expect((await schedule(tx, hb)).lease_until).toBeNull();
+        expect((await getTickHeartbeat(tx, hb)).ageMs).toBeGreaterThan(2 * 3_600_000 - 5_000); // not advanced: nothing claimed it
+
+        // With the heartbeat on, the row is rewritten by the heartbeat only: still no lease, still not a sweep.
+        const again = await runTick(opts(tx, [], { heartbeat: hb }));
+        expect(again.sweepsRun).toEqual([]);
+        expect((await schedule(tx, hb)).lease_until).toBeNull();
+        expect((await getTickHeartbeat(tx, hb)).ageMs).toBeLessThan(5_000);
+      });
     });
   });
 });

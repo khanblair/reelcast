@@ -155,6 +155,27 @@ export function toTimeoutError(e: unknown, label: string, timeoutMs: number): un
   return isAbortLike(e) ? new AiTimeoutError(label, timeoutMs, { cause: e }) : e;
 }
 
+/**
+ * Bound a call the SDK cannot bound itself (the Files API upload ignores per-request options in
+ * @google/genai 2.6.0). The wrapped request is NOT cancelled: it is only abandoned, and finishes or
+ * dies on its own while the caller moves on with a retryable AiTimeoutError.
+ */
+export function withDeadline<T>(call: Promise<T>, label: string, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new AiTimeoutError(label, timeoutMs)), timeoutMs);
+    call.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e: unknown) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Submit a new generation
 // ---------------------------------------------------------------------------

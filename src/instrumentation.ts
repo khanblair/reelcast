@@ -1,10 +1,19 @@
 /**
- * Dev-only, opt-in: run the job tick in-process every few seconds (`DEV_TICK=1` in `.env.local`).
- * It is OFF by default because dev and production can share one database, and a local ticker would then
- * claim and run real users' jobs. In production the tick is driven by pg_cron (`/api/cron/tick`).
+ * Runs once when a server instance starts.
+ *
+ *  - production: check the environment (src/server/lib/env-check.ts) and log ONE warning naming any missing or
+ *    unusable required variable. It only throws (refuses to start) when the operator set `ENV_STRICT=1`.
+ *  - development, opt-in: run the job tick in-process every few seconds (`DEV_TICK=1` in `.env.local`).
+ *    It is OFF by default because dev and production can share one database, and a local ticker would then
+ *    claim and run real users' jobs. In production the tick is driven by pg_cron (`/api/cron/tick`).
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  if (process.env.NODE_ENV === "production") {
+    const { runStartupEnvCheck } = await import("@/server/lib/env-check");
+    runStartupEnvCheck(process.env);
+    return;
+  }
   if (process.env.NODE_ENV !== "development") return;
 
   const g = globalThis as { __reelcastDevTick?: ReturnType<typeof setInterval> | "off" };

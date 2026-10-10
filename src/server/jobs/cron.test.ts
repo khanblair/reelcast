@@ -122,6 +122,13 @@ describe("handleTickRequest", () => {
     expect(errs).toEqual([]);
   });
 
+  test("the cron route is the one caller that asks the tick to record its heartbeat", async () => {
+    const seen: (string | null | undefined)[] = [];
+    const run: TickRunner = async (o: TickOptions) => (seen.push(o.heartbeat), idle());
+    await handleTickRequest(request(), run);
+    expect(seen).toEqual(["tick.heartbeat"]);
+  });
+
   test("passes the requested budget to the runner, clamped to 270s, defaulting to 240s", async () => {
     const budgets: (number | undefined)[] = [];
     const run: TickRunner = async (o: TickOptions) => (budgets.push(o.budgetMs), idle());

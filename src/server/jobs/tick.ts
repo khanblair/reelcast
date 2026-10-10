@@ -6,7 +6,7 @@
 import { sql } from "drizzle-orm";
 import { db as defaultDb, type DbLike } from "@/db/client";
 import { jobSchedules } from "@/db/schema";
-import { TICK_HEARTBEAT, writeTickHeartbeat } from "./heartbeat";
+import { writeTickHeartbeat } from "./heartbeat";
 import { NonRetryableError, jobFailedHooks as defaultHooks, jobHandlers, sweeps as defaultSweeps, taskHandlers, type HandlerCtx, type JobFailedHook, type Sweep } from "./handlers";
 import { claimJobs, claimTasks, completeJob, completeTask, deferJob, failJob, failTask, recoverStale, rescheduleTask, type JobRow, type QueueScope, type TaskRow } from "./queue";
 
@@ -26,9 +26,10 @@ export type TickOptions = {
   /** Tests only: recover and claim ONLY this user's rows (see QueueScope). Production never sets it. */
   scope?: QueueScope;
   /**
-   * Name of the `job_schedules` row that records "a tick finished" (default `tick.heartbeat`), or null to write none.
-   * Anything that runs ticks against the shared database for a reason other than production scheduling (tests that use
-   * the real db, a developer's ticker) should pass its own name or null, so it cannot make a dead production tick look alive.
+   * Name of the `job_schedules` row that records "a tick finished". Default: none. ONLY the production cron entry point
+   * (src/server/jobs/cron.ts) passes `TICK_HEARTBEAT`: the heartbeat exists to notice that pg_cron stopped calling the
+   * route, so a tick started by anything else (a developer's local ticker, `kickRunner` after a user action, tests that
+   * use the real database) must not write it, or it would make a dead production cron look alive.
    */
   heartbeat?: string | null;
 };
@@ -161,7 +162,7 @@ export async function runTick(opts: TickOptions = {}): Promise<TickResult> {
 
   // The last thing every tick does, idle or cut short by the deadline, but not in a `finally`: a tick that threw above
   // must leave the heartbeat stale. One statement. A failed write is reported, it must not fail a tick that did its work.
-  const heartbeat = opts.heartbeat === undefined ? TICK_HEARTBEAT : opts.heartbeat;
+  const heartbeat = opts.heartbeat ?? null;
   if (heartbeat !== null) {
     try {
       await writeTickHeartbeat(db, heartbeat, result.errors);

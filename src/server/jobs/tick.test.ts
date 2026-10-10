@@ -284,7 +284,9 @@ describe("tick heartbeat", () => {
     });
   });
 
-  test("the default name is tick.heartbeat (checked without touching the live row)", async () => {
+  test("a tick writes no heartbeat unless it is asked to (only the cron route asks)", async () => {
+    // The heartbeat exists to notice that pg_cron stopped calling the route. A local ticker, kickRunner or a test that
+    // runs a tick must not write it, or it would make a dead production cron look alive.
     await inRolledBackTx(async ({ tx }) => {
       const written: unknown[] = [];
       const recording = new Proxy(tx, {
@@ -295,6 +297,8 @@ describe("tick heartbeat", () => {
         },
       }) as DbLike;
       await runTick({ db: recording, drain: false, sweeps: [], staleMs: NO_STALE_MS, jobFailedHooks: {} }); // no `heartbeat` option
+      expect(written).toHaveLength(0);
+      await runTick({ db: recording, drain: false, sweeps: [], staleMs: NO_STALE_MS, jobFailedHooks: {}, heartbeat: TICK_HEARTBEAT });
       expect(written).toHaveLength(1);
       expect(written[0]).toMatchObject({ name: "tick.heartbeat" });
       expect(TICK_HEARTBEAT).toBe("tick.heartbeat");

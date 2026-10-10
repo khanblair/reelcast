@@ -6,6 +6,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { stripQueryParams } from "@/server/lib/safe-error";
+import { TICK_HEARTBEAT } from "./heartbeat";
 import { runTick, type TickOptions, type TickResult } from "./tick";
 
 export type TickRunner = (opts: TickOptions) => Promise<TickResult>;
@@ -42,7 +43,8 @@ export async function handleTickRequest(req: Request, run: TickRunner = runTick)
   if (!authorized(req)) return NextResponse.json({ ok: false }, { status: 401 });
   const budget = Number(new URL(req.url).searchParams.get("budgetMs"));
   const started = performance.now();
-  const result = await run({ budgetMs: Number.isFinite(budget) && budget > 0 ? Math.min(budget, 270_000) : 240_000 });
+  // The only caller that records the heartbeat: it exists to notice that pg_cron stopped calling this route.
+  const result = await run({ budgetMs: Number.isFinite(budget) && budget > 0 ? Math.min(budget, 270_000) : 240_000, heartbeat: TICK_HEARTBEAT });
   logTickResult(result, Math.round(performance.now() - started));
   return NextResponse.json({ ok: true, ...result }, { headers: { "Cache-Control": "no-store" } });
 }

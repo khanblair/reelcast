@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, gte, inArray, like, or, sql } from "drizzle-orm";
 import { db, type DbLike } from "@/db/client";
 import { notifications, paymentEvents, paymentOrders, subscriptions, users } from "@/db/schema";
-import { inRolledBackTx } from "@/server/testing";
+import { countQueries, inRolledBackTx } from "@/server/testing";
 import {
   applyVerifiedPayment,
   cancelAtPeriodEnd,
@@ -495,6 +495,64 @@ describe("sweeps", () => {
       await tx.update(subscriptions).set({ cancelAtPeriodEnd: false }).where(eq(subscriptions.id, sub.id));
       await tx.update(users).set({ planSource: "admin" }).where(eq(users.id, user.id));
       expect((await runRenewalSweep(tx, deps, { userId: user.id })).created).toBe(0);
+    });
+  });
+
+  test("renewal sweep: a run where every order already exists costs a constant number of statements, however many subscriptions", async () => {
+    const deps = { prices: { pro: 19, elite: 49 }, currency: "USD" };
+    const run = async (n: number) =>
+      inRolledBackTx(async ({ tx, user, makeUser }) => {
+        const people = [user, ...(await Promise.all(Array.from({ length: n - 1 }, () => makeUser())))];
+        const ids = people.map((u) => u.id);
+        const subs: Awaited<ReturnType<typeof mkSub>>[] = [];
+        for (const u of people) {
+          await resetUser(tx, u.id, "pro", "subscription");
+          subs.push(await mkSub(tx, u.id, { periodEnd: new Date(Date.now() + 2 * DAY) }));
+        }
+        const first = await countQueries(() => runRenewalSweep(tx, deps, { userIds: ids }));
+        const second = await countQueries(() => runRenewalSweep(tx, deps, { userIds: ids }));
+        const orders = await tx.select().from(paymentOrders).where(inArray(paymentOrders.userId, ids));
+        const reminders = await tx.select().from(notifications).where(and(inArray(notifications.userId, ids), eq(notifications.title, "Renew your Pro plan")));
+        return { first, second, orders, reminders, subs };
+      });
+
+    const one = await run(1);
+    const six = await run(6);
+
+    for (const [n, r] of [[1, one], [6, six]] as const) {
+      expect(r.first.result).toEqual({ created: n }); // every subscription gets exactly one order ...
+      expect(r.orders).toHaveLength(n);
+      expect(new Set(r.orders.map((o) => o.merchantRef)).size).toBe(n);
+      for (const sub of r.subs) expect(r.orders.filter((o) => o.merchantRef === renewalBaseRef(sub.id, sub.periodEnd as Date))).toHaveLength(1);
+      expect(r.reminders).toHaveLength(n); // ... and exactly one reminder
+      expect(r.second.result).toEqual({ created: 0 }); // the second run creates nothing and sends nothing more
+    }
+    expect(six.second.queries).toBe(one.second.queries); // does not grow with the number of subscriptions
+    expect(six.second.queries).toBe(2); // the candidate select + one lookup of the existing references
+  });
+
+  test("renewal sweep: only subscriptions without an order for this period get one (mixed batch)", async () => {
+    await inRolledBackTx(async ({ tx, user, makeUser }) => {
+      const deps = { prices: { pro: 19, elite: 49 }, currency: "USD" };
+      const people = [user, await makeUser(), await makeUser()];
+      const subs: Awaited<ReturnType<typeof mkSub>>[] = [];
+      for (const u of people) {
+        await resetUser(tx, u.id, "pro", "subscription");
+        subs.push(await mkSub(tx, u.id, { periodEnd: new Date(Date.now() + 2 * DAY) }));
+      }
+      const ids = people.map((u) => u.id);
+      // The middle subscription already has its order (as if an earlier run, or a retried checkout, created it).
+      await runRenewalSweep(tx, deps, { userIds: [people[1].id] });
+      const [existing] = await tx.select().from(paymentOrders).where(eq(paymentOrders.subscriptionId, subs[1].id));
+      expect(existing.merchantRef).toBe(renewalBaseRef(subs[1].id, subs[1].periodEnd as Date));
+
+      expect(await runRenewalSweep(tx, deps, { userIds: ids })).toEqual({ created: 2 });
+      const orders = await tx.select().from(paymentOrders).where(inArray(paymentOrders.userId, ids));
+      expect(orders).toHaveLength(3);
+      expect(orders.find((o) => o.subscriptionId === subs[1].id)?.id).toBe(existing.id); // untouched
+      for (const u of people) expect(await countNotifications(tx, u.id, "Renew your Pro plan")).toBe(1);
+      // an empty id list selects nothing (and must not error)
+      expect(await runRenewalSweep(tx, deps, { userIds: [] })).toEqual({ created: 0 });
     });
   });
 

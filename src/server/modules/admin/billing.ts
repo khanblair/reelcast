@@ -1,7 +1,7 @@
 // Admin billing console: subscriptions, payments, and the queue of payments that need a human.
 // All functions are admin-only (`auth: "admin"`). Money is never moved from here: flagged payments are
 // refunded in the Pesapal dashboard (the confirmation code is shown for that) and then marked reviewed.
-import { and, desc, eq, ilike, inArray, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, ilike, isNotNull, isNull, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { paymentEvents, paymentOrders, subscriptions, SUBSCRIPTION_STATUSES, users } from "@/db/schema";
@@ -30,7 +30,31 @@ const FLAGS = {
 } as const;
 type FlagKey = keyof typeof FLAGS;
 
-type PaymentRow = typeof paymentOrders.$inferSelect;
+/**
+ * The payment columns an admin list/detail needs, i.e. exactly what `paymentDto` reads. Everything else (the hosted
+ * checkout link `redirect_url`, `provider`, `updated_at`, `reviewed_by`) is never fetched, so a 200-row page that is
+ * polled every 30 s does not drag them over the wire.
+ */
+const paymentColumns = {
+  id: paymentOrders.id,
+  userId: paymentOrders.userId,
+  subscriptionId: paymentOrders.subscriptionId,
+  merchantRef: paymentOrders.merchantRef,
+  orderTrackingId: paymentOrders.orderTrackingId,
+  confirmationCode: paymentOrders.confirmationCode,
+  purpose: paymentOrders.purpose,
+  plan: paymentOrders.plan,
+  amount: paymentOrders.amount,
+  currency: paymentOrders.currency,
+  statusCode: paymentOrders.statusCode,
+  statusText: paymentOrders.statusText,
+  paymentMethod: paymentOrders.paymentMethod,
+  appliedAt: paymentOrders.appliedAt,
+  reviewedAt: paymentOrders.reviewedAt,
+  reviewNote: paymentOrders.reviewNote,
+  createdAt: paymentOrders.createdAt,
+};
+type PaymentRow = Pick<typeof paymentOrders.$inferSelect, keyof typeof paymentColumns>;
 
 function flagOf(o: Pick<PaymentRow, "statusText" | "statusCode">): FlagKey | null {
   if (o.statusText === "AMOUNT_MISMATCH") return "amount_mismatch";
@@ -84,7 +108,7 @@ const reviewer = alias(users, "reviewer");
 
 /** A payment with its customer and (when reviewed) the admin who reviewed it. */
 const paymentUserJoin = {
-  order: paymentOrders,
+  order: paymentColumns,
   email: users.email,
   name: users.name,
   reviewerEmail: reviewer.email,
@@ -95,11 +119,22 @@ const paymentUserJoin = {
 export const overview = query({
   auth: "admin",
   handler: async (ctx) => {
-    const [subs, revenue, review, pending] = await Promise.all([
-      ctx.db
-        .select({ status: subscriptions.status, n: sql<number>`count(*)`.mapWith(Number) })
-        .from(subscriptions)
-        .groupBy(subscriptions.status),
+    // Polled every 30 s by every open admin tab (the sidebar badge), so two statements instead of four: every number
+    // that is a plain count comes back in ONE row (subscriptions by status, plus the two payment counts as scalar
+    // subqueries that reuse the exact predicates below); the per-currency revenue is the only multi-row result.
+    const [counts, revenue] = await Promise.all([
+      ctx.db.execute(sql`
+        select count(*) filter (where ${subscriptions.status} = 'active')::int as "active",
+               count(*) filter (where ${subscriptions.status} = 'past_due')::int as "pastDue",
+               count(*) filter (where ${subscriptions.status} = 'approval_pending')::int as "awaitingPayment",
+               count(*) filter (where ${subscriptions.status} = 'cancelled')::int as "cancelled",
+               count(*) filter (where ${subscriptions.status} = 'expired')::int as "expired",
+               (select count(*) from ${paymentOrders} where ${and(isNull(paymentOrders.reviewedAt), FLAGGED_SQL)})::int as "needsReviewCount",
+               (select count(*) from ${paymentOrders} where ${and(or(isNull(paymentOrders.statusCode), eq(paymentOrders.statusCode, 0)), isNotNull(paymentOrders.orderTrackingId), sql`${paymentOrders.createdAt} > now() - interval '7 days'`)})::int as "pendingPayments"
+        from ${subscriptions}
+      `) as unknown as Promise<
+        { active: number; pastDue: number; awaitingPayment: number; cancelled: number; expired: number; needsReviewCount: number; pendingPayments: number }[]
+      >,
       ctx.db
         .select({
           currency: paymentOrders.currency,
@@ -109,30 +144,22 @@ export const overview = query({
         .from(paymentOrders)
         .where(and(eq(paymentOrders.statusCode, 1), isNotNull(paymentOrders.appliedAt), sql`${paymentOrders.appliedAt} > now() - interval '30 days'`))
         .groupBy(paymentOrders.currency),
-      ctx.db
-        .select({ n: sql<number>`count(*)`.mapWith(Number) })
-        .from(paymentOrders)
-        .where(and(isNull(paymentOrders.reviewedAt), FLAGGED_SQL)),
-      ctx.db
-        .select({ n: sql<number>`count(*)`.mapWith(Number) })
-        .from(paymentOrders)
-        .where(and(or(isNull(paymentOrders.statusCode), eq(paymentOrders.statusCode, 0)), isNotNull(paymentOrders.orderTrackingId), sql`${paymentOrders.createdAt} > now() - interval '7 days'`)),
     ]);
 
-    const byStatus = Object.fromEntries(SUBSCRIPTION_STATUSES.map((s) => [s, subs.find((r) => r.status === s)?.n ?? 0])) as Record<(typeof SUBSCRIPTION_STATUSES)[number], number>;
+    const c = counts[0];
     return {
       subscriptions: {
-        active: byStatus.active,
-        pastDue: byStatus.past_due,
-        awaitingPayment: byStatus.approval_pending,
-        cancelled: byStatus.cancelled,
-        expired: byStatus.expired,
+        active: c.active,
+        pastDue: c.pastDue,
+        awaitingPayment: c.awaitingPayment,
+        cancelled: c.cancelled,
+        expired: c.expired,
       },
       /** Completed, applied payments in the last 30 days, per currency. */
       revenue30d: revenue.map((r) => ({ currency: r.currency, total: Number(r.total), count: r.count })),
-      needsReviewCount: review[0]?.n ?? 0,
+      needsReviewCount: c.needsReviewCount,
       /** Orders sent to Pesapal in the last 7 days that have not completed yet. */
-      pendingPayments: pending[0]?.n ?? 0,
+      pendingPayments: c.pendingPayments,
     };
   },
 });
@@ -263,31 +290,38 @@ export const getPayment = query({
   auth: "admin",
   input: z.object({ id: z.string().uuid() }),
   handler: async (ctx, args) => {
-    const [row] = await ctx.db
-      .select(paymentUserJoin)
+    // One statement: the order (with its customer and reviewer) LEFT JOINed to its notification trail. The trail is every
+    // event whose tracking-id OR merchant-ref column holds either of the order's two identifiers (the cross matches are
+    // deliberate: they are what the previous two-step lookup did), newest first, at most 50. An order with no events
+    // yields a single row whose event is null. Without payloads: what Pesapal told us and what we did.
+    const rows = await ctx.db
+      .select({
+        ...paymentUserJoin,
+        event: {
+          id: paymentEvents.id,
+          notificationType: paymentEvents.notificationType,
+          receivedAt: paymentEvents.receivedAt,
+          processedAt: paymentEvents.processedAt,
+          error: paymentEvents.error,
+        },
+      })
       .from(paymentOrders)
       .innerJoin(users, eq(users.id, paymentOrders.userId))
       .leftJoin(reviewer, eq(reviewer.id, paymentOrders.reviewedBy))
+      .leftJoin(
+        paymentEvents,
+        or(
+          sql`${paymentEvents.orderTrackingId} in (${paymentOrders.orderTrackingId}, ${paymentOrders.merchantRef})`,
+          sql`${paymentEvents.merchantRef} in (${paymentOrders.orderTrackingId}, ${paymentOrders.merchantRef})`,
+        ),
+      )
       .where(eq(paymentOrders.id, args.id))
-      .limit(1);
+      .orderBy(desc(paymentEvents.receivedAt))
+      .limit(50);
+    const row = rows[0];
     if (!row) return null; // the UI shows "not found"; an error would go to the error boundary
 
-    // Notification trail (what Pesapal told us and what we did), without the raw payloads.
-    const keys = [row.order.orderTrackingId, row.order.merchantRef].filter((k): k is string => !!k);
-    const events = keys.length
-      ? await ctx.db
-          .select({
-            id: paymentEvents.id,
-            notificationType: paymentEvents.notificationType,
-            receivedAt: paymentEvents.receivedAt,
-            processedAt: paymentEvents.processedAt,
-            error: paymentEvents.error,
-          })
-          .from(paymentEvents)
-          .where(or(inArray(paymentEvents.orderTrackingId, keys), inArray(paymentEvents.merchantRef, keys)))
-          .orderBy(desc(paymentEvents.receivedAt))
-          .limit(50)
-      : [];
+    const events = rows.flatMap((r) => (r.event ? [r.event] : []));
     return { payment: paymentDto(row.order, row), events };
   },
 });

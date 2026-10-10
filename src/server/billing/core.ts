@@ -717,6 +717,22 @@ async function revokeAccess(tx: DbLike, order: OrderRow, now: Date): Promise<boo
 
 // ─── sweeps ──────────────────────────────────────────────────────────────────
 
+/** Parameters per lookup statement (Postgres allows 65 535 bind parameters; stay far below). */
+const REF_LOOKUP_CHUNK = 1000;
+
+/** Which of these merchant references already have a payment_orders row? One statement per 1000 references. */
+async function existingMerchantRefs(db: DbLike, refs: string[]): Promise<Set<string>> {
+  const found = new Set<string>();
+  for (let i = 0; i < refs.length; i += REF_LOOKUP_CHUNK) {
+    const rows = await db
+      .select({ merchantRef: paymentOrders.merchantRef })
+      .from(paymentOrders)
+      .where(inArray(paymentOrders.merchantRef, refs.slice(i, i + REF_LOOKUP_CHUNK)));
+    for (const r of rows) found.add(r.merchantRef);
+  }
+  return found;
+}
+
 /**
  * Create the renewal order for subscriptions whose period ends within 3 days (and for past_due ones
  * that have none). The merchant reference is deterministic per period, so any number of concurrent
@@ -726,7 +742,7 @@ async function revokeAccess(tx: DbLike, order: OrderRow, now: Date): Promise<boo
 export async function runRenewalSweep(
   db: DbLike,
   deps: { prices: PlanPrices; currency: string; now?: () => Date },
-  opts: { limit?: number; /** restrict to one user (tests, support tooling) */ userId?: string } = {},
+  opts: { limit?: number; /** restrict to one user (tests, support tooling) */ userId?: string; /** restrict to these users (tests) */ userIds?: string[] } = {},
 ): Promise<{ created: number }> {
   const now = clock(deps);
   const rows = await db
@@ -738,6 +754,7 @@ export async function runRenewalSweep(
         eq(subscriptions.cancelAtPeriodEnd, false),
         ne(users.planSource, "admin"),
         opts.userId ? eq(subscriptions.userId, opts.userId) : undefined,
+        opts.userIds ? inArray(subscriptions.userId, opts.userIds) : undefined,
         or(
           and(eq(subscriptions.status, "active"), lte(subscriptions.periodEnd, new Date(now.getTime() + RENEWAL_LEAD_MS))),
           eq(subscriptions.status, "past_due"),
@@ -747,7 +764,13 @@ export async function runRenewalSweep(
     .orderBy(subscriptions.periodEnd)
     .limit(opts.limit ?? 500);
 
-  let created = 0;
+  // Which of these candidates still need an order? Every run re-selects everyone inside the 3-day window (and everyone
+  // past_due), and once a period's order exists the per-row transaction below is a pure no-op, so look the existing
+  // references up in ONE query and only open a transaction for the rest. This is only a shortcut: the INSERT ... ON
+  // CONFLICT DO NOTHING below stays the guard, so concurrent sweeps still create exactly one order per period and only
+  // the winner notifies. The reference is the same deterministic one the insert uses; a reference that exists is exactly
+  // the case in which that insert would conflict, whoever created the order and whatever its status is now.
+  const candidates: { sub: SubRow; plan: PaidPlan; price: number; ref: string }[] = [];
   for (const { sub } of rows) {
     if (!sub.periodEnd) continue;
     const plan = renewalPlan(sub);
@@ -755,6 +778,13 @@ export async function runRenewalSweep(
     if (price == null) continue;
     // A scheduled downgrade is paid only once the current (higher) period is over.
     if (sub.status === "active" && isPendingDowngrade(sub)) continue;
+    candidates.push({ sub, plan, price, ref: renewalBaseRef(sub.id, sub.periodEnd) });
+  }
+  const settled = await existingMerchantRefs(db, candidates.map((c) => c.ref));
+
+  let created = 0;
+  for (const { sub, plan, price, ref } of candidates) {
+    if (settled.has(ref)) continue; // this period's order already exists
     const inserted = await db.transaction(async (tx) => {
       const [o] = await tx
         .insert(paymentOrders)

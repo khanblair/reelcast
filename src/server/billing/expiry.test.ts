@@ -155,7 +155,10 @@ describe("expiry sweep: heals subscriptions an earlier non-atomic sweep left hal
       expect(await runExpirySweep(tx, { userId: user.id })).toMatchObject({ healed: 0 });
       expect(await getUser(tx, user.id)).toMatchObject({ plan: "pro", planSource: "subscription" });
 
-      expect(await runExpirySweep(tx, { userId: user.id, now: new Date(Date.now() + 10 * 60_000) })).toMatchObject({ healed: 1 });
+      // still inside the margin 5 minutes later (a reconcile-applied payment's own `now` can be minutes old) ...
+      expect(await runExpirySweep(tx, { userId: user.id, now: new Date(Date.now() + 5 * 60_000) })).toMatchObject({ healed: 0 });
+      // ... and healed once it has been idle for longer than any payment can lag
+      expect(await runExpirySweep(tx, { userId: user.id, now: new Date(Date.now() + 15 * 60_000) })).toMatchObject({ healed: 1 });
       expect(await getUser(tx, user.id)).toMatchObject({ plan: "free", planSource: "default" });
     });
   });

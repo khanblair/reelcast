@@ -828,8 +828,11 @@ export async function runRenewalSweep(
  * A paid plan whose subscription is already over is healed only once its users row has been idle this long.
  * Why: the heal decides on a snapshot, and a payment applied at the same moment writes the subscription AND the
  * plan in one transaction; the idle margin lets that fresh write win (see healOrphanedPlans).
+ * Sized above the longest a payment's own `now` can lag the moment it commits: the reconcile sweep applies its
+ * orders one after another with the `now` it started with, so the tick budget (4 min) plus a slow poll plus the
+ * host overrun is about 6 minutes.
  */
-const HEAL_MIN_IDLE_MS = 2 * 60_000;
+const HEAL_MIN_IDLE_MS = 10 * 60_000;
 
 /**
  * Heal users left on a subscription-granted paid plan with NO live subscription behind it. Before the expiry
@@ -840,7 +843,8 @@ const HEAL_MIN_IDLE_MS = 2 * 60_000;
  *  - no approval_pending / active / past_due subscription: anything live is left to the normal flow;
  *  - users.updated_at older than HEAL_MIN_IDLE_MS: under READ COMMITTED a payment that commits while this
  *    statement waits on the users row would be re-checked against the OLD snapshot of subscriptions, and the
- *    customer who just paid would be downgraded. grantEntitlement stamps updated_at, so that re-check fails instead.
+ *    customer who just paid would be downgraded. grantEntitlement stamps updated_at with the payment's own `now`,
+ *    which is at most a few minutes old, so with this margin that re-check fails instead (see HEAL_MIN_IDLE_MS).
  * Quiet on purpose: no notification (the missed "ended" notice cannot be reconstructed for a past date).
  */
 async function healOrphanedPlans(db: DbLike, now: Date, limit: number, only: { userId?: string; userIds?: string[] }): Promise<number> {

@@ -24,12 +24,24 @@ function isPlanLimit(e: unknown): boolean {
   return e instanceof RpcError && e.code === "PLAN_LIMIT_EXCEEDED";
 }
 
+/** What the chat reads from the caller's settings row (null when the user has none): the stored BYOK key + prompt context. */
+type ChatSettings = {
+  userId: string;
+  deepseekApiKey: string | null;
+  aiTone: string | null;
+  aiNiche: string | null;
+  aiTargetAudience: string | null;
+  aiBrandVoice: string | null;
+  autoPublishEnabled: boolean | null;
+  autoPublishNextAt: Date | null;
+  autoPublishCount: number | null;
+} | null;
+
 /** The user's own (BYOK) DeepSeek key wins; otherwise the platform key. null = none configured. */
-async function resolveDeepseekKey(db: DbLike, userId: string): Promise<string | null> {
-  const [row] = await db.select({ key: settings.deepseekApiKey }).from(settings).where(eq(settings.userId, userId)).limit(1);
-  if (row?.key) {
+async function resolveDeepseekKey(db: DbLike, storedUserKey: string | null | undefined): Promise<string | null> {
+  if (storedUserKey) {
     try {
-      const own = decryptSecret(row.key);
+      const own = decryptSecret(storedUserKey);
       if (own) return own;
     } catch {
       console.error("[aiAssistant] stored DeepSeek key could not be decrypted; falling back to the platform key");
@@ -46,21 +58,38 @@ export const chat = action({
     // Free users have no AI assistant access (limit 0 in PLAN_LIMITS; checked up front like Convex).
     if ((user.plan ?? "free") === "free") return { error: "plan_limit" };
 
-    // The session must belong to the caller (NOT_FOUND otherwise).
-    const [session] = await db
-      .select({ id: aiSessions.id })
+    // The session must belong to the caller (NOT_FOUND otherwise). The caller's settings row comes back on the same
+    // row (one statement): it holds the BYOK key and is the prompt's settings context, so it is never read again.
+    const [found] = await db
+      .select({
+        id: aiSessions.id,
+        settings: {
+          userId: settings.userId,
+          deepseekApiKey: settings.deepseekApiKey,
+          aiTone: settings.aiTone,
+          aiNiche: settings.aiNiche,
+          aiTargetAudience: settings.aiTargetAudience,
+          aiBrandVoice: settings.aiBrandVoice,
+          autoPublishEnabled: settings.autoPublishEnabled,
+          autoPublishNextAt: settings.autoPublishNextAt,
+          autoPublishCount: settings.autoPublishCount,
+        },
+      })
       .from(aiSessions)
+      .leftJoin(settings, eq(settings.userId, aiSessions.userId))
       .where(and(eq(aiSessions.id, args.sessionId), eq(aiSessions.userId, userId)))
       .limit(1);
-    if (!session) throw notFound("Session not found");
+    if (!found) throw notFound("Session not found");
+    const userSettings: ChatSettings = found.settings;
 
-    const deepseekKey = await resolveDeepseekKey(db, userId);
+    const deepseekKey = await resolveDeepseekKey(db, userSettings?.deepseekApiKey);
     if (!deepseekKey) return { error: "no_api_key" };
 
     // Atomic metering: check + increment in one statement.
     let usage: { used: number; limit: number };
     try {
-      usage = await consumeQuota(db, userId, "aiMessagesUsed");
+      // user.plan is fresh (read on every request): no extra `users` read.
+      usage = await consumeQuota(db, userId, "aiMessagesUsed", user.plan);
     } catch (e) {
       if (isPlanLimit(e)) return { error: "plan_limit" };
       throw e;
@@ -72,13 +101,13 @@ export const chat = action({
         await db
           .select({ role: aiMessages.role, content: aiMessages.content })
           .from(aiMessages)
-          .where(and(eq(aiMessages.sessionId, session.id), eq(aiMessages.userId, userId)))
+          .where(and(eq(aiMessages.sessionId, found.id), eq(aiMessages.userId, userId)))
           .orderBy(desc(aiMessages.createdAt))
           .limit(HISTORY_LIMIT)
       ).reverse();
-      await db.insert(aiMessages).values({ userId, sessionId: session.id, role: "user", content: args.message });
+      await db.insert(aiMessages).values({ userId, sessionId: found.id, role: "user", content: args.message });
 
-      const systemPrompt = await buildSystemPrompt(db, userId, usage);
+      const systemPrompt = await buildSystemPrompt(db, userId, usage, userSettings);
 
       const res = await fetch("https://api.deepseek.com/chat/completions", {
         method: "POST",
@@ -101,8 +130,8 @@ export const chat = action({
       const responseText = data.choices?.[0]?.message?.content;
       if (!responseText) throw new RpcError("INTERNAL", "DeepSeek returned no response content");
 
-      await db.insert(aiMessages).values({ userId, sessionId: session.id, role: "assistant", content: responseText });
-      await db.update(aiSessions).set({ lastMessageAt: new Date() }).where(eq(aiSessions.id, session.id));
+      await db.insert(aiMessages).values({ userId, sessionId: found.id, role: "assistant", content: responseText });
+      await db.update(aiSessions).set({ lastMessageAt: new Date() }).where(eq(aiSessions.id, found.id));
       return { response: responseText };
     } catch (e) {
       // The assistant never answered: give the metered message back.
@@ -115,8 +144,8 @@ export const chat = action({
   },
 });
 
-async function buildSystemPrompt(db: DbLike, userId: string, usage: { used: number; limit: number }): Promise<string> {
-  const [counts, recent, analyticsRows, settingsRows] = await Promise.all([
+async function buildSystemPrompt(db: DbLike, userId: string, usage: { used: number; limit: number }, s: ChatSettings): Promise<string> {
+  const [counts, recent, analyticsRows] = await Promise.all([
     db.select({ status: videos.status, n: sql<number>`count(*)::int` }).from(videos).where(eq(videos.userId, userId)).groupBy(videos.status),
     db
       .select({ title: videos.title, tags: videos.tags, status: videos.status })
@@ -131,9 +160,7 @@ async function buildSystemPrompt(db: DbLike, userId: string, usage: { used: numb
       .orderBy(desc(videoAnalytics.fetchedAt))
       .limit(20)
       .catch(() => []),
-    db.select().from(settings).where(eq(settings.userId, userId)).limit(1),
   ]);
-  const s = settingsRows[0];
 
   const statusCounts: Record<string, number> = {};
   for (const c of counts) statusCounts[c.status] = c.n;

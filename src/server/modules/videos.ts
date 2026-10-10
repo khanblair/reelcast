@@ -46,7 +46,8 @@ export const create = mutation({
   handler: async (ctx, args) =>
     // One transaction: if the insert fails the quota unit is rolled back with it (no refund needed).
     ctx.db.transaction(async (tx) => {
-      await consumeQuota(tx, ctx.userId, "videosUploaded");
+      // ctx.user is read fresh on every request, so its plan is current: no extra `users` read.
+      await consumeQuota(tx, ctx.userId, "videosUploaded", ctx.user.plan);
       const [row] = await tx
         .insert(videos)
         .values({
@@ -120,13 +121,18 @@ export const get = query({
   input: z.object({ id: z.string() }),
   handler: async (ctx, { id }) => {
     if (!isUuid(id)) return null;
-    const [row] = await ctx.db
-      .select()
-      .from(videos)
-      .where(and(eq(videos.id, id), eq(videos.userId, ctx.userId)))
-      .limit(1);
+    // Both reads go out together. The history of a video that is not the caller's is fetched but dropped below:
+    // it is only returned together with the owner-scoped video row, so nothing leaks.
+    const [[row], metadataHistory] = await Promise.all([
+      ctx.db
+        .select()
+        .from(videos)
+        .where(and(eq(videos.id, id), eq(videos.userId, ctx.userId)))
+        .limit(1),
+      listMetadataHistory(ctx.db, id),
+    ]);
     if (!row) return null;
-    return { ...row, metadataHistory: await listMetadataHistory(ctx.db, row.id) };
+    return { ...row, metadataHistory };
   },
 });
 

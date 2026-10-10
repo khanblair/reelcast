@@ -34,32 +34,38 @@ export async function listLatestForUser(db: DbLike, userId: string, limit: numbe
   return db.select().from(latest).orderBy(desc(latest.fetchedAt)).limit(limit);
 }
 
-/** Channel totals over the latest snapshot of each video + the top 5 videos by views. */
+/**
+ * Channel totals over the latest snapshot of each video + the top 5 videos by views, in ONE statement: the totals are
+ * window aggregates over the whole `latest` set, computed before the LIMIT trims it to the top 5 (so every returned
+ * row carries the same totals). No rows at all means no videos: the same zeros / null the plain aggregate gave.
+ */
 export async function getChannelTotals(db: DbLike, userId: string) {
   const latest = latestPerVideo(db, userId);
-  const [agg] = await db
-    .select({
-      totalViews: sql<number>`coalesce(sum(${latest.views}), 0)`.mapWith(Number),
-      totalWatchTimeMinutes: sql<number>`coalesce(sum(${latest.watchTimeMinutes}), 0)`.mapWith(Number),
-      totalImpressions: sql<number>`coalesce(sum(${latest.impressions}), 0)`.mapWith(Number),
-      // avg() ignores NULLs, so this is null (not 0) when no video has CTR data.
-      avgCtr: sql<number | null>`avg(${latest.ctr})`.mapWith((v) => (v === null || v === undefined ? null : Number(v))),
-    })
-    .from(latest);
-
-  const topVideos = await db
+  const rows = await db
     .select({
       videoId: latest.videoId,
       youtubeVideoId: latest.youtubeVideoId,
       views: latest.views,
       watchTimeMinutes: latest.watchTimeMinutes,
       ctr: latest.ctr,
+      totalViews: sql<number>`coalesce(sum(${latest.views}) over (), 0)`.mapWith(Number),
+      totalWatchTimeMinutes: sql<number>`coalesce(sum(${latest.watchTimeMinutes}) over (), 0)`.mapWith(Number),
+      totalImpressions: sql<number>`coalesce(sum(${latest.impressions}) over (), 0)`.mapWith(Number),
+      // avg() ignores NULLs, so this is null (not 0) when no video has CTR data.
+      avgCtr: sql<number | null>`avg(${latest.ctr}) over ()`.mapWith((v) => (v === null || v === undefined ? null : Number(v))),
     })
     .from(latest)
     .orderBy(sql`${latest.views} desc nulls last`)
     .limit(5);
 
-  return { ...agg, topVideos };
+  const first = rows[0];
+  return {
+    totalViews: first?.totalViews ?? 0,
+    totalWatchTimeMinutes: first?.totalWatchTimeMinutes ?? 0,
+    totalImpressions: first?.totalImpressions ?? 0,
+    avgCtr: first?.avgCtr ?? null,
+    topVideos: rows.map((r) => ({ videoId: r.videoId, youtubeVideoId: r.youtubeVideoId, views: r.views, watchTimeMinutes: r.watchTimeMinutes, ctr: r.ctr })),
+  };
 }
 
 export type SeriesPoint = {

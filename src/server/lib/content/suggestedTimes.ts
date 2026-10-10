@@ -15,13 +15,6 @@ export type HourBucket = { hourUtc: number; count: number; totalViews: number; t
 
 const NOT_ENOUGH = { suggestedTimes: null, reason: "not_enough_data" as const, videosNeeded: MIN_DATA_POINTS };
 
-export async function countPublished(db: DbLike, userId: string): Promise<number> {
-  const [row] = (await db.execute(sql`
-    select count(*)::int as published from videos where user_id = ${userId} and status = 'published'
-  `)) as unknown as { published: number }[];
-  return Number(row?.published ?? 0);
-}
-
 /** Latest analytics snapshot per published video, bucketed by UTC publish hour. */
 export async function loadHourBuckets(db: DbLike, userId: string): Promise<HourBucket[]> {
   const rows = (await db.execute(sql`
@@ -70,7 +63,12 @@ export function scoreHourBuckets(buckets: HourBucket[]) {
   return { suggestedTimes: scored, reason: "analytics" as const, totalVideosAnalysed: analysed };
 }
 
+/**
+ * One statement. A separate "how many published videos" count used to run first, but it is redundant: every row
+ * `loadHourBuckets` counts is a published video (and at most one row per video, via the `limit 1` lateral), so the
+ * analysed total can never exceed the published count, and `scoreHourBuckets` already returns NOT_ENOUGH below
+ * MIN_DATA_POINTS analysed videos.
+ */
 export async function computeSuggestedTimes(db: DbLike, userId: string) {
-  if ((await countPublished(db, userId)) < MIN_DATA_POINTS) return NOT_ENOUGH;
   return scoreHourBuckets(await loadHourBuckets(db, userId));
 }

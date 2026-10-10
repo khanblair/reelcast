@@ -3,10 +3,7 @@
  */
 import { sql } from "drizzle-orm";
 import type { DbLike } from "@/db/client";
-import { enqueueJob } from "@/server/jobs/queue";
 import { bestEffort, defaultDeps, type PublishDeps } from "./deps";
-
-type Claimed = { id: string; user_id: string };
 
 export type DueSchedulesOptions = {
   /** Test seam: only consider this user's / these videos. Production passes nothing. */
@@ -21,10 +18,15 @@ export type DueSchedulesOptions = {
 /**
  * Turn every due scheduled video into a publish job.
  *
- * Each batch is ONE transaction: `UPDATE ... SET status='publishing' ... FOR UPDATE SKIP LOCKED
- * RETURNING` claims the rows (concurrent sweeps get disjoint sets and never wait), then a job is
- * enqueued for each claimed row. A crash rolls both back, so a video is never left "publishing"
- * without a job; the DB allows one active publish job per video, so duplicates are impossible.
+ * Each batch is ONE statement (so one network round trip, whatever the batch size): a CTE picks up to
+ * `batchSize` due rows with `FOR UPDATE SKIP LOCKED` (concurrent sweeps get disjoint sets and never wait),
+ * an `UPDATE ... SET status='publishing' ... RETURNING` claims exactly those rows, and an `INSERT ... SELECT ... ON CONFLICT DO NOTHING`
+ * creates a publish job for every claimed row. A single statement is atomic, so a crash can never leave
+ * a video "publishing" without a job; the partial unique index `jobs_one_active_per_video_type_idx`
+ * allows one active publish job per video, so duplicates are impossible, and a claimed video that
+ * already has an active publish job just keeps it (claimed counts it, jobsCreated does not).
+ * The job gets the same values `enqueueJob` gives it: pending, 0 attempts, 3 max attempts, no metadata,
+ * `run_at` = `opts.runAt` or the current time.
  */
 export async function processDueSchedules(db: DbLike, opts: DueSchedulesOptions = {}): Promise<{ claimed: number; jobsCreated: number }> {
   const batchSize = opts.batchSize ?? 200;
@@ -36,30 +38,33 @@ export async function processDueSchedules(db: DbLike, opts: DueSchedulesOptions 
   let jobsCreated = 0;
 
   for (let i = 0; i < maxBatches; i++) {
-    const batch = await db.transaction(async (tx) => {
-      const rows = (await tx.execute(sql`
-        update videos
+    // An ISO string, not a Date: raw `sql` parameters are not run through a column mapper.
+    const runAt = (opts.runAt ?? new Date()).toISOString();
+    const [batch] = (await db.execute(sql`
+      with picked as materialized (
+        select id from videos
+         where status = 'scheduled' and scheduled_publish_at <= now() and published_video_id is null
+           ${userFilter} ${idFilter}
+         order by scheduled_publish_at
+         limit ${batchSize}
+           for update skip locked
+      ), c as (
+        update videos v
            set status = 'publishing', updated_at = now()
-         where id in (
-           select id from videos
-            where status = 'scheduled' and scheduled_publish_at <= now() and published_video_id is null
-              ${userFilter} ${idFilter}
-            order by scheduled_publish_at
-            limit ${batchSize}
-              for update skip locked
-         )
-        returning id, user_id
-      `)) as unknown as Claimed[];
-      let created = 0;
-      for (const r of rows) {
-        const { created: isNew } = await enqueueJob(tx, { userId: r.user_id, videoId: r.id, type: "publish", runAt: opts.runAt });
-        if (isNew) created++;
-      }
-      return { n: rows.length, created };
-    });
-    claimed += batch.n;
+          from picked
+         where v.id = picked.id
+        returning v.id, v.user_id
+      ), ins as (
+        insert into jobs (user_id, video_id, type, run_at, metadata, max_attempts)
+        select user_id, id, 'publish', ${runAt}::timestamptz, null, 3 from c
+        on conflict do nothing
+        returning id
+      )
+      select (select count(*) from c)::int as claimed, (select count(*) from ins)::int as created
+    `)) as unknown as { claimed: number; created: number }[];
+    claimed += batch.claimed;
     jobsCreated += batch.created;
-    if (batch.n < batchSize) break;
+    if (batch.claimed < batchSize) break;
   }
   return { claimed, jobsCreated };
 }

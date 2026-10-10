@@ -29,9 +29,26 @@ export type TickResult = { recovered: { jobs: number; tasks: number; failedJobs:
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const isRetryable = (e: unknown) => !(e instanceof NonRetryableError);
 
-/** Atomically claim a sweep: only the tick that advances last_run_at runs it. */
+/**
+ * Which of `sweeps` need a claim attempt right now, in ONE statement: those with no schedule row yet
+ * (`missing`) and those whose interval has elapsed with no live lease (the same predicate as the claim
+ * UPDATE below). On an idle tick it returns nothing, so the whole sweep phase costs one statement
+ * instead of two per sweep. It is only a filter: ownership is still decided by `claimSweep`.
+ */
+async function dueSweeps(db: DbLike, sweeps: Sweep[]): Promise<{ due: Set<string>; missing: string[] }> {
+  const rows = (await db.execute(sql`
+    select v.name, (s.name is null) as missing
+      from (values ${sql.join(sweeps.map((s) => sql`(${s.name}::text, ${s.everyMs}::float8)`), sql`, `)}) as v(name, every_ms)
+      left join job_schedules s on s.name = v.name
+     where s.name is null
+        or ((s.last_run_at is null or s.last_run_at <= now() - v.every_ms * interval '1 millisecond')
+            and (s.lease_until is null or s.lease_until <= now()))
+  `)) as unknown as { name: string; missing: boolean }[];
+  return { due: new Set(rows.map((r) => r.name)), missing: [...new Set(rows.filter((r) => r.missing).map((r) => r.name))] };
+}
+
+/** Atomically claim a sweep: only the tick that advances last_run_at runs it. The schedule row must exist. */
 async function claimSweep(db: DbLike, name: string, everyMs: number, leaseMs: number): Promise<boolean> {
-  await db.insert(jobSchedules).values({ name }).onConflictDoNothing();
   const rows = (await db.execute(sql`
     update job_schedules
        set last_run_at = now(), lease_until = now() + ${leaseMs} * interval '1 millisecond'
@@ -102,8 +119,15 @@ export async function runTick(opts: TickOptions = {}): Promise<TickResult> {
   result.recovered = { jobs: recovered.jobs, tasks: recovered.tasks, failedJobs: recovered.failedJobs.length };
   for (const job of recovered.failedJobs) await notifyFailed(hooks, job, job.error ?? "Worker timed out", { db, now: new Date() }, result.errors);
 
+  // One cheap check finds the sweeps that are due (almost always none). Each due sweep is still claimed
+  // one at a time, right before it runs and after the deadline check: claiming them all up front would
+  // burn the interval (up to 6 hours) of every sweep that a deadline break or a crash kept from running.
+  const { due, missing } = sweeps.length > 0 && Date.now() < deadline ? await dueSweeps(db, sweeps) : { due: new Set<string>(), missing: [] as string[] };
+  if (missing.length > 0 && Date.now() < deadline) await db.insert(jobSchedules).values(missing.map((name) => ({ name }))).onConflictDoNothing();
+
   for (const sweep of sweeps) {
     if (Date.now() >= deadline) break;
+    if (!due.has(sweep.name)) continue;
     if (!(await claimSweep(db, sweep.name, sweep.everyMs, Math.min(budgetMs, 5 * 60_000)))) continue;
     try {
       await sweep.run({ db, now: new Date(), deadline });

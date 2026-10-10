@@ -118,6 +118,36 @@ describe("a database that does not answer", () => {
     expect(calls).toEqual({ execute: 1, select: 0 });
   }, 5_000);
 
+  describe("the one timer covers every statement, not just the ping", () => {
+    /** Awaiting it never settles; any method call on it returns itself (a drizzle select chain that hangs). */
+    const hangs: unknown = new Proxy({}, { get: (_t, prop) => (prop === "then" ? () => {} : () => hangs) });
+    /** The same chain, but it resolves to `rows`. */
+    const answers = (rows: unknown[]): unknown => new Proxy({}, { get: (_t, prop) => (prop === "then" ? (resolve: (v: unknown) => void) => resolve(rows) : () => answers(rows)) });
+
+    test("the heartbeat read hangs after a good ping", async () => {
+      const db = { execute: async () => [{ "?column?": 1 }], select: () => hangs } as unknown as DbLike;
+      const t0 = performance.now();
+      const res = await handleHealthRequest(withSecret(), { db, env: goodEnv(), timeoutMs: 60 });
+      expect(performance.now() - t0).toBeLessThan(1_000);
+      expect(res.status).toBe(503);
+      expect(await bodyOf(res)).toMatchObject({ status: "down", db: { ok: false, error: "timeout" }, tick: null, queue: null });
+    }, 5_000);
+
+    test("the queue-depth statement hangs after a good ping and heartbeat", async () => {
+      let executes = 0;
+      const db = {
+        execute: () => (++executes === 1 ? Promise.resolve([{ "?column?": 1 }]) : new Promise(() => {})),
+        select: () => answers([]),
+      } as unknown as DbLike;
+      const t0 = performance.now();
+      const res = await handleHealthRequest(withSecret(), { db, env: goodEnv(), timeoutMs: 60 });
+      expect(performance.now() - t0).toBeLessThan(1_000);
+      expect(res.status).toBe(503);
+      expect(await bodyOf(res)).toMatchObject({ status: "down", db: { ok: false, error: "timeout" }, queue: null });
+      expect(executes).toBe(2);
+    }, 5_000);
+  });
+
   test("a failing database is down too, and its message (pooler host, user) is never returned", async () => {
     const db = { execute: async () => { throw new Error("connect ECONNREFUSED LEAKSENTINEL-pooler.supabase.com:6543 user=LEAKSENTINEL"); } } as unknown as DbLike;
     const res = await handleHealthRequest(withSecret(), { db, env: goodEnv(), timeoutMs: 1_000 });

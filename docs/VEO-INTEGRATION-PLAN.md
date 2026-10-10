@@ -24,7 +24,7 @@ Key properties of the current design:
 /generate form
   │  rpc videos.createGenerated   plan pre-check, insert video (source_type 'generate', status 'draft', ai_config)
   │  rpc videos.updateStatus      draft -> queued
-  │  rpc jobs.create              enqueue the 'generation' job; kickRunner() runs a tick right after the response
+  │  rpc jobs.create              enqueue the 'generation' job; kickRunner() runs a tick right after the response (production, or dev with DEV_TICK=1)
   ▼
 job runner (runTick)  ->  generation handler (runGenerationJob)
   │  submit    consume 'veoGenerated' quota -> Veo generateVideos -> insert generations row,
@@ -154,7 +154,7 @@ The `/generate` page calls `videos.createGenerated`, then `videos.updateStatus(q
 
 - `createGenerated` checks `getUsage` and rejects with `PLAN_LIMIT_EXCEEDED:veoGenerated:<plan>` when the month's allowance is used up. Free users (limit 0) are therefore stopped here. This check does not consume anything.
 - It inserts the video with `source_type = 'generate'`, `status = 'draft'`, an empty `raw_file_key`, `raw_file_size = 0`, the title set to the first 80 characters of the prompt, and the form values in `ai_config`.
-- `jobs.create` calls `enqueueJob` (idempotent per video and type) and `kickRunner()`, which runs a tick right after the response so the submit step starts immediately.
+- `jobs.create` calls `enqueueJob` (idempotent per video and type) and `kickRunner()`, which runs a tick right after the response so the submit step starts immediately (in production; in dev only with `DEV_TICK=1`).
 
 ### Submit step
 
@@ -173,7 +173,7 @@ If a `generations` row exists for this run, the handler polls the stored operati
 - **Not done.** Increment `polls`. If `polls >= 40` **or** more than 10 minutes have passed since the generation row was created (`MAX_POLLS`, `MAX_GENERATION_MS`), fail permanently with "Generation timed out after Ns". Otherwise move the row from `submitted` to `processing` (first time only) and return `deferMs: 15000`.
 - **Done.** Go to finalize.
 
-`deferMs` is a minimum delay, not an exact one. `deferJob` puts the job back to `pending` with `run_at = now + 15 s` and does not consume a retry attempt. The job is picked up by the next runner tick: every minute in production (Supabase pg_cron calls `/api/cron/tick`) and every 5 seconds in development (`src/instrumentation.ts`). In production the real cadence is therefore roughly one poll per minute, which makes the 10-minute wall-clock cap the effective limit and the 40-poll cap a safety net.
+`deferMs` is a minimum delay, not an exact one. `deferJob` puts the job back to `pending` with `run_at = now + 15 s` and does not consume a retry attempt. The job is picked up by the next runner tick: every minute in production (Supabase pg_cron calls `/api/cron/tick`) and every 5 seconds in development when `DEV_TICK=1` is set (`src/instrumentation.ts`; off by default). In production the real cadence is therefore roughly one poll per minute, which makes the 10-minute wall-clock cap the effective limit and the 40-poll cap a safety net.
 
 ### Finalize step
 

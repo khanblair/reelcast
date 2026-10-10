@@ -7,7 +7,7 @@ import { sql } from "drizzle-orm";
 import { db as defaultDb, type DbLike } from "@/db/client";
 import { jobSchedules } from "@/db/schema";
 import { NonRetryableError, jobFailedHooks as defaultHooks, jobHandlers, sweeps as defaultSweeps, taskHandlers, type HandlerCtx, type JobFailedHook, type Sweep } from "./handlers";
-import { claimJobs, claimTasks, completeJob, completeTask, deferJob, failJob, failTask, recoverStale, rescheduleTask, type JobRow, type TaskRow } from "./queue";
+import { claimJobs, claimTasks, completeJob, completeTask, deferJob, failJob, failTask, recoverStale, rescheduleTask, type JobRow, type QueueScope, type TaskRow } from "./queue";
 
 export type TickOptions = {
   db?: DbLike;
@@ -22,6 +22,8 @@ export type TickOptions = {
   drain?: boolean;
   /** Override the registered job-failed hooks (tests). */
   jobFailedHooks?: Partial<Record<JobRow["type"], JobFailedHook>>;
+  /** Tests only: recover and claim ONLY this user's rows (see QueueScope). Production never sets it. */
+  scope?: QueueScope;
 };
 
 export type TickResult = { recovered: { jobs: number; tasks: number; failedJobs: number }; sweepsRun: string[]; jobsRun: number; tasksRun: number; errors: string[] };
@@ -115,7 +117,7 @@ export async function runTick(opts: TickOptions = {}): Promise<TickResult> {
   const hooks = opts.jobFailedHooks ?? defaultHooks;
   const result: TickResult = { recovered: { jobs: 0, tasks: 0, failedJobs: 0 }, sweepsRun: [], jobsRun: 0, tasksRun: 0, errors: [] };
 
-  const recovered = await recoverStale(db, staleMs);
+  const recovered = await recoverStale(db, staleMs, opts.scope);
   result.recovered = { jobs: recovered.jobs, tasks: recovered.tasks, failedJobs: recovered.failedJobs.length };
   for (const job of recovered.failedJobs) await notifyFailed(hooks, job, job.error ?? "Worker timed out", { db, now: new Date() }, result.errors);
 
@@ -141,7 +143,7 @@ export async function runTick(opts: TickOptions = {}): Promise<TickResult> {
 
   // Drain: claim small batches until nothing is due or the budget is spent.
   while (opts.drain !== false && Date.now() < deadline) {
-    const [js, ts] = await Promise.all([claimJobs(db, concurrency), claimTasks(db, concurrency)]);
+    const [js, ts] = await Promise.all([claimJobs(db, concurrency, undefined, opts.scope), claimTasks(db, concurrency, undefined, opts.scope)]);
     if (js.length === 0 && ts.length === 0) break;
     const ctx: HandlerCtx = { db, now: new Date(), deadline };
     await Promise.all([

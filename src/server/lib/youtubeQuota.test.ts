@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { users, youtubeQuotaUsage } from "@/db/schema";
-import { inRolledBackTx } from "@/server/testing";
+import { youtubeQuotaUsage } from "@/db/schema";
+import { createCommittedTestUser, deleteCommittedTestUsers, inRolledBackTx } from "@/server/testing";
 import { addYoutubeQuota, getYoutubeQuotaUsed, utcDateString } from "./youtubeQuota";
 
 setDefaultTimeout(90_000);
@@ -29,41 +29,19 @@ describe("youtubeQuota", () => {
 
 describe("youtubeQuota under real concurrency", () => {
   let userId = "";
-  let createdUser = false;
-  let before = 0;
-  let hadRow = false;
 
+  // Committed rows (separate connections), owned by a throwaway user that is deleted afterwards.
   beforeAll(async () => {
-    const rows = (await db.execute(sql`select id, email from auth.users order by created_at limit 1`)) as unknown as { id: string; email: string }[];
-    userId = rows[0].id;
-    if (!(await db.select().from(users).where(eq(users.id, userId)))[0]) {
-      await db.insert(users).values({ id: userId, email: rows[0].email });
-      createdUser = true;
-    }
-    const existing = await db
-      .select()
-      .from(youtubeQuotaUsage)
-      .where(and(eq(youtubeQuotaUsage.userId, userId), eq(youtubeQuotaUsage.date, utcDateString())));
-    hadRow = existing.length > 0;
-    before = existing[0]?.unitsUsed ?? 0;
+    userId = (await createCommittedTestUser()).id;
   });
 
   afterAll(async () => {
-    // Undo exactly what the test added.
-    if (hadRow) {
-      await db
-        .update(youtubeQuotaUsage)
-        .set({ unitsUsed: before })
-        .where(and(eq(youtubeQuotaUsage.userId, userId), eq(youtubeQuotaUsage.date, utcDateString())));
-    } else {
-      await db.delete(youtubeQuotaUsage).where(and(eq(youtubeQuotaUsage.userId, userId), eq(youtubeQuotaUsage.date, utcDateString())));
-    }
-    if (createdUser) await db.delete(users).where(eq(users.id, userId));
+    await deleteCommittedTestUsers([userId]); // cascades its quota rows
   });
 
   test("20 parallel increments lose nothing and never create duplicate rows", async () => {
     const results = await Promise.all(Array.from({ length: 20 }, () => addYoutubeQuota(db, userId, 3)));
-    expect(await getYoutubeQuotaUsed(db, userId)).toBe(before + 60);
+    expect(await getYoutubeQuotaUsed(db, userId)).toBe(60);
     expect(new Set(results).size).toBe(20); // every caller saw a distinct running total
     const rows = await db
       .select()

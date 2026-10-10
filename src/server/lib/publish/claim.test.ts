@@ -1,16 +1,17 @@
 /**
  * Concurrency tests need REAL committed rows (a rolled-back transaction cannot race another connection),
- * so they create throwaway rows tagged with MARK and delete them afterwards. Jobs are created with a
+ * so they create throwaway rows owned by a throwaway user (never a real account: the database may be the
+ * production one) and delete that user afterwards. Jobs are created with a
  * far-future run_at and nothing here has a real file, channel or notification, so a `next dev` tick
  * running at the same time can neither pick them up nor reach an external service.
  */
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { eq, inArray, like, sql } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
-import { jobs, users, videos, youtubeChannels } from "@/db/schema";
+import { jobs, videos, youtubeChannels } from "@/db/schema";
 import { publishNow } from "@/server/modules/actions/publishNow";
-import { callRpc, inRolledBackTx } from "@/server/testing";
+import { callRpc, createCommittedTestUser, deleteCommittedTestUsers, inRolledBackTx } from "@/server/testing";
 import { claimAndEnqueuePublish } from "./claim";
 import { makeDeps, mkChannel, mkJob, mkVideo } from "./dbkit";
 import { runPublishJob } from "./run";
@@ -23,7 +24,6 @@ const MARK = `__c1_${Date.now()}`;
 // Years ahead: if a run is ever interrupted before afterAll, leftover jobs cannot become runnable for a long time.
 const FUTURE = new Date(Date.now() + 10 * 365 * 24 * 3_600_000);
 let userId = "";
-let createdUser = false;
 const videoIds: string[] = [];
 const channelIds: string[] = [];
 
@@ -35,22 +35,14 @@ async function mk(over: Partial<typeof videos.$inferInsert> = {}) {
 }
 
 beforeAll(async () => {
-  // Rows left behind by an interrupted earlier run (only ones created by this file: marker prefix / test channel ids).
-  await db.delete(videos).where(like(videos.title, "\\_\\_c1\\_%"));
-  await db.delete(youtubeChannels).where(like(youtubeChannels.channelId, "UC\\_test\\_%"));
-  const rows = (await db.execute(sql`select id, email from auth.users order by created_at limit 1`)) as unknown as { id: string; email: string }[];
-  userId = rows[0].id;
-  const [existing] = await db.select().from(users).where(eq(users.id, userId));
-  if (!existing) {
-    await db.insert(users).values({ id: userId, email: rows[0].email });
-    createdUser = true;
-  }
+  // Rows left behind by an interrupted earlier run belong to an old throwaway user, which createCommittedTestUser removes (cascade).
+  userId = (await createCommittedTestUser()).id;
 });
 
 afterAll(async () => {
   if (videoIds.length) await db.delete(videos).where(inArray(videos.id, videoIds)); // cascades jobs
   if (channelIds.length) await db.delete(youtubeChannels).where(inArray(youtubeChannels.id, channelIds));
-  if (createdUser) await db.delete(users).where(eq(users.id, userId));
+  await deleteCommittedTestUsers([userId]); // cascades anything left
 });
 
 describe("claimAndEnqueuePublish: compare-and-swap", () => {

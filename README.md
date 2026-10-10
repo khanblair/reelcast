@@ -15,7 +15,7 @@ bun run db:migrate           # create the tables in your Supabase database
 bun run dev                  # http://localhost:3000
 ```
 
-`bun run dev` is the only process you need. The background job runner (publishing, generation, schedules) runs inside the dev server.
+`bun run dev` serves the app. The background job runner (publishing, generation, schedules) does **not** run inside it by default, because your `DATABASE_URL` may be the production database and a local runner would process real users' jobs. Set `DEV_TICK=1` in `.env.local` to run it locally (only with a database that is safe to drain). If your database is the production one, work you enqueue from `localhost` is still picked up within about a minute by the production `pg_cron` tick, which runs the deployed code, not your local edits.
 
 ### Environment
 
@@ -36,7 +36,7 @@ Every variable is documented in [`.env.example`](.env.example). The ones you nee
 
 | Command | What it does |
 |---|---|
-| `bun run dev` | Development server (with the in-process job runner) |
+| `bun run dev` | Development server (add `DEV_TICK=1` to `.env.local` to also run the job runner in-process) |
 | `bun run build` / `bun run start` | Production build and server |
 | `bun run check` | Typecheck + lint |
 | `bun run test <file>` | Run tests, e.g. `bun run test src/server/rpc/rpc.test.ts` |
@@ -49,7 +49,7 @@ Tests are DB-backed (they run in transactions that are always rolled back) and u
 
 - **Browser → server** goes through one typed endpoint, `POST /api/rpc`. Server functions live in `src/server/modules/` and are registered in `src/server/rpc/registry.ts`. In the browser, `src/lib/rpc/client.ts` provides `api`, `useQuery`, `useMutation` and `useAction`.
 - **Data** is in Supabase Postgres (`src/db/schema.ts`, migrations in `drizzle/`). Every table is locked to the server: the public API has no access, and secrets are encrypted at rest.
-- **Background work** runs on a Postgres queue (`src/server/jobs/`). One function, `runTick()`, claims due jobs and tasks and runs the periodic sweeps. In development a timer calls it every 5 seconds; in production Supabase `pg_cron` calls `/api/cron/tick` every minute.
+- **Background work** runs on a Postgres queue (`src/server/jobs/`). One function, `runTick()`, claims due jobs and tasks and runs the periodic sweeps. In production Supabase `pg_cron` calls `/api/cron/tick` every minute. In development a timer calls it every 5 seconds only when `DEV_TICK=1` is set (off by default: dev and production can share one database).
 - **Files** are uploaded straight from the browser to Cloudinary and streamed to YouTube when published.
 - **Billing** uses Pesapal. Pesapal notifications are never trusted on their own; each is re-verified with Pesapal before a plan changes.
 

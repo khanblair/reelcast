@@ -1,14 +1,15 @@
 /**
  * Billing core against the real database. Everything runs inside a transaction that is rolled back,
- * except the "concurrency" block, which needs separate connections and therefore commits throwaway
- * rows that it deletes afterwards. Pesapal is never contacted: a fake provider stands in.
+ * except the "concurrency" block, which needs separate connections and therefore commits rows owned by a
+ * throwaway user that it deletes afterwards (the database may be the production one: no real account is
+ * touched). Pesapal is never contacted: a fake provider stands in.
  */
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { randomUUID } from "node:crypto";
-import { and, eq, gte, inArray, like, or, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, like, or } from "drizzle-orm";
 import { db, type DbLike } from "@/db/client";
 import { notifications, paymentEvents, paymentOrders, subscriptions, users } from "@/db/schema";
-import { countQueries, inRolledBackTx } from "@/server/testing";
+import { countQueries, createCommittedTestUser, deleteCommittedTestUsers, inRolledBackTx } from "@/server/testing";
 import {
   applyVerifiedPayment,
   cancelAtPeriodEnd,
@@ -733,7 +734,6 @@ describe("changePlan", () => {
 describe("concurrency (committed rows, cleaned up)", () => {
   const startedAt = new Date();
   let userId = "";
-  let saved: { exists: boolean; plan?: string; planSource?: string } = { exists: false };
   const createdSubs: string[] = [];
   const createdOrders: string[] = [];
   const trackingIds: string[] = [];
@@ -743,8 +743,8 @@ describe("concurrency (committed rows, cleaned up)", () => {
     if (createdSubs.length) await db.delete(subscriptions).where(inArray(subscriptions.id, createdSubs));
     createdOrders.length = 0;
     createdSubs.length = 0;
-    // Put the shared test user back right away: other suites use the same account.
-    await db.update(users).set({ plan: (saved.plan ?? "free") as "free", planSource: (saved.planSource ?? "default") as "default" }).where(eq(users.id, userId));
+    // Back to a fresh free account for the next test.
+    await db.update(users).set({ plan: "free", planSource: "default" }).where(eq(users.id, userId));
   }
 
   /** A test that commits rows: always cleans up in `finally`, so a failing assertion never leaks a plan. */
@@ -760,11 +760,7 @@ describe("concurrency (committed rows, cleaned up)", () => {
   }
 
   beforeAll(async () => {
-    const rows = (await db.execute(sql`select id, email from auth.users order by created_at limit 1`)) as unknown as { id: string; email: string }[];
-    userId = rows[0].id;
-    const [existing] = await db.select().from(users).where(eq(users.id, userId));
-    if (existing) saved = { exists: true, plan: existing.plan, planSource: existing.planSource };
-    else await db.insert(users).values({ id: userId, email: rows[0].email });
+    userId = (await createCommittedTestUser()).id;
     const live = await db.select().from(subscriptions).where(and(eq(subscriptions.userId, userId), inArray(subscriptions.status, ["approval_pending", "active", "past_due"])));
     if (live.length) throw new Error("Refusing to run concurrency tests: the test user already has a live subscription");
   });
@@ -778,8 +774,7 @@ describe("concurrency (committed rows, cleaned up)", () => {
     await db
       .delete(notifications)
       .where(and(eq(notifications.userId, userId), gte(notifications.createdAt, startedAt), inArray(notifications.title, ["Payment received", "Renew your Pro plan", "Payment reversed"])));
-    if (saved.exists) await db.update(users).set({ plan: saved.plan as "free", planSource: saved.planSource as "default" }).where(eq(users.id, userId));
-    else await db.delete(users).where(eq(users.id, userId));
+    await deleteCommittedTestUsers([userId]); // cascades its remaining rows
     void startedAt;
   });
 

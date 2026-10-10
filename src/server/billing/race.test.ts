@@ -1,14 +1,15 @@
 /**
  * The brief's headline invariant, through the REAL entry points: a browser callback and Pesapal's IPN
  * (and a retried IPN / second callback) all arrive at once for one completed order. Exactly one of them
- * may extend the period. Needs separate connections, so it commits throwaway rows and removes them.
+ * may extend the period. Needs separate connections, so it commits rows, all owned by a throwaway user that is
+ * deleted afterwards (the database may be the production one: no real account is ever touched).
  */
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { and, eq, gte, inArray } from "drizzle-orm";
 import { db } from "@/db/client";
-import { notifications, paymentEvents, paymentOrders, subscriptions, users } from "@/db/schema";
-import { sql } from "drizzle-orm";
+import { notifications, paymentEvents, paymentOrders, subscriptions } from "@/db/schema";
+import { createCommittedTestUser, deleteCommittedTestUsers } from "@/server/testing";
 import { handleCallback } from "./pesapal/callback";
 import { handleIpn } from "./pesapal/ipn";
 import { DAY, completed, fakeProvider, getSub, getUser } from "./testkit";
@@ -18,7 +19,6 @@ setDefaultTimeout(120_000);
 const APP = "https://app.test";
 const startedAt = new Date();
 let userId = "";
-let saved: { exists: boolean; plan?: string; planSource?: string } = { exists: false };
 let savedAppUrl: string | undefined;
 const subIds: string[] = [];
 const orderIds: string[] = [];
@@ -29,17 +29,12 @@ async function cleanup() {
   if (orderIds.length) await db.delete(paymentOrders).where(inArray(paymentOrders.id, orderIds));
   if (subIds.length) await db.delete(subscriptions).where(inArray(subscriptions.id, subIds));
   await db.delete(notifications).where(and(eq(notifications.userId, userId), gte(notifications.createdAt, startedAt), inArray(notifications.title, ["Payment received"])));
-  if (saved.exists) await db.update(users).set({ plan: saved.plan as "free", planSource: saved.planSource as "default" }).where(eq(users.id, userId));
 }
 
 beforeAll(async () => {
   savedAppUrl = process.env.NEXT_PUBLIC_APP_URL;
   process.env.NEXT_PUBLIC_APP_URL = APP;
-  const rows = (await db.execute(sql`select id, email from auth.users order by created_at limit 1`)) as unknown as { id: string; email: string }[];
-  userId = rows[0].id;
-  const [existing] = await db.select().from(users).where(eq(users.id, userId));
-  if (existing) saved = { exists: true, plan: existing.plan, planSource: existing.planSource };
-  else await db.insert(users).values({ id: userId, email: rows[0].email });
+  userId = (await createCommittedTestUser()).id;
   const live = await db.select().from(subscriptions).where(and(eq(subscriptions.userId, userId), inArray(subscriptions.status, ["approval_pending", "active", "past_due"])));
   if (live.length) throw new Error("Refusing to run: the test user already has a live subscription");
 });
@@ -47,7 +42,7 @@ beforeAll(async () => {
 afterAll(async () => {
   if (!userId) return;
   await cleanup();
-  if (!saved.exists) await db.delete(users).where(eq(users.id, userId));
+  await deleteCommittedTestUsers([userId]); // cascades its notifications, subscriptions and orders too
   if (savedAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
   else process.env.NEXT_PUBLIC_APP_URL = savedAppUrl;
 });

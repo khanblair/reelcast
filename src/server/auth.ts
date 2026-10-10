@@ -33,17 +33,31 @@ export async function ensureUser(claims: Claims): Promise<UserRow> {
   const meta = claims.user_metadata ?? {};
   const email = claims.email;
   if (!email) throw unauthenticated("Account has no email");
-  const [row] = await db
-    .insert(users)
-    .values({
-      id: claims.sub,
-      email,
-      name: meta.full_name ?? meta.name ?? null,
-      imageUrl: meta.avatar_url ?? meta.picture ?? null,
-    })
-    .onConflictDoUpdate({ target: users.id, set: { email } })
-    .returning();
-  return row;
+  try {
+    const [row] = await db
+      .insert(users)
+      .values({
+        id: claims.sub,
+        email,
+        name: meta.full_name ?? meta.name ?? null,
+        imageUrl: meta.avatar_url ?? meta.picture ?? null,
+      })
+      .onConflictDoUpdate({ target: users.id, set: { email } })
+      .returning();
+    return row;
+  } catch (err) {
+    // users.id references auth.users(id). A token can outlive its account (it stays valid until it expires), and
+    // once the account is deleted that reference fails: the person is signed out, not a server error.
+    if (isForeignKeyViolation(err)) throw unauthenticated("This account no longer exists");
+    throw err;
+  }
+}
+
+function isForeignKeyViolation(err: unknown): boolean {
+  for (let e = err as { code?: string; cause?: unknown } | undefined, depth = 0; e && depth < 4; e = e.cause as typeof e, depth++) {
+    if (e.code === "23503") return true;
+  }
+  return false;
 }
 
 /** Signed-in user row or null. */

@@ -74,6 +74,10 @@ A scheduled video is picked up by a sweep that runs every minute and turns due v
 
 Supabase Auth handles sign-up, sessions and Google sign-in. ReelCast stores a profile row per user keyed by the Supabase user ID (email, name, plan, admin flag). No passwords are stored in the application database.
 
+**Editing the profile.** On `/profile`, "Edit profile" opens a dialog to change the name and the profile picture; the email is shown but cannot be changed. A picture is chosen from a file, cropped in the browser (drag to reposition, slider to zoom) to a 512 × 512 JPEG, and uploaded straight to Cloudinary into the user's own folder (`reelcast/avatars/<user id>/`) with a signature from `/api/cloudinary/sign-avatar`. Saving calls `users.updateProfile`, which checks the name rules (1–60 characters, no control characters or `<` `>`) and re-checks the picture with Cloudinary (it must be the caller's own file, an image, JPG/PNG/WebP, at most 5 MB, 64–4096 px). A replaced or removed picture is deleted from Cloudinary.
+
+**Deleting the account.** `/profile/delete` shows what will be removed and requires typing the account email. `users.deleteAccount` then, in this order: deletes every video file the user uploaded or generated and every profile picture from Cloudinary (all-or-nothing: if storage fails, nothing else is touched and the user can retry); revokes the YouTube grants at Google; and in one transaction deletes the contact-form messages and raw payment notifications that carry the user's data without pointing at them, then the Supabase auth user, whose `ON DELETE CASCADE` chain removes the app user and every row that belongs to it. The only admin cannot delete their account until another admin exists. Videos already published to YouTube stay on YouTube.
+
 ### Video Uploads & Draft Library
 
 Files go from the browser straight to Cloudinary using signed upload parameters. The Drafts library lists every video with its pipeline status at a glance. The pipeline a video moves through is: `draft → queued → generating → ready → scheduled → publishing → published` (or `failed`).
@@ -143,7 +147,8 @@ An admin-only console with its own sidebar and routes, separate from the user ap
 | `/ideas` | Idea vault |
 | `/intelligence` | Content intelligence: trends, keywords, gaps |
 | `/settings` (+ `/ai`, `/general`, `/notifications`, `/telegram`, `/youtube`) | Account, YouTube connection, AI defaults, notification channels |
-| `/ai-config`, `/profile` | AI defaults and profile |
+| `/ai-config`, `/profile` | AI defaults and profile (edit name and picture) |
+| `/profile/delete` | Permanently delete the account and all of its data |
 | `/billing` | Plan, usage, payments, upgrade/cancel (Pesapal) |
 | `/admin/*` | Admin console with its own sidebar: overview, users, messages, videos, jobs, billing (subscriptions, payments, needs review), usage, system (quota, storage, health), settings |
 | `/contact`, `/privacy`, `/terms` | Marketing and legal pages |
@@ -195,6 +200,8 @@ An admin-only console with its own sidebar and routes, separate from the user ap
 - File URLs are limited to the app's own Cloudinary account, and Discord webhooks are limited to Discord's hosts, to block server-side request forgery
 - Telegram chat IDs are stored per user and used only for outbound notifications
 - Uploaded files are deleted from Cloudinary after a successful publish
+- Profile pictures can only be uploaded into the caller's own Cloudinary folder (the signature fixes the folder, a random id, the allowed formats and a size cap), and a picture URL is accepted only if it is exactly that kind of URL for that user and Cloudinary confirms the file
+- Account deletion is complete by construction: every table that holds user data references `users(id) ON DELETE CASCADE`, and tests fail if a new table does not (or is not explicitly handled by `deleteAccount`)
 
 ---
 

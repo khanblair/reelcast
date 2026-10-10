@@ -11,35 +11,10 @@ import { NotificationsPopover } from "./notifications-popover";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AssistantPanel } from "@/components/ai/assistant-panel";
 import { api, useQuery } from "@/lib/rpc/client";
-import Image from "next/image";
 import Link from "next/link";
 import type { Route } from "next";
-import { cn } from "@/lib/utils";
-
-function ProfileAvatar({ name, imageUrl, size = "sm" }: { name?: string | null; imageUrl?: string | null; size?: "sm" | "md" }) {
-  const initials = name
-    ? name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
-    : "?";
-  const dim = size === "sm" ? 32 : 40;
-  const cls = size === "sm" ? "h-8 w-8 text-xs" : "h-10 w-10 text-sm";
-
-  if (imageUrl) {
-    return (
-      <Image
-        src={imageUrl}
-        alt={name ?? "Profile"}
-        width={dim}
-        height={dim}
-        className={cn("rounded-full object-cover ring-2 ring-border", cls)}
-      />
-    );
-  }
-  return (
-    <div className={cn("rounded-full bg-primary/10 ring-2 ring-border flex items-center justify-center font-semibold text-primary", cls)}>
-      {initials}
-    </div>
-  );
-}
+import { UserAvatar } from "@/components/shared/user-avatar";
+import { displayName } from "@/lib/user-display";
 
 export function Topbar() {
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -120,7 +95,7 @@ export function Topbar() {
               className="flex items-center justify-center rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               aria-label="Profile menu"
             >
-              <ProfileAvatar name={user?.name} imageUrl={user?.imageUrl} />
+              <UserAvatar name={user?.name} email={user?.email} imageUrl={user?.imageUrl} size={32} className="ring-2 ring-border" />
             </button>
 
             {dropdownOpen && (
@@ -131,7 +106,7 @@ export function Topbar() {
               >
                 {/* User info header */}
                 <div className="px-3 py-2.5 border-b border-border">
-                  <p className="text-sm font-medium truncate">{user?.name ?? "Account"}</p>
+                  <p className="text-sm font-medium truncate">{user ? displayName(user) : "Account"}</p>
                   <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
                 </div>
 

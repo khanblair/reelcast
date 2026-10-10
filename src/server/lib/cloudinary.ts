@@ -75,6 +75,102 @@ function authHeader(): { Authorization: string } {
   return { Authorization: `Basic ${Buffer.from(`${apiKey}:${apiSecret}`).toString("base64")}` };
 }
 
+// ─── bulk delete + image info (Admin API) ────────────────────────────────────
+
+export type CloudinaryResourceType = "video" | "image";
+
+const BULK_DELETE_BATCH = 100;
+const BULK_DELETE_ATTEMPTS = 3;
+
+/** "deleted" and "not_found" both mean the asset is gone, which is all a cleanup needs. */
+const isGone = (state: unknown) => state === "deleted" || state === "not_found";
+
+type BulkDeleteResponse = { deleted?: Record<string, string>; partial?: boolean };
+
+/**
+ * Delete assets by public id with the Admin API (100 per call, CDN copies invalidated). Idempotent: an id that is
+ * already gone counts as deleted. Throws if any asset could not be confirmed gone, or when `deadline` passes, so a
+ * caller can refuse to go on and a retry simply picks up the rest.
+ */
+export async function destroyCloudinaryAssets(
+  publicIds: string[],
+  resourceType: CloudinaryResourceType,
+  opts: { f?: FetchLike; deadline?: number } = {},
+): Promise<void> {
+  const ids = [...new Set(publicIds)];
+  if (ids.length === 0) return;
+  const f = opts.f ?? ((i: string | URL | Request, o?: RequestInit) => fetch(i, o));
+  const { cloudName } = credentials();
+  const headers = authHeader();
+
+  for (let i = 0; i < ids.length; i += BULK_DELETE_BATCH) {
+    let remaining = ids.slice(i, i + BULK_DELETE_BATCH);
+    for (let attempt = 0; attempt < BULK_DELETE_ATTEMPTS && remaining.length > 0; attempt++) {
+      if (opts.deadline !== undefined && Date.now() > opts.deadline) throw new Error("Cloudinary cleanup ran out of time");
+      const url = new URL(`https://api.cloudinary.com/v1_1/${cloudName}/resources/${resourceType}/upload`);
+      for (const id of remaining) url.searchParams.append("public_ids[]", id);
+      url.searchParams.set("invalidate", "true");
+      const res = await f(url, { method: "DELETE", headers, signal: AbortSignal.timeout(30_000) });
+      if (!res.ok) throw new Error(`Cloudinary bulk delete failed: ${res.status} — ${await res.text()}`);
+      const body = (await res.json()) as BulkDeleteResponse;
+      remaining = remaining.filter((id) => !isGone(body.deleted?.[id]));
+    }
+    if (remaining.length > 0) throw new Error(`Cloudinary could not delete ${remaining.length} asset(s)`);
+  }
+}
+
+/** Delete every asset whose public id starts with `prefix` (the Admin API pages through `partial` responses). */
+export async function destroyCloudinaryPrefix(
+  prefix: string,
+  resourceType: CloudinaryResourceType,
+  opts: { f?: FetchLike; deadline?: number } = {},
+): Promise<void> {
+  if (!prefix.endsWith("/") || prefix.length < 4) throw new Error("Refusing to delete by a short or open-ended prefix");
+  const f = opts.f ?? ((i: string | URL | Request, o?: RequestInit) => fetch(i, o));
+  const { cloudName } = credentials();
+  const headers = authHeader();
+
+  for (let round = 0; round < 10; round++) {
+    if (opts.deadline !== undefined && Date.now() > opts.deadline) throw new Error("Cloudinary cleanup ran out of time");
+    const url = new URL(`https://api.cloudinary.com/v1_1/${cloudName}/resources/${resourceType}/upload`);
+    url.searchParams.set("prefix", prefix);
+    url.searchParams.set("invalidate", "true");
+    const res = await f(url, { method: "DELETE", headers, signal: AbortSignal.timeout(30_000) });
+    if (!res.ok) throw new Error(`Cloudinary prefix delete failed: ${res.status} — ${await res.text()}`);
+    const body = (await res.json()) as BulkDeleteResponse;
+    if (!body.partial) return;
+  }
+  throw new Error("Cloudinary prefix delete did not finish");
+}
+
+export type CloudinaryImageInfo = { resourceType: string; type: string; format: string; bytes: number; width: number; height: number };
+
+/** Facts about an uploaded image, or null when Cloudinary does not know the public id. */
+export async function getCloudinaryImageInfo(publicId: string, f: FetchLike = (i, o) => fetch(i, o)): Promise<CloudinaryImageInfo | null> {
+  const { cloudName } = credentials();
+  const path = publicId.split("/").map(encodeURIComponent).join("/");
+  const res = await f(`https://api.cloudinary.com/v1_1/${cloudName}/resources/image/upload/${path}`, {
+    headers: authHeader(),
+    cache: "no-store",
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (res.status === 404) {
+    await res.body?.cancel().catch(() => undefined);
+    return null;
+  }
+  if (!res.ok) throw new Error(`Cloudinary lookup failed: ${res.status}`);
+  const r = (await res.json()) as Record<string, unknown>;
+  return {
+    resourceType: String(r.resource_type ?? ""),
+    type: String(r.type ?? ""),
+    format: String(r.format ?? "").toLowerCase(),
+    bytes: Number(r.bytes ?? 0),
+    width: Number(r.width ?? 0),
+    height: Number(r.height ?? 0),
+  };
+}
+
+
 const usableDuration = (d: unknown): number | null => (typeof d === "number" && Number.isFinite(d) && d > 0 ? Math.round(d) : null);
 
 /**

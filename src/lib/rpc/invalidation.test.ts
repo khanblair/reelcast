@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
+import { ALL_RPC_KEY } from "../billing-poll";
 import { invalidateForWrite, invalidationFor, narrowedWritePaths } from "./invalidation";
+import { pollingOptions, staleTimeFor } from "./polling";
 
 // ─── What the server actually exports (the registry maps modules/<a>/<b>.ts to path "a.b.<export>") ───
 
@@ -179,5 +181,104 @@ describe("invalidateForWrite against a real QueryClient", () => {
     await invalidateForWrite(qc, "videos.update");
     expect(calls).toEqual({ "notifications.get": 3, "videos.list": 2, "jobs.list": 2 });
     for (const off of unsubscribers) off();
+  });
+});
+
+describe("a write still refreshes data that stays fresh for a long time", () => {
+  // The observers use exactly the timing options useQuery passes (polling.ts), staleTime included.
+  function harness() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const calls: Record<string, number> = {};
+    const observer = (path: string) =>
+      new QueryObserver(qc, {
+        queryKey: ["rpc", path, {}],
+        queryFn: async () => {
+          calls[path] = (calls[path] ?? 0) + 1;
+          return calls[path];
+        },
+        ...pollingOptions(path),
+      });
+    const watch = (path: string) => observer(path).subscribe(() => {});
+    const settle = () => new Promise((r) => setTimeout(r, 5));
+    return { qc, calls, observer, watch, settle };
+  }
+
+  test("the paths under test really do stay fresh for at least a minute", () => {
+    for (const path of ["ideas.list", "users.current", "settings.get", "aiSessions.list", "youtubeChannels.list"]) {
+      expect(staleTimeFor(path)).toBeGreaterThanOrEqual(60_000);
+    }
+  });
+
+  test("without a write the data is reused for its whole staleTime, then refetched", async () => {
+    const { calls, watch, settle } = harness();
+    const realNow = Date.now;
+    const t0 = realNow();
+    let elapsed = 0;
+    Date.now = () => t0 + elapsed;
+    const off: (() => void)[] = [];
+    try {
+      off.push(watch("ideas.list"), watch("users.current"), watch("videos.list"));
+      await settle();
+
+      elapsed = 30_000;
+      off.push(watch("ideas.list"), watch("users.current"), watch("videos.list")); // another component mounts the same queries
+      await settle();
+      // 30 s on: the 60 s ones are reused, videos.list (10 s) was refetched.
+      expect(calls).toEqual({ "ideas.list": 1, "users.current": 1, "videos.list": 2 });
+
+      elapsed = 61_000;
+      off.push(watch("ideas.list"), watch("users.current"));
+      await settle();
+      expect(calls).toEqual({ "ideas.list": 2, "users.current": 2, "videos.list": 2 });
+    } finally {
+      Date.now = realNow;
+      for (const o of off) o();
+    }
+  });
+
+  test("an unmapped write refreshes every long-lived query that is on screen, and the write waits for them", async () => {
+    const { qc, calls, watch, settle } = harness();
+    const off = [watch("ideas.list"), watch("users.current"), watch("settings.get"), watch("analytics.getDashboardStats")];
+    await settle();
+    await invalidateForWrite(qc, "videos.update");
+    expect(calls).toEqual({ "ideas.list": 2, "users.current": 2, "settings.get": 2, "analytics.getDashboardStats": 2 });
+    for (const o of off) o();
+  });
+
+  test("a mapped write refreshes only its targets (ideas.create -> ideas.list)", async () => {
+    const { qc, calls, watch, settle } = harness();
+    const off = [watch("ideas.list"), watch("users.current"), watch("aiSessions.list")];
+    await settle();
+    await invalidateForWrite(qc, "ideas.create");
+    expect(calls).toEqual({ "ideas.list": 2, "users.current": 1, "aiSessions.list": 1 });
+    await invalidateForWrite(qc, "aiSessions.create");
+    expect(calls).toEqual({ "ideas.list": 2, "users.current": 1, "aiSessions.list": 2 });
+    for (const o of off) o();
+  });
+
+  test("a query nobody is looking at is marked stale, so the next screen to need it refetches instead of using the cache", async () => {
+    const { qc, calls, watch, settle } = harness();
+    const off = watch("ideas.list");
+    await settle();
+    off(); // the ideas page is closed; the data is still cached and still within its staleTime
+    expect(calls["ideas.list"]).toBe(1);
+
+    await invalidateForWrite(qc, "ideas.create"); // e.g. made from the assistant panel
+    expect(qc.getQueryState(["rpc", "ideas.list", {}])?.isInvalidated).toBe(true);
+    expect(calls["ideas.list"]).toBe(1); // nobody watching: no request yet
+
+    const back = watch("ideas.list"); // the ideas page opens again
+    await settle();
+    expect(calls["ideas.list"]).toBe(2);
+    back();
+  });
+
+  test("the billing page's refresh-everything step reaches users.current and settings.get too", async () => {
+    const { qc, calls, watch, settle } = harness();
+    const off = [watch("users.current"), watch("settings.get"), watch("billing.getStatus")];
+    await settle();
+    await qc.invalidateQueries({ queryKey: ALL_RPC_KEY });
+    expect(calls).toEqual({ "users.current": 2, "settings.get": 2, "billing.getStatus": 2 });
+    for (const o of off) o();
   });
 });

@@ -10,6 +10,8 @@
  *  - schedules the next run by returning `{ rescheduleInMs }` (the queue re-pends this very task row).
  *    It cannot enqueue a new task under the same dedupe key: while this task is 'running' it still
  *    owns the key, so `enqueueTask` would just hand this row back and the chain would end.
+ * What can still end a chain (a worker that dies on its last attempt, a task cancelled by hand) is found by the
+ * `autoPublish.recover` sweep (./autoPublishChain.ts), which restarts it.
  */
 import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";

@@ -6,8 +6,9 @@ import { and, eq, sql } from "drizzle-orm";
 import { settings } from "@/db/schema";
 import { buildSettingsValues, assertAutoPublishArgs, settingsUpdateInput, startAutoPublishInput } from "@/server/lib/accounts/settings";
 import { getChannelSummary, settingsDto } from "@/server/lib/dto";
-import { cancelTask, enqueueTask } from "@/server/jobs/queue";
+import { cancelTask } from "@/server/jobs/queue";
 import { kickRunner } from "@/server/jobs/kick";
+import { autoPublishKey, enqueueAutoPublishRun } from "@/server/lib/publish/autoPublishChain";
 import { mutation, query } from "../rpc/define";
 
 /** The user's settings merged with YouTube connection info. Never includes API keys. */
@@ -75,8 +76,6 @@ export const disconnectDiscord = mutation({
   },
 });
 
-const autoPublishKey = (userId: string) => `autoPublish:${userId}`;
-
 /**
  * Turn auto-publish on. Stores the schedule and (re)queues the `autoPublish.run` task for
  * `scheduledAt` (agent C1's handler runs the batch and queues the next run).
@@ -105,7 +104,7 @@ export const startAutoPublish = mutation({
       // Replace any pending run (Convex: scheduler.cancel + scheduler.runAt). A run that is already
       // in flight keeps its lease and queues the next one itself.
       await cancelTask(tx, autoPublishKey(ctx.userId));
-      await enqueueTask(tx, { kind: "autoPublish.run", userId: ctx.userId, payload: { userId: ctx.userId }, runAt, dedupeKey: autoPublishKey(ctx.userId) });
+      await enqueueAutoPublishRun(tx, ctx.userId, runAt);
     });
 
     if (runAt.getTime() <= Date.now() + 5_000) kickRunner();

@@ -35,10 +35,16 @@ export function limitsFor(plan: string | null | undefined): Record<UsageField, n
 /**
  * Atomically consume one unit. Throws PLAN_LIMIT_EXCEEDED:<field>:<plan> (the UI parses it)
  * when the user is at their limit. Safe under concurrency.
+ *
+ * `plan`: pass the caller's plan when the caller already holds it (an rpc handler has `ctx.user.plan`, read fresh
+ * on every request) to skip the extra `users` round trip. Job-side callers omit it and the plan is read here.
  */
-export async function consumeQuota(db: DbLike, userId: string, field: UsageField): Promise<{ used: number; limit: number }> {
-  const [u] = await db.select({ plan: users.plan }).from(users).where(eq(users.id, userId)).limit(1);
-  const plan = u?.plan ?? "free";
+export async function consumeQuota(db: DbLike, userId: string, field: UsageField, knownPlan?: string | null): Promise<{ used: number; limit: number }> {
+  let plan = knownPlan;
+  if (!plan) {
+    const [u] = await db.select({ plan: users.plan }).from(users).where(eq(users.id, userId)).limit(1);
+    plan = u?.plan ?? "free";
+  }
   const limit = limitsFor(plan)[field];
   if (limit <= 0) throw planLimit(`PLAN_LIMIT_EXCEEDED:${field}:${plan}`);
 
@@ -65,25 +71,66 @@ export async function refundQuota(db: DbLike, userId: string, field: UsageField)
   `);
 }
 
-/** Current month's usage next to the plan limits (billing page, admin). */
-export async function getUsage(db: DbLike, userId: string) {
-  const [u] = await db.select({ plan: users.plan }).from(users).where(eq(users.id, userId)).limit(1);
-  const [row] = await db
-    .select()
-    .from(usageLedger)
-    .where(and(eq(usageLedger.userId, userId), eq(usageLedger.month, monthKey())))
-    .limit(1);
-  const plan = u?.plan ?? "free";
-  const limits = limitsFor(plan);
+export type Usage = {
+  plan: string;
+  month: string;
+  used: Record<UsageField, number>;
+  limits: Record<UsageField, number>;
+};
+
+/**
+ * One statement: the user's plan (and plan source) with this month's ledger row. `users` is the driving table, so a
+ * user without a ledger row still gets a row (zeros), and an unknown user gets none (free plan, zeros).
+ */
+async function readUsage(db: DbLike, userId: string, knownPlan?: string | null): Promise<Usage & { planSource?: string }> {
+  const month = monthKey();
+  let plan: string;
+  let planSource: string | undefined;
+  let row: typeof usageLedger.$inferSelect | null | undefined;
+  if (knownPlan) {
+    // The caller holds the plan: only the ledger is read (and the plan source stays unknown).
+    plan = knownPlan;
+    [row] = await db
+      .select()
+      .from(usageLedger)
+      .where(and(eq(usageLedger.userId, userId), eq(usageLedger.month, month)))
+      .limit(1);
+  } else {
+    const [r] = await db
+      .select({ plan: users.plan, planSource: users.planSource, ledger: usageLedger })
+      .from(users)
+      .leftJoin(usageLedger, and(eq(usageLedger.userId, users.id), eq(usageLedger.month, month)))
+      .where(eq(users.id, userId))
+      .limit(1);
+    plan = r?.plan ?? "free";
+    planSource = r?.planSource ?? "default";
+    row = r?.ledger;
+  }
   return {
     plan,
-    month: monthKey(),
+    planSource,
+    month,
     used: {
       videosUploaded: row?.videosUploaded ?? 0,
       metadataGenerated: row?.metadataGenerated ?? 0,
       veoGenerated: row?.veoGenerated ?? 0,
       aiMessagesUsed: row?.aiMessagesUsed ?? 0,
     },
-    limits,
+    limits: limitsFor(plan),
   };
+}
+
+/**
+ * Current month's usage next to the plan limits (billing page, admin). One statement; with `knownPlan` (the caller
+ * already holds a fresh plan) it only reads the ledger.
+ */
+export async function getUsage(db: DbLike, userId: string, knownPlan?: string | null): Promise<Usage> {
+  const { plan, month, used, limits } = await readUsage(db, userId, knownPlan);
+  return { plan, month, used, limits };
+}
+
+/** getUsage plus `users.plan_source`, still one statement (the billing status needs both). */
+export async function getUsageWithPlanSource(db: DbLike, userId: string): Promise<Usage & { planSource: string }> {
+  const u = await readUsage(db, userId); // no known plan, so the join path always sets the source
+  return { ...u, planSource: u.planSource ?? "default" };
 }

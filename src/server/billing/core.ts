@@ -70,6 +70,11 @@ const STALE_PENDING_MS = 7 * DAY_MS;
 /** Reconcile gives up polling an unpaid order after this long (an IPN can still settle it later). */
 const RECONCILE_GIVE_UP_MS = 3 * DAY_MS;
 const RECONCILE_MIN_AGE_MS = 10 * 60_000;
+/**
+ * Upper bound of ONE provider status poll. Mirrors the Pesapal client's request timeout (20 s); core is
+ * provider-agnostic, so the number lives here instead of being imported from ./pesapal.
+ */
+export const RECONCILE_POLL_TIMEOUT_MS = 20_000;
 
 /** status_text values that mean "this order row can never become a live checkout". */
 const DEAD_TEXTS = ["submit_failed", "submit_abandoned", "superseded", "ABANDONED"];
@@ -966,13 +971,20 @@ export async function runExpirySweep(
  * and have been quiet for 10+ minutes. Oldest-touched first; every poll bumps updated_at so a batch
  * of dead orders cannot starve the rest. Orders older than 3 days are marked ABANDONED (an IPN can
  * still settle them later).
+ *
+ * Time budget: polls run one after another and each can take up to RECONCILE_POLL_TIMEOUT_MS, so during a
+ * provider outage 25 orders could hold the tick for minutes and starve the drain behind it (publishing).
+ * `opts.deadline` is the tick's deadline (epoch ms, HandlerCtx.deadline): no poll STARTS once less than one
+ * poll timeout is left. Orders that were skipped are not touched, so they stay first in line for the next run.
  */
 export async function runReconcileSweep(
   db: DbLike,
-  deps: { provider: PaymentProvider; now?: () => Date },
-  opts: { limit?: number; /** restrict to one user (tests, support tooling) */ userId?: string } = {},
+  deps: { provider: PaymentProvider; now?: () => Date; /** wall clock in epoch ms for the deadline check (tests); NOT `now`, which is the tick's start */ nowMs?: () => number },
+  opts: { limit?: number; /** restrict to one user (tests, support tooling) */ userId?: string; /** epoch ms; undefined = no budget (callers outside a tick) */ deadline?: number } = {},
 ): Promise<{ polled: number; applied: number; abandoned: number; errors: number }> {
   const now = clock(deps);
+  const wallClock = deps.nowMs ?? Date.now;
+  const outOfBudget = () => opts.deadline !== undefined && opts.deadline - wallClock() < RECONCILE_POLL_TIMEOUT_MS;
   const unpaid = and(
     opts.userId ? eq(paymentOrders.userId, opts.userId) : undefined,
     isNotNull(paymentOrders.orderTrackingId),
@@ -987,6 +999,9 @@ export async function runReconcileSweep(
     .where(and(unpaid, lte(paymentOrders.createdAt, new Date(now.getTime() - RECONCILE_GIVE_UP_MS))))
     .returning({ id: paymentOrders.id });
 
+  const res = { polled: 0, applied: 0, abandoned: abandoned.length, errors: 0 };
+  if (outOfBudget()) return res; // not even enough time for one poll: skip the lookup too
+
   const due = await db
     .select()
     .from(paymentOrders)
@@ -994,8 +1009,8 @@ export async function runReconcileSweep(
     .orderBy(paymentOrders.updatedAt)
     .limit(opts.limit ?? 25);
 
-  const res = { polled: 0, applied: 0, abandoned: abandoned.length, errors: 0 };
   for (const order of due) {
+    if (outOfBudget()) break;
     res.polled++;
     try {
       const status = await deps.provider.getStatus(order.orderTrackingId as string);

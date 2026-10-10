@@ -3,7 +3,9 @@
  * atomically, so overlapping workers never run the same one twice.
  *   billing.renewal   every 15 min  create the renewal order (+ reminder) for periods ending within 3 days
  *   billing.expiry    every 15 min  active -> past_due (3 day grace) -> expired, downgrade respecting plan_source
+ *                                   (status change + downgrade are one transaction; also heals plans left half-done)
  *   billing.reconcile every 5 min   poll Pesapal for unpaid orders older than 10 min so a lost IPN can't strand a payment
+ *                                   (stops polling when the tick deadline is closer than one poll timeout)
  */
 import { purgeUnmatchedEvents, runExpirySweep, runReconcileSweep, runRenewalSweep } from "@/server/billing/core";
 import { getCurrency, getPlanPrices } from "@/server/billing/plans";
@@ -31,10 +33,11 @@ export const handlers: HandlerSet = {
     {
       name: "billing.reconcile",
       everyMs: 5 * MIN,
-      run: async ({ db, now }) => {
+      run: async ({ db, now, deadline }) => {
         const provider = await getProvider(db);
         if (!provider) return; // payments not configured: nothing can be pending
-        await runReconcileSweep(db, { provider, now: () => now });
+        // The tick's deadline bounds the serial provider polls, so an outage cannot starve the drain (publishing).
+        await runReconcileSweep(db, { provider, now: () => now }, { deadline });
         await purgeUnmatchedEvents(db, now);
       },
     },

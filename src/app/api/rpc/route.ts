@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { dispatch, toErrorBody } from "@/server/rpc/dispatch";
+import { logRpcCall } from "@/server/rpc/log";
 import { api } from "@/server/rpc/registry";
 
 // Hobby-plan ceiling. Anything that can run longer must be queued as a job instead.
@@ -11,22 +12,29 @@ export const dynamic = "force-dynamic";
  * Same-origin JSON only (CSRF defence for cookie auth).
  */
 export async function POST(req: Request) {
+  const started = performance.now();
+  // A request refused before it reaches dispatch() still gets its one log line (it never ran a statement or had a user).
+  const refuse = (status: number, code: string, message: string, path = "") => {
+    logRpcCall({ path, ok: false, code, ms: performance.now() - started, stmts: 0, uid: null });
+    return NextResponse.json({ ok: false, error: { code, message } }, { status });
+  };
+
   const site = req.headers.get("sec-fetch-site");
   if (site && site !== "same-origin" && site !== "none") {
-    return NextResponse.json({ ok: false, error: { code: "FORBIDDEN", message: "Cross-site request blocked" } }, { status: 403 });
+    return refuse(403, "FORBIDDEN", "Cross-site request blocked");
   }
   if (!req.headers.get("content-type")?.includes("application/json")) {
-    return NextResponse.json({ ok: false, error: { code: "BAD_REQUEST", message: "Expected application/json" } }, { status: 400 });
+    return refuse(400, "BAD_REQUEST", "Expected application/json");
   }
 
-  let payload: { path?: unknown; args?: unknown };
+  let payload: { path?: unknown; args?: unknown } | null;
   try {
     payload = await req.json();
   } catch {
-    return NextResponse.json({ ok: false, error: { code: "BAD_REQUEST", message: "Invalid JSON" } }, { status: 400 });
+    return refuse(400, "BAD_REQUEST", "Invalid JSON");
   }
-  if (typeof payload.path !== "string") {
-    return NextResponse.json({ ok: false, error: { code: "BAD_REQUEST", message: "Missing path" } }, { status: 400 });
+  if (typeof payload?.path !== "string") {
+    return refuse(400, "BAD_REQUEST", "Missing path");
   }
 
   try {

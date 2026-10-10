@@ -24,6 +24,9 @@ import { NonRetryableError } from "./handlers";
 setDefaultTimeout(60_000);
 
 const MARK = `qtest-${Date.now()}`; // no LIKE wildcards in it: the afterAll deletes match `MARK%`
+// These ticks run on the REAL database: their heartbeat must not be the production one (a test run would make a dead
+// production tick look alive). The afterAll below deletes every job_schedules row named MARK%.
+const HEARTBEAT = `${MARK}.heartbeat`;
 let userId = "";
 const videoIds: string[] = [];
 /** Every claim / recover / tick below uses these two. */
@@ -146,12 +149,12 @@ describe("tick", () => {
   test("a sweep runs once per interval even when ticks overlap", async () => {
     let runs = 0;
     const sweep = { name: `${MARK}.sweep`, everyMs: 3_600_000, run: async () => void runs++ };
-    const opts = { db: qdb, scope: own(), sweeps: [sweep], budgetMs: 2000, drain: false };
+    const opts = { db: qdb, scope: own(), sweeps: [sweep], budgetMs: 2000, drain: false, heartbeat: HEARTBEAT };
     await Promise.all([runTick(opts), runTick(opts), runTick(opts)]);
     expect(runs).toBe(1);
   });
   test("a throwing sweep does not break the tick and is reported", async () => {
-    const r = await runTick({ db: qdb, scope: own(), sweeps: [{ name: `${MARK}.bad`, everyMs: 1, run: async () => { throw new Error("nope"); } }], budgetMs: 2000, drain: false });
+    const r = await runTick({ db: qdb, scope: own(), sweeps: [{ name: `${MARK}.bad`, everyMs: 1, run: async () => { throw new Error("nope"); } }], budgetMs: 2000, drain: false, heartbeat: HEARTBEAT });
     expect(r.errors.some((e) => e.includes("nope"))).toBe(true);
   });
   test("onJobFailed fires when stale recovery gives up on a job (worker died on its last attempt)", async () => {
@@ -159,7 +162,7 @@ describe("tick", () => {
     const { job } = await enqueueJob(db, { userId, videoId: v.id, type: "publish", maxAttempts: 1 });
     await db.update(jobs).set({ status: "processing", attempts: 1, lockedAt: new Date(Date.now() - 3_600_000) }).where(eq(jobs.id, job.id));
     const seen: string[] = [];
-    const r = await runTick({ db: qdb, scope: own(), sweeps: [], budgetMs: 2000, drain: false, jobFailedHooks: { publish: async (j) => void seen.push(j.id) } });
+    const r = await runTick({ db: qdb, scope: own(), sweeps: [], budgetMs: 2000, drain: false, heartbeat: HEARTBEAT, jobFailedHooks: { publish: async (j) => void seen.push(j.id) } });
     expect(seen).toContain(job.id);
     expect(r.recovered.failedJobs).toBe(1); // exactly this test job: the scope keeps real stuck jobs out
     const [row] = await db.select().from(jobs).where(eq(jobs.id, job.id));
@@ -169,7 +172,7 @@ describe("tick", () => {
     const v = await mkVideo("hook-throws");
     const { job } = await enqueueJob(db, { userId, videoId: v.id, type: "publish", maxAttempts: 1 });
     await db.update(jobs).set({ status: "processing", attempts: 1, lockedAt: new Date(Date.now() - 3_600_000) }).where(eq(jobs.id, job.id));
-    const r = await runTick({ db: qdb, scope: own(), sweeps: [], budgetMs: 2000, drain: false, jobFailedHooks: { publish: async () => { throw new Error("hook boom"); } } });
+    const r = await runTick({ db: qdb, scope: own(), sweeps: [], budgetMs: 2000, drain: false, heartbeat: HEARTBEAT, jobFailedHooks: { publish: async () => { throw new Error("hook boom"); } } });
     expect(r.errors.some((e) => e.includes("hook boom"))).toBe(true);
   });
   test("NonRetryableError is a real class", () => {

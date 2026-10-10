@@ -64,7 +64,7 @@ quotes or braces returned different data, so tags could silently change).
 | `getDashboardStats`, `getChannelTotals` | 2 each | 1 each |
 | `getSuggestedTimes` (once 5+ videos are published) | 2 | 1 |
 | `aiAssistant.chat` / `metadata.generateForUpload` | 12 / 10 | 9 / 9 |
-| Job runner: sweep bookkeeping per tick (8 sweeps) | 18 | 2 |
+| Job runner: sweep bookkeeping per tick (8 sweeps) | 18 | 2 (the cron tick adds 1 for its heartbeat) |
 | Job runner: `recoverStale` when nothing is stuck | 2 | 1 |
 | `publish.dueSchedules`, every minute (20 due videos) | 21 | 1 |
 | `billing.renewal` sweep, every run after the first | 1 + 3N | 2 |

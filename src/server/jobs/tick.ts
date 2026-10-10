@@ -6,6 +6,7 @@
 import { sql } from "drizzle-orm";
 import { db as defaultDb, type DbLike } from "@/db/client";
 import { jobSchedules } from "@/db/schema";
+import { writeTickHeartbeat } from "./heartbeat";
 import { NonRetryableError, jobFailedHooks as defaultHooks, jobHandlers, sweeps as defaultSweeps, taskHandlers, type HandlerCtx, type JobFailedHook, type Sweep } from "./handlers";
 import { claimJobs, claimTasks, completeJob, completeTask, deferJob, failJob, failTask, recoverStale, rescheduleTask, type JobRow, type QueueScope, type TaskRow } from "./queue";
 
@@ -24,6 +25,13 @@ export type TickOptions = {
   jobFailedHooks?: Partial<Record<JobRow["type"], JobFailedHook>>;
   /** Tests only: recover and claim ONLY this user's rows (see QueueScope). Production never sets it. */
   scope?: QueueScope;
+  /**
+   * Name of the `job_schedules` row that records "a tick finished". Default: none. ONLY the production cron entry point
+   * (src/server/jobs/cron.ts) passes `TICK_HEARTBEAT`: the heartbeat exists to notice that pg_cron stopped calling the
+   * route, so a tick started by anything else (a developer's local ticker, `kickRunner` after a user action, tests that
+   * use the real database) must not write it, or it would make a dead production cron look alive.
+   */
+  heartbeat?: string | null;
 };
 
 export type TickResult = { recovered: { jobs: number; tasks: number; failedJobs: number }; sweepsRun: string[]; jobsRun: number; tasksRun: number; errors: string[] };
@@ -150,6 +158,17 @@ export async function runTick(opts: TickOptions = {}): Promise<TickResult> {
       ...js.map((j) => runJob(db, j, ctx, result.errors, hooks).then(() => void result.jobsRun++)),
       ...ts.map((t) => runTask(db, t, ctx, result.errors).then(() => void result.tasksRun++)),
     ]);
+  }
+
+  // The last thing every tick does, idle or cut short by the deadline, but not in a `finally`: a tick that threw above
+  // must leave the heartbeat stale. One statement. A failed write is reported, it must not fail a tick that did its work.
+  const heartbeat = opts.heartbeat ?? null;
+  if (heartbeat !== null) {
+    try {
+      await writeTickHeartbeat(db, heartbeat, result.errors);
+    } catch (e) {
+      result.errors.push(`heartbeat: ${msg(e)}`.slice(0, 300));
+    }
   }
   return result;
 }

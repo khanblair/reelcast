@@ -9,7 +9,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { DbLike } from "@/db/client";
 import { videos, youtubeChannels } from "@/db/schema";
-import { addYoutubeQuota } from "@/server/lib/youtubeQuota";
+import { addYoutubeQuota, assertYoutubeQuotaAvailable } from "@/server/lib/youtubeQuota";
 import { getPrimaryChannelRow, getValidAccessToken } from "@/server/lib/youtube/tokens";
 import { safeMessage } from "@/server/lib/generation/common";
 import { action } from "../../rpc/define";
@@ -37,6 +37,9 @@ const YT = "https://www.googleapis.com/youtube/v3";
 const YT_TIMEOUT_MS = 15_000;
 const MAX_COMPETITORS = 5;
 const MAX_USER_VIDEOS = 1000;
+/** Quota units: search.list costs 100 per call; videos.list is recorded as 1 unit per video returned. */
+const SEARCH_LIST_UNITS = 100;
+const GAPS_TRENDING_RESULTS = 25;
 
 /** The caller's YouTube access token (refreshed if needed), or null when not connected / unusable. */
 async function accessTokenFor(db: DbLike, userId: string): Promise<{ accessToken: string; rowId: string } | null> {
@@ -163,13 +166,15 @@ export const searchByKeyword = action({
     const { db, userId } = ctx;
     const tok = await accessTokenFor(db, userId);
     if (!tok) return [];
+    // Refuse BEFORE the call (the cost is only recorded afterwards). Outside the try: the catch below swallows errors.
+    await assertYoutubeQuotaAvailable(db, userId, SEARCH_LIST_UNITS);
     try {
       const { status, data } = await doSearchByKeyword(tok.accessToken, args.keyword, args.maxResults ?? 25);
       if (status === 401) {
         await markTokenExpired(db, userId, tok.rowId);
         return [];
       }
-      await addYoutubeQuota(db, userId, 100); // search.list costs 100 quota units
+      await addYoutubeQuota(db, userId, SEARCH_LIST_UNITS);
       return data;
     } catch (e) {
       console.error("[searchByKeyword] error:", safeMessage(e, 120));
@@ -187,6 +192,10 @@ export const getContentGaps = action({
     const tok = await accessTokenFor(db, userId);
     if (!tok) return { gaps: [], competitorTopics: [], userTopics: [] };
 
+    // Worst case for this request: the trending list plus one search.list per competitor looked up (at most 5).
+    const channelIds = (args.competitorChannelIds ?? []).slice(0, MAX_COMPETITORS);
+    await assertYoutubeQuotaAvailable(db, userId, GAPS_TRENDING_RESULTS + SEARCH_LIST_UNITS * channelIds.length);
+
     // 1. Tags from the user's published videos.
     const published = await db
       .select({ tags: videos.tags, aiTags: videos.aiTags })
@@ -198,7 +207,7 @@ export const getContentGaps = action({
     // 2. Trending tags.
     let trendingTags: string[] = [];
     try {
-      const { status, data: trending } = await fetchTrendingVideos(tok.accessToken, { maxResults: 25 });
+      const { status, data: trending } = await fetchTrendingVideos(tok.accessToken, { maxResults: GAPS_TRENDING_RESULTS });
       if (status === 401) {
         await markTokenExpired(db, userId, tok.rowId);
         return { gaps: [], competitorTopics: [], userTopics };
@@ -214,7 +223,6 @@ export const getContentGaps = action({
     // 3. Recent uploads of competitor channels (parallel, capped).
     const competitorTopics: string[] = [];
     let expired = false;
-    const channelIds = (args.competitorChannelIds ?? []).slice(0, MAX_COMPETITORS);
     const settled = await Promise.allSettled(
       channelIds.map(async (channelId) => {
         const params = new URLSearchParams({ part: "snippet", channelId, type: "video", order: "date", maxResults: "10" });
@@ -225,7 +233,7 @@ export const getContentGaps = action({
         }
         if (!res.ok) return [] as string[];
         const json = (await res.json()) as { items?: { snippet?: { title?: string } }[] };
-        await addYoutubeQuota(db, userId, 100);
+        await addYoutubeQuota(db, userId, SEARCH_LIST_UNITS);
         return (json.items ?? []).map((i) => i.snippet?.title ?? "").filter(Boolean);
       }),
     );

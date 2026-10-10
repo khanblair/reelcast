@@ -82,13 +82,23 @@ export const generateForUpload = action({
     } catch (e) {
       if (e instanceof FramesUnavailableError) {
         // Slow path: hand over to the background task (it keeps our metered unit across retries).
-        await cancelTask(db, metadataTaskKey(video.id));
-        const { created } = await enqueueTask(db, {
-          kind: "metadata.generate",
-          payload: { videoId: video.id, mode: "manual", quotaConsumed: true, humanize: args.humanize },
-          userId: video.userId,
-          dedupeKey: metadataTaskKey(video.id),
-        });
+        // Cancel-then-enqueue is one transaction: if the enqueue fails, the scheduled run it was about to
+        // supersede is not left cancelled, and the unit we metered above goes back (nobody will use it).
+        let created: boolean;
+        try {
+          ({ created } = await db.transaction(async (tx) => {
+            await cancelTask(tx, metadataTaskKey(video.id));
+            return enqueueTask(tx, {
+              kind: "metadata.generate",
+              payload: { videoId: video.id, mode: "manual", quotaConsumed: true, humanize: args.humanize },
+              userId: video.userId,
+              dedupeKey: metadataTaskKey(video.id),
+            });
+          }));
+        } catch (enqueueError) {
+          await refundQuota(db, video.userId, "metadataGenerated").catch(() => {});
+          throw publicError("Metadata generation failed", enqueueError);
+        }
         if (!created) await refundQuota(db, video.userId, "metadataGenerated").catch(() => {});
         else kickRunner();
         return { ...current, queued: true };

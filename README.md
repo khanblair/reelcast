@@ -15,7 +15,7 @@ bun run db:migrate           # create the tables in your Supabase database
 bun run dev                  # http://localhost:3000
 ```
 
-`bun run dev` serves the app. The background job runner (publishing, generation, schedules) does **not** run inside it by default, because your `DATABASE_URL` may be the production database and a local runner would process real users' jobs. Set `DEV_TICK=1` in `.env.local` to run it locally (only with a database that is safe to drain).
+`bun run dev` serves the app. The background job runner (publishing, generation, schedules) does **not** run inside it by default, because your `DATABASE_URL` may be the production database and a local runner would process real users' jobs. Set `DEV_TICK=1` in `.env.local` to run it locally (only with a database that is safe to drain). If your database is the production one, work you enqueue from `localhost` is still picked up within about a minute by the production `pg_cron` tick, which runs the deployed code, not your local edits.
 
 ### Environment
 

@@ -122,9 +122,47 @@ export function isPermanentAiError(e: unknown): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Timeouts
+// A hung Google call must fail fast so the job retries (3 attempts with backoff) instead of holding a
+// serverless function, or a whole cron tick, until the host kills it at maxDuration (300 s).
+// ---------------------------------------------------------------------------
+/** Veo `generateVideos` submit: one small POST. */
+export const VEO_SUBMIT_TIMEOUT_MS = 60_000;
+/** Veo operation poll: one small GET, repeated every 15 s. */
+export const VEO_POLL_TIMEOUT_MS = 30_000;
+
+/**
+ * A Google call did not answer in time. Deliberately NOT a PermanentAiError (and carries no HTTP status),
+ * so `isPermanentAiError` is false and the job handler rethrows it as a plain Error: the queue retries.
+ */
+export class AiTimeoutError extends Error {
+  constructor(label: string, timeoutMs: number, options?: { cause?: unknown }) {
+    super(`${label} timed out after ${Math.round(timeoutMs / 1000)}s`, options);
+    this.name = "AiTimeoutError";
+  }
+}
+
+/** A request aborted by the SDK's `httpOptions.timeout` (AbortError) or by `AbortSignal.timeout` (TimeoutError). */
+function isAbortLike(e: unknown): boolean {
+  for (let cur = e as { name?: unknown; cause?: unknown } | null | undefined, depth = 0; cur && depth < 4; cur = cur.cause as typeof cur, depth++) {
+    if (cur.name === "AbortError" || cur.name === "TimeoutError") return true;
+  }
+  return false;
+}
+
+/** Re-throw an aborted request as an AiTimeoutError (clear message, retryable); anything else passes through. */
+export function toTimeoutError(e: unknown, label: string, timeoutMs: number): unknown {
+  return isAbortLike(e) ? new AiTimeoutError(label, timeoutMs, { cause: e }) : e;
+}
+
+// ---------------------------------------------------------------------------
 // Submit a new generation
 // ---------------------------------------------------------------------------
-export async function submitVeoGeneration(params: VeoGenerationParams, apiKey?: string | null): Promise<{ operationName: string }> {
+export async function submitVeoGeneration(
+  params: VeoGenerationParams,
+  apiKey?: string | null,
+  timeoutMs: number = VEO_SUBMIT_TIMEOUT_MS,
+): Promise<{ operationName: string }> {
   const { ai, isVertexAI } = createAiClient(apiKey);
   const modelId = VEO_MODEL_IDS[params.model];
   if (!modelId) throw new VeoOperationError(`Unknown Veo model: ${params.model}`);
@@ -142,11 +180,20 @@ export async function submitVeoGeneration(params: VeoGenerationParams, apiKey?: 
   };
   if (supportsAudio) config.generateAudio = params.generateAudio ?? true;
 
-  const operation = await ai.models.generateVideos({
-    model: modelId,
-    source: { prompt: params.prompt },
-    config: config as Parameters<typeof ai.models.generateVideos>[0]["config"],
-  });
+  // Trade-off (known, accepted): if the timeout fires AFTER Google accepted the request (a slow or lost
+  // response), the caller sees a retryable failure, refunds the quota unit and submits again, so one
+  // generation can be billed twice. Closing that window needs an intent row (SCALING-LADDER Q-8).
+  config.httpOptions = { timeout: timeoutMs };
+  let operation: GenerateVideosOperation;
+  try {
+    operation = await ai.models.generateVideos({
+      model: modelId,
+      source: { prompt: params.prompt },
+      config: config as Parameters<typeof ai.models.generateVideos>[0]["config"],
+    });
+  } catch (e) {
+    throw toTimeoutError(e, "Veo submit", timeoutMs);
+  }
 
   if (!operation.name) throw new Error("Veo operation returned without a name");
   return { operationName: operation.name };
@@ -155,7 +202,11 @@ export async function submitVeoGeneration(params: VeoGenerationParams, apiKey?: 
 // ---------------------------------------------------------------------------
 // Poll an existing operation (one request; callers schedule the next poll)
 // ---------------------------------------------------------------------------
-export async function pollVeoOperation(operationName: string, apiKey?: string | null): Promise<VeoOperationResult> {
+export async function pollVeoOperation(
+  operationName: string,
+  apiKey?: string | null,
+  timeoutMs: number = VEO_POLL_TIMEOUT_MS,
+): Promise<VeoOperationResult> {
   const { ai } = createAiClient(apiKey);
 
   // getVideosOperation needs a proper GenerateVideosOperation instance:
@@ -163,7 +214,12 @@ export async function pollVeoOperation(operationName: string, apiKey?: string | 
   const stub = new GenerateVideosOperation();
   stub.name = operationName;
 
-  const operation = await ai.operations.getVideosOperation({ operation: stub });
+  let operation: GenerateVideosOperation;
+  try {
+    operation = await ai.operations.getVideosOperation({ operation: stub, config: { httpOptions: { timeout: timeoutMs } } });
+  } catch (e) {
+    throw toTimeoutError(e, "Veo poll", timeoutMs);
+  }
 
   if (!operation.done) return { operationName, done: false };
 

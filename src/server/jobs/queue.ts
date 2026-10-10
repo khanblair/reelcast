@@ -29,6 +29,20 @@ export function backoffMs(attempt: number): number {
   return Math.min(30_000 * 2 ** Math.max(attempt - 1, 0), 15 * 60_000);
 }
 
+/**
+ * Restricts a claim or recovery call to ONE user's rows. Production callers never pass it (no scope = every
+ * row, exactly as before); tests and tools that share a database with real data do, so a stray call can only
+ * ever reach rows they created. Once a scope is given it is mandatory: an empty `userId` throws instead of
+ * silently matching everything. Tasks without a `user_id` can never be in scope.
+ */
+export type QueueScope = { userId: string };
+
+function scopeFilter(scope: QueueScope | undefined) {
+  if (scope === undefined) return sql``;
+  if (typeof scope.userId !== "string" || scope.userId === "") throw new Error("queue scope requires a non-empty userId");
+  return sql`and user_id = ${scope.userId}`;
+}
+
 // ─── jobs ────────────────────────────────────────────────────────────────────
 
 export type EnqueueJobInput = {
@@ -68,9 +82,10 @@ export async function enqueueJob(db: DbLike, input: EnqueueJobInput): Promise<{ 
   return { job: existing, created: false };
 }
 
-/** Claim up to `limit` due jobs for this worker. */
-export async function claimJobs(db: DbLike, limit: number, types?: JobType[]): Promise<JobRow[]> {
+/** Claim up to `limit` due jobs for this worker. `scope` (tests only) limits the claim to one user's jobs. */
+export async function claimJobs(db: DbLike, limit: number, types?: JobType[], scope?: QueueScope): Promise<JobRow[]> {
   const typeFilter = types?.length ? sql`and type in (${sql.join(types.map((t) => sql`${t}`), sql`, `)})` : sql``;
+  const owner = scopeFilter(scope);
   const rows = (await db.execute(sql`
     update jobs set
       status = 'processing',
@@ -80,7 +95,7 @@ export async function claimJobs(db: DbLike, limit: number, types?: JobType[]): P
       updated_at = now()
     where id in (
       select id from jobs
-      where status = 'pending' and run_at <= now() ${typeFilter}
+      where status = 'pending' and run_at <= now() ${typeFilter} ${owner}
       order by run_at
       for update skip locked
       limit ${limit}
@@ -189,8 +204,10 @@ export async function cancelTask(db: DbLike, dedupeKey: string): Promise<boolean
   return rows.length > 0;
 }
 
-export async function claimTasks(db: DbLike, limit: number, kinds?: string[]): Promise<TaskRow[]> {
+/** Claim up to `limit` due tasks. `scope` (tests only) limits the claim to one user's tasks. */
+export async function claimTasks(db: DbLike, limit: number, kinds?: string[], scope?: QueueScope): Promise<TaskRow[]> {
   const kindFilter = kinds?.length ? sql`and kind in (${sql.join(kinds.map((k) => sql`${k}`), sql`, `)})` : sql``;
+  const owner = scopeFilter(scope);
   const rows = (await db.execute(sql`
     update tasks set
       status = 'running',
@@ -199,7 +216,7 @@ export async function claimTasks(db: DbLike, limit: number, kinds?: string[]): P
       updated_at = now()
     where id in (
       select id from tasks
-      where status = 'pending' and run_at <= now() ${kindFilter}
+      where status = 'pending' and run_at <= now() ${kindFilter} ${owner}
       order by run_at
       for update skip locked
       limit ${limit}
@@ -247,13 +264,16 @@ export async function rescheduleTask(db: DbLike, id: string, delayMs: number, pa
  * the probe is recovered by the next call. The probe takes no row locks, and the two tables are
  * still updated by separate statements, so no transaction ever holds a jobs lock while waiting
  * on a tasks lock (or the other way round).
+ *
+ * `scope` (tests only) limits the probe and both UPDATEs to one user's rows.
  */
-export async function recoverStale(db: DbLike, staleMs: number): Promise<{ jobs: number; tasks: number; failedJobs: JobRow[] }> {
+export async function recoverStale(db: DbLike, staleMs: number, scope?: QueueScope): Promise<{ jobs: number; tasks: number; failedJobs: JobRow[] }> {
   const cutoff = new Date(Date.now() - staleMs).toISOString();
+  const owner = scopeFilter(scope);
   const [probe] = (await db.execute(sql`
     select
-      exists (select 1 from jobs where status = 'processing' and locked_at < ${cutoff}::timestamptz) as jobs,
-      exists (select 1 from tasks where status = 'running' and locked_at < ${cutoff}::timestamptz) as tasks
+      exists (select 1 from jobs where status = 'processing' and locked_at < ${cutoff}::timestamptz ${owner}) as jobs,
+      exists (select 1 from tasks where status = 'running' and locked_at < ${cutoff}::timestamptz ${owner}) as tasks
   `)) as unknown as { jobs: boolean; tasks: boolean }[];
   const j = !probe.jobs
     ? []
@@ -263,7 +283,7 @@ export async function recoverStale(db: DbLike, staleMs: number): Promise<{ jobs:
           error = coalesce(error, 'Worker timed out'),
           completed_at = case when attempts >= max_attempts then now() else completed_at end,
           locked_at = null, run_at = now(), updated_at = now()
-        where status = 'processing' and locked_at < ${cutoff}::timestamptz
+        where status = 'processing' and locked_at < ${cutoff}::timestamptz ${owner}
         returning *
       `)) as unknown as Record<string, unknown>[]);
   const t = !probe.tasks
@@ -273,7 +293,7 @@ export async function recoverStale(db: DbLike, staleMs: number): Promise<{ jobs:
           status = case when attempts >= max_attempts then 'failed' else 'pending' end,
           last_error = coalesce(last_error, 'Worker timed out'),
           locked_at = null, run_at = now(), updated_at = now()
-        where status = 'running' and locked_at < ${cutoff}::timestamptz
+        where status = 'running' and locked_at < ${cutoff}::timestamptz ${owner}
         returning id
       `)) as unknown as unknown[]);
   const failedJobs = j.map(camelRow).filter((r) => r.status === "failed") as JobRow[];

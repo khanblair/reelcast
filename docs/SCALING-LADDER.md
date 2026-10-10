@@ -14,7 +14,7 @@ audit of Reelcast against that flow and the live tracker for every fix that come
 I read those lines myself. `[agent path:line]` = reported by a read-only audit agent; the claims I could
 spot-check are marked "checked". `[NOT VERIFIED]` = could not be established from here.
 
-**Status.** `PR #n open` = a pull request exists and waits for your review/merge (not `DONE` until merged and verified where it matters) · `TODO` not started · `DOING` in progress · `DONE` merged-ready and verified · `BLOCKED` needs a
+**Status.** `DONE` = merged and verified by a test and/or a live check (named in the row) · `MERGED` = merged, but part of the verification is yours (browser, Vercel logs) · `PR #n open` = waiting for review · `TODO` not started · `DOING` in progress · `DONE` merged-ready and verified · `BLOCKED` needs a
 decision or access from the owner · `SKIP` deliberately not done (trigger recorded) · `OBS` open observation.
 
 **Gate.** `G` = touches production, a protected file, a paid/external service or a download, so it waits for an
@@ -130,31 +130,31 @@ and `/auth/callback` open redirect `[checked src/app/auth/callback/route.ts:13]`
 Update the **Status** and **Verified by** columns as work lands. Every `DONE` row must name the test, command
 or measurement that proves it.
 
-### Open pull requests: merge order and the steps only you can take
+### Merged pull requests and what is still yours to do
 
-| PR | Items | Notes before / after merging |
+All nine PRs were merged on 2026-10-10 in this order: #8, #13, #14, #9, #12, #15, #16, #10, #11 (merge commits, same style as the history; no branches deleted).
+
+| PR | Items | Still to do on your side |
 |---|---|---|
-| #8 | this doc | docs only; merge any time |
-| #9 | R-1 region, R-2 middleware | after the deploy: `curl -sI https://reelcast-kappa.vercel.app/ \| grep x-vercel-id` should show `arn1`; then sign in / out and open a protected page (browser check is yours) |
-| #13 | F-1b, F-1c | after merging, `next dev` stops running jobs unless `DEV_TICK=1` is in your `.env.local` (I do not edit your env files) |
-| #14 | M-1, M-2 | **stacked on #13**: merge #13 first, then this one retargets to `main` |
-| #10 | D-2 indexes | merging does not touch production; **you run `bun run db:migrate`** to apply it (shared database; plain `CREATE INDEX`, milliseconds on these table sizes) |
-| #11 | R-4, R-6, R-7 | product decision inside: free users now share one 5/month allowance across metadata, captions and thumbnails |
-| #12 | R-3 adaptive polling | browser recipe in the PR (Network tab filtered to `/api/rpc`, idle 3 minutes: about 3 POSTs/min instead of about 15) |
-| #15 | Q-4 timeouts | independent |
-| #16 | Q-1, Q-2, Q-5, Q-6 | the Q-1 heal step downgrades users stuck on a paid plan with no live subscription; it changes nothing today (0 subscriptions, both users free/default) |
-
-#13 and #14 are the only dependent pair; the rest touch different files and can merge in any order.
+| #8 | this doc | nothing |
+| #13 | F-1b, F-1c | add `DEV_TICK=1` to `.env.local` only if you want jobs to run locally (I do not edit your env files) |
+| #14 | M-1, M-2 | nothing |
+| #9 | R-1, R-2 | sign in and out, open a protected page (browser check) |
+| #12 | R-3 | browser recipe: Network tab filtered to `/api/rpc`, dashboard idle 3 minutes, about 3 POSTs/min instead of about 15 |
+| #15 | Q-4 | nothing |
+| #16 | Q-1, Q-2, Q-5, Q-6 | nothing (the Q-1 heal changes nothing today: 0 subscriptions) |
+| #10 | D-2 | **run `bun run db:migrate`** (applies 8 indexes to the shared production database; plain `CREATE INDEX`, milliseconds at these sizes) |
+| #11 | R-4, R-6, R-7 | nothing |
 
 ### Foundation (safety before anything else)
 
 | ID | Item | Sev | Gate | Status | Verified by |
 |---|---|---|---|---|---|
 | F-1 | Separate the database used by dev/tests from production. Option A: local Docker Postgres for DB-backed tests (no cost). Option B: second Supabase project (needed for pooler/region behaviour). Add a guard that makes the test suite refuse a non-local `DATABASE_URL` unless explicitly allowed. | P0 | G (B) | **DECIDED 2026-10-10: stays shared for now** (owner: a few real users live there). Consequence: no load, fault-injection or destructive runs; DB-backed tests must be made safe instead (F-1c). Revisit before launch. | – |
-| F-1c | Make the existing DB-backed tests safe on a shared database: `race.test.ts` must use a synthetic user instead of the oldest real account; `queue.test.ts` `claimJobs` calls must filter to the test's own rows; `recoverStale`/`runTick` cases must not touch real due jobs. | P0 | – | PR #13 open | tests pass; grep shows no test selects a real account; a "rows that existed before" snapshot is identical after the suite |
-| F-1b | Guard dev behaviour that acts on prod data: `instrumentation.ts` 5 s ticker, and `kickRunner` (`kick.ts:9-21`, no env check) must only run against a non-prod database or with an explicit opt-in. `queue.test.ts` (`claimJobs` with no owner filter) and `race.test.ts` (rewrites the oldest real account's plan, restores in `afterAll`) must not run against prod. | P0 | G (changes dev loop) | PR #13 open (approved) | unit tests for the guard; manual: dev server prints "tick disabled" |
+| F-1c | Make the existing DB-backed tests safe on a shared database: `race.test.ts` must use a synthetic user instead of the oldest real account; `queue.test.ts` `claimJobs` calls must filter to the test's own rows; `recoverStale`/`runTick` cases must not touch real due jobs. | P0 | – | DONE (merged #13) | tests pass; grep shows no test selects a real account; a "rows that existed before" snapshot is identical after the suite |
+| F-1b | Guard dev behaviour that acts on prod data: `instrumentation.ts` 5 s ticker, and `kickRunner` (`kick.ts:9-21`, no env check) must only run against a non-prod database or with an explicit opt-in. `queue.test.ts` (`claimJobs` with no owner filter) and `race.test.ts` (rewrites the oldest real account's plan, restores in `afterAll`) must not run against prod. | P0 | G (changes dev loop) | DONE (merged #13). Local ticks now need `DEV_TICK=1` | unit tests for the guard; manual: dev server prints "tick disabled" |
 | F-2 | Schedule the production tick: install `pg_cron` + `pg_net` and the cron job (`scripts/db-cron.ts`) **in the production database**; confirm `CRON_SECRET` matches in Vercel; confirm the first runs return 200. | P0 | G (prod DB) | **DONE 2026-10-10** (owner approved) | [live] pre-flight authenticated tick → HTTP 200 `ok:true` (proves Vercel's secret matches); after install `cron.job` `reelcast-tick` active `* * * * *`; `cron.job_run_details` 2/2 `succeeded`; `net._http_response` 200 `ok:true`. Still to prove: heartbeat advances with the dev server stopped (needs M-2). |
-| F-3 | Production tick heartbeat + alert (see M-2, M-4). | P0 | – | PARTIAL: heartbeat in PR #14; health endpoint + external pinger still TODO | heartbeat age test; external pinger configured by owner |
+| F-3 | Production tick heartbeat + alert (see M-2, M-4). | P0 | – | PARTIAL: heartbeat merged (#14) and verified live (advances every minute from pg_cron); `/api/health` and an external pinger still TODO | heartbeat age test; external pinger configured by owner |
 | F-4 | Vercel plan: Hobby is "non-commercial use only" (docs/SPEC.md:938) but billing is live. Owner decision. | P0 if billing is live | G (owner) | BLOCKED on you | owner confirms plan |
 | F-5 | Backups / PITR / Supabase plan and compute size are not knowable from code. Owner confirms in the dashboard; one restore test. | P0 | G (owner) | BLOCKED on you | owner confirms |
 | F-6 | Rotate the shared database password (it was printed into a read-only audit agent's transcript on this machine; also the natural moment to split dev/prod credentials). | P1 | G (owner) | BLOCKED on you | new `DATABASE_URL` in Vercel + local |
@@ -163,8 +163,8 @@ or measurement that proves it.
 
 | ID | Item | Sev | Gate | Status | Verified by |
 |---|---|---|---|---|---|
-| M-1 | One structured log line per RPC: path, ms, status/code, statement count, no PII; log `RpcError` INTERNAL; pluggable error-report hook in `toErrorBody`. | P1 | – | PR #14 open (stacked on #13) | unit test on dispatch; line visible in `next dev` |
-| M-2 | Tick: per-entry error logging, summary line, heartbeat row at end of each tick (`job_schedules` name `tick.heartbeat`, one statement). | P0 | – | PR #14 open (stacked on #13) | tick test asserts heartbeat + error log |
+| M-1 | One structured log line per RPC: path, ms, status/code, statement count, no PII; log `RpcError` INTERNAL; pluggable error-report hook in `toErrorBody`. | P1 | – | MERGED (#14). The log lines are not verified in Vercel logs (I cannot read them) | unit test on dispatch; line visible in `next dev` |
+| M-2 | Tick: per-entry error logging, summary line, heartbeat row at end of each tick (`job_schedules` name `tick.heartbeat`, one statement). | P0 | – | DONE (merged #14). `tick.heartbeat` verified live: written by the production cron route, age 30 s at 17:52 UTC | tick test asserts heartbeat + error log |
 | M-3 | Admin health: queue depth, oldest pending age, failed jobs/tasks, last tick age, sweep `last_error`. | P1 | – | TODO | admin module test + `api.admin` gate test passes |
 | M-4 | `GET /api/health`: DB ping, tick freshness, missing-env report; public, minimal body (`ok`/`stale`/`degraded`); no secrets. | P1 | – | TODO | route test; stale heartbeat → 503 |
 | M-5 | Env validation: startup warning + `/api/health` report for missing required vars (hard-fail is opt-in so a missing optional var cannot take prod down). | P1 | – | TODO | unit test of the validator |
@@ -175,13 +175,13 @@ or measurement that proves it.
 
 | ID | Item | Sev | Gate | Status | Verified by |
 |---|---|---|---|---|---|
-| R-1 | Function region next to the database (`arn1`): `vercel.json` `regions`. Every statement currently crosses the Atlantic. | P0 | G (deploys on merge; plan limits unknown) | PR #9 open (approved) | response header `x-vercel-id` shows `arn1` after deploy |
-| R-2 | `middleware.ts:48` `getUser()` → `getClaims()` (ES256 verified locally). Removes one Auth round trip from every page request and prefetch. **Protected file.** | P1 | G (protected, auth) | PR #9 open (approved) | middleware behaviour test; auth flow checked by owner |
-| R-3 | Adaptive polling: `refetchInterval` returns `false` when no job is in flight; longer `staleTime` for `users.current`, `settings.get`, analytics. | P1 | – | PR #12 open | unit tests on the interval functions; RPC count per focused minute before/after |
-| R-4 | `/auth/callback`: accept only same-origin relative `next` (`/…`, not `//` or `/\`). | P1 | – | PR #11 open | table-driven test incl. `@evil.com`, `//evil.com`, `/\evil.com` |
+| R-1 | Function region next to the database (`arn1`): `vercel.json` `regions`. Every statement currently crosses the Atlantic. | P0 | G (deploys on merge; plan limits unknown) | DONE (merged #9). Verified live: `x-vercel-id` shows `arn1` | response header `x-vercel-id` shows `arn1` after deploy |
+| R-2 | `middleware.ts:48` `getUser()` → `getClaims()` (ES256 verified locally). Removes one Auth round trip from every page request and prefetch. **Protected file.** | P1 | G (protected, auth) | MERGED (#9). Signed-out redirect verified live (`/dashboard` to `/sign-in?redirect_url=%2Fdashboard`); the signed-in flow is your browser check | middleware behaviour test; auth flow checked by owner |
+| R-3 | Adaptive polling: `refetchInterval` returns `false` when no job is in flight; longer `staleTime` for `users.current`, `settings.get`, analytics. | P1 | – | MERGED (#12). Your browser check is pending (recipe in the PR) | unit tests on the interval functions; RPC count per focused minute before/after |
+| R-4 | `/auth/callback`: accept only same-origin relative `next` (`/…`, not `//` or `/\`). | P1 | – | DONE (merged #11) | table-driven test incl. `@evil.com`, `//evil.com`, `/\evil.com` |
 | R-5 | `/api/rpc` hardening: body size cap, exact `application/json`, Origin check alongside `Sec-Fetch-Site`. | P2 | – | TODO | route tests |
-| R-6 | Meter Gemini captions + thumbnails (no quota gate today). | P1 | – | PR #11 open | test: over-limit call rejected, counter increments |
-| R-7 | Pre-check YouTube quota before `searchByKeyword` (100 u) / `getContentGaps` (~525 u). | P1 | – | PR #11 open | test with quota near limit |
+| R-6 | Meter Gemini captions + thumbnails (no quota gate today). | P1 | – | DONE (merged #11). Product decision recorded: free users share one 5/month allowance | test: over-limit call rejected, counter increments |
+| R-7 | Pre-check YouTube quota before `searchByKeyword` (100 u) / `getContentGaps` (~525 u). | P1 | – | DONE (merged #11) | test with quota near limit |
 | R-8 | Tighten `/api/cloudinary/sign` (per-user folder, allowed formats, random id) like the avatar signer. | P1 | – | TODO | route test; upload still works (owner) |
 | R-9 | Rate limiting at the edge (Vercel Firewall on `/api/rpc`, `/api/cloudinary/*`, IPN). Plan availability unknown. | P1 before public launch | G (owner/dashboard) | BLOCKED on you | owner confirms rules |
 | R-10 | Static landing page, GIF → video, delete unused `public/videos/forex`. | P2 | – | SKIP (trigger: marketing traffic or LCP regression) | – |
@@ -191,7 +191,7 @@ or measurement that proves it.
 | ID | Item | Sev | Gate | Status | Verified by |
 |---|---|---|---|---|---|
 | D-1 | Statement / lock / idle-in-transaction timeouts. **Experiment done (2026-10-10, [live], session-scoped, read-only):** the transaction pooler (port 6543) **ignores** both the postgres.js `connection: {statement_timeout…}` startup parameters and `options=-c statement_timeout=…` in the URL — `current_setting` stayed `2min` and `pg_sleep(8)` ran to completion in all three variants (baseline, startup parameter, `options`), standalone and inside `sql.begin`. `SET LOCAL` would need a transaction around every statement (extra round trips). The only mechanism left is **role-level**: `alter role postgres set statement_timeout = '30s'`, `lock_timeout = '10s'`, `idle_in_transaction_session_timeout = '60s'`. Side effect: it also applies to migrations and the dashboard SQL editor on that role (a long `create index` on a large table would be cancelled). Today the bound is the 120 s server default, so severity is P1, not P0. | P1 | G (`alter role` = prod DB) | BLOCKED on you | after applying: `pg_sleep(40)` is cancelled at ~30 s and the same connection serves the next statement (rerun `timeoutexp` experiment) |
-| D-2 | One migration with the indexes that have a nameable problem: `ideas(linked_video_id)` (per-video cascade scan), `tasks(user_id)`, `tasks(locked_at) where running`, `payment_orders(subscription_id, created_at)`, `payment_orders(updated_at) where applied_at is null`, `payment_events(received_at)` + bounded purge. Plus a test that fails when an FK has no leading index. | P1 | G (migration = prod DB) | PR #10 open; **you apply it** (`bun run db:migrate`) after merging | `EXPLAIN` on synthetic rows in the isolated DB: plan flips seq scan → index; FK-guard test |
+| D-2 | One migration with the indexes that have a nameable problem: `ideas(linked_video_id)` (per-video cascade scan), `tasks(user_id)`, `tasks(locked_at) where running`, `payment_orders(subscription_id, created_at)`, `payment_orders(updated_at) where applied_at is null`, `payment_events(received_at)` + bounded purge. Plus a test that fails when an FK has no leading index. | P1 | G (migration = prod DB) | MERGED (#10), **NOT APPLIED**: you run `bun run db:migrate` | `EXPLAIN` on synthetic rows in the isolated DB: plan flips seq scan → index; FK-guard test |
 | D-3 | Retention sweep (bounded batches): `tasks` done/cancelled/failed > 14 d, read `notifications` > 90 d, `youtube_quota_usage` > 90 d. | P1 | – (runs in prod only after deploy) | TODO | test: old rows deleted, young rows kept, batch bounded |
 | D-5 | `cron.job_run_details` grows one row per minute (about 1,440/day) and Supabase does not prune it. Add a daily `pg_cron` job deleting rows older than 7 days (installed the same way as the tick job). | P2 | G (prod DB) | TODO | row count stays bounded after a day |
 | D-4 | `latestPerVideo` / `getStats` rewrites, cursor/total on capped lists, `deleteAccount` URL-scan indexes, unused-index drop. | P2 | – | SKIP (trigger: any user > 400 videos, or `getStats` > 300 ms in M-1) | – |
@@ -200,12 +200,12 @@ or measurement that proves it.
 
 | ID | Item | Sev | Gate | Status | Verified by |
 |---|---|---|---|---|---|
-| Q-1 | `billing.expiry`: revoke entitlement atomically with the subscription update (one transaction per row) and heal rows left half-done. | P1 | – | PR #16 open | test simulating a crash between the two statements |
-| Q-2 | Generation: `jobs.create('generation')` moves the video to `queued` in the same transaction (as the publish path does) so a dropped browser leaves no stuck `queued` video. | P1 | – | PR #16 open | test: no state where job exists without status, or vice versa |
+| Q-1 | `billing.expiry`: revoke entitlement atomically with the subscription update (one transaction per row) and heal rows left half-done. | P1 | – | DONE (merged #16) | test simulating a crash between the two statements |
+| Q-2 | Generation: `jobs.create('generation')` moves the video to `queued` in the same transaction (as the publish path does) so a dropped browser leaves no stuck `queued` video. | P1 | – | DONE (merged #16) | test: no state where job exists without status, or vice versa |
 | Q-3 | Visibility: failed tasks and sweep `last_error` in admin; re-enqueue sweep for auto-publish users whose chain died. | P1 | – | TODO | admin test; chain-recovery test |
-| Q-4 | Timeouts on Veo submit/poll and Files API calls (`httpOptions.timeout`); budget-aware start (defer when too little tick budget remains). | P1 | – | PR #15 open | test with a fake server that hangs: call aborts, job retries |
-| Q-5 | `billing.reconcile` honours the tick deadline. | P2 | – | PR #16 open | test with deadline in the past |
-| Q-6 | Metadata slow path: refund quota if the enqueue throws; analytics enqueue-after-work crash window. | P2 | – | PR #16 open | test |
+| Q-4 | Timeouts on Veo submit/poll and Files API calls (`httpOptions.timeout`); budget-aware start (defer when too little tick budget remains). | P1 | – | DONE (merged #15) | test with a fake server that hangs: call aborts, job retries |
+| Q-5 | `billing.reconcile` honours the tick deadline. | P2 | – | DONE (merged #16) | test with deadline in the past |
+| Q-6 | Metadata slow path: refund quota if the enqueue throws; analytics enqueue-after-work crash window. | P2 | – | DONE (merged #16) | test |
 | Q-7 | Fence final job updates with `status = 'processing'`; lock order in checkout vs apply (deadlock). | P2 | – | SKIP (needs race-test coverage first; self-heals via reconcile) | – |
 | Q-8 | Veo double-submit window (needs an intent row). | P2 | – | SKIP (costs state; trigger: first real Veo spend) | – |
 
@@ -218,6 +218,21 @@ or measurement that proves it.
 | X-3 | Sharding / partitioning | SKIP | DB > 8 GB or a table > 50 M rows |
 
 ---
+
+### Post-merge verification (2026-10-10)
+
+| Check | Result |
+|---|---|
+| CI on `main` head (`31e2122`): lint, typecheck, build | success |
+| Vercel deployment of that commit | success |
+| `bun run check` on the merged tree | 0 errors (the same 3 old warnings in untouched files) |
+| Full test suite on the merged tree: 77 files in 13 sequential batches | 893 tests pass; 2 tests hit a pooler `CONNECT_TIMEOUT` in the batch run and **pass when run alone** (`claim.test.ts` 8/8, `admin/billing.test.ts` 13/13). See "Known flake" |
+| Live region | `x-vercel-id` shows `arn1` on `/` and `/api/cron/tick` (was `iad1`) |
+| Live middleware | signed-out `/dashboard` redirects to `/sign-in?redirect_url=%2Fdashboard` |
+| Production tick after deploy | last 5 `cron.job_run_details` succeeded, pg_net HTTP 200 `ok:true`, `tick.heartbeat` advancing |
+| Real users / residue | both users still `free/default`; 0 test users, 0 jobs, 0 subscriptions left behind |
+
+**Known flake:** tests that open several parallel connections (`claim.test.ts` "ten simultaneous claims", `admin/billing.test.ts`) can hit the pooler's 15 s `connect_timeout` when a whole batch runs while the production cron and other test connections compete for the pooler. They are logic-correct (pass alone). A separate dev database (F-1) is the real fix.
 
 ## 4. Decisions waiting on you
 
@@ -277,3 +292,4 @@ Local Postgres cannot reproduce the Supabase transaction pooler (pipelining hang
 | 2026-10-10 | Owner decisions: DB stays shared for now (so no load/fault-injection runs; unsafe tests will be made safe instead); F-1b, R-1, R-2, D-2 approved as PRs (never applied to prod by me); F-2 approved and executed; branch base = main after owner merges PRs #6 and #7. |
 | 2026-10-10 | F-2 DONE: production tick scheduled and verified (see tracker). D-1 experiment recorded: pooler ignores client-side timeout settings, role-level `ALTER ROLE` is the only route. |
 | 2026-10-10 | Wave 1 and 2 implemented by isolated agents, each diff reviewed and re-tested by the lead before any push: PRs #9 to #15 opened (see §3). Review changes: videos publishing index re-keyed on `id` after a HOT-update test (0/500 vs 500/500); heartbeat restricted to the cron route so local/kick/test ticks cannot mask a dead production cron. |
+| 2026-10-10 | All nine PRs merged in order (#8, #13, #14, #9, #12, #15, #16, #10, #11). One CI failure on #11 was a transient `bun install` error on the runner (tarball extraction), fixed by re-running the job. Post-merge verification recorded in §3. #10's migration is merged but not applied. |
